@@ -8,6 +8,7 @@ import { TaxLogic } from './components/TaxLogic';
 import { TaxAssistant } from './components/TaxAssistant';
 import { ArcadeMode } from './components/ArcadeMode';
 import { LiveTracker } from './components/LiveTracker';
+import { BackupRestore } from './components/BackupRestore';
 import { LayoutDashboard, Car, Receipt, Settings as SettingsIcon, Download, AlertCircle, X, ShieldCheck, Bell, Clock, TrendingUp, PiggyBank, Wrench, CreditCard, Zap, Gauge, Scale, CheckCircle, AlertTriangle, Navigation, Package, Utensils, User, Truck, HelpCircle, Check } from 'lucide-react';
 
 const DEFAULT_STATS: PlayerStats = {
