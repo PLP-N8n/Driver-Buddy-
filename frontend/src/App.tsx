@@ -29,6 +29,10 @@ export default function App() {
   const [showArcade, setShowArcade] = useState(false);
   const [showLiveTracker, setShowLiveTracker] = useState(false);
 
+  // Backup tracking state
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(null);
+  const [entriesSinceBackup, setEntriesSinceBackup] = useState(0);
+
   // Export State
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportConfig, setExportConfig] = useState({
