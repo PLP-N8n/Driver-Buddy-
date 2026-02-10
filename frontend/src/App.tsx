@@ -570,6 +570,16 @@ export default function App() {
 
                   {/* Backup & Restore */}
                   <div className="pt-8 border-t border-slate-100">
+                    <RecurringExpenseManager
+                      recurringExpenses={recurringExpenses}
+                      onAdd={addRecurringExpense}
+                      onDelete={deleteRecurringExpense}
+                      onToggle={toggleRecurringExpense}
+                    />
+                  </div>
+
+                  {/* Backup & Restore */}
+                  <div className="pt-8 border-t border-slate-100">
                     <BackupRestore
                       trips={trips}
                       expenses={expenses}
