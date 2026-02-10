@@ -145,6 +145,25 @@ export default function App() {
     setPlayerStats({ ...playerStats, xp: newXp, totalLogs: playerStats.totalLogs + 1 });
   };
 
+  // Backup Restore handler
+  const handleRestore = (data: {
+    trips: Trip[];
+    expenses: Expense[];
+    dailyLogs: DailyWorkLog[];
+    settings: Settings;
+    playerStats: PlayerStats;
+  }) => {
+    setTrips(data.trips);
+    setExpenses(data.expenses);
+    setDailyLogs(data.dailyLogs);
+    setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+    setPlayerStats(data.playerStats);
+    setLastBackupDate(new Date().toISOString());
+    setEntriesSinceBackup(0);
+    localStorage.setItem('driver_last_backup', new Date().toISOString());
+    localStorage.setItem('driver_entries_since_backup', '0');
+  };
+
   const handleExport = () => {
     let csvContent = "";
 
