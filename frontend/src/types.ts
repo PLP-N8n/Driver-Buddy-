@@ -51,6 +51,20 @@ export interface ManualAllowance {
   amount: number;
 }
 
+export type RecurringFrequency = 'weekly' | 'monthly' | 'annual';
+
+export interface RecurringExpense {
+  id: string;
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+  frequency: RecurringFrequency;
+  startDate: string;
+  lastGeneratedDate: string | null;
+  isVatClaimable: boolean;
+  isActive: boolean;
+}
+
 export type DriverRole = 'COURIER' | 'FOOD_DELIVERY' | 'TAXI' | 'LOGISTICS' | 'OTHER';
 
 export interface Settings {
