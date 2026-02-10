@@ -190,6 +190,13 @@ export default function App() {
   const addDailyLog = (log: DailyWorkLog) => { setDailyLogs([...dailyLogs, log]); incrementBackupCounter(); };
   const deleteDailyLog = (id: string) => setDailyLogs(dailyLogs.filter(l => l.id !== id));
 
+  // Recurring expense handlers
+  const addRecurringExpense = (item: RecurringExpense) => setRecurringExpenses(prev => [...prev, item]);
+  const deleteRecurringExpense = (id: string) => setRecurringExpenses(prev => prev.filter(r => r.id !== id));
+  const toggleRecurringExpense = (id: string) => setRecurringExpenses(prev =>
+    prev.map(r => r.id === id ? { ...r, isActive: !r.isActive } : r)
+  );
+
   // Handler for Live Shift Save
   const handleLiveShiftSave = (data: { miles: number, durationHours: number, revenue: number, provider: string, path?: {lat: number, lng: number}[] }) => {
     const today = new Date().toISOString().split('T')[0];
