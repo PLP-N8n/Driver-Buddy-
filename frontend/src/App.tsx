@@ -86,16 +86,24 @@ export default function App() {
   useEffect(() => localStorage.setItem('driver_player_stats', JSON.stringify(playerStats)), [playerStats]);
 
   // Handlers
-  const addTrip = (trip: Trip) => setTrips([...trips, trip]);
+  const incrementBackupCounter = () => {
+    setEntriesSinceBackup(prev => {
+      const next = prev + 1;
+      localStorage.setItem('driver_entries_since_backup', String(next));
+      return next;
+    });
+  };
+
+  const addTrip = (trip: Trip) => { setTrips([...trips, trip]); incrementBackupCounter(); };
   const deleteTrip = (id: string) => setTrips(trips.filter(t => t.id !== id));
   const updateTrip = (id: string, updates: Partial<Trip>) => {
     setTrips(trips.map(t => t.id === id ? { ...t, ...updates } : t));
   };
   
-  const addExpense = (expense: Expense) => setExpenses([...expenses, expense]);
+  const addExpense = (expense: Expense) => { setExpenses([...expenses, expense]); incrementBackupCounter(); };
   const deleteExpense = (id: string) => setExpenses(expenses.filter(e => e.id !== id));
 
-  const addDailyLog = (log: DailyWorkLog) => setDailyLogs([...dailyLogs, log]);
+  const addDailyLog = (log: DailyWorkLog) => { setDailyLogs([...dailyLogs, log]); incrementBackupCounter(); };
   const deleteDailyLog = (id: string) => setDailyLogs(dailyLogs.filter(l => l.id !== id));
 
   // Handler for Live Shift Save
