@@ -243,12 +243,14 @@ export default function App() {
     dailyLogs: DailyWorkLog[];
     settings: Settings;
     playerStats: PlayerStats;
+    recurringExpenses?: RecurringExpense[];
   }) => {
     setTrips(data.trips);
     setExpenses(data.expenses);
     setDailyLogs(data.dailyLogs);
     setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
     setPlayerStats(data.playerStats);
+    if (data.recurringExpenses) setRecurringExpenses(data.recurringExpenses);
     setLastBackupDate(new Date().toISOString());
     setEntriesSinceBackup(0);
     localStorage.setItem('driver_last_backup', new Date().toISOString());
