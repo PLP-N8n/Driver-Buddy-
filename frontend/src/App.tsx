@@ -70,6 +70,12 @@ export default function App() {
       setSettings({ ...DEFAULT_SETTINGS, ...parsed });
     }
     if (savedStats) setPlayerStats(JSON.parse(savedStats));
+
+    // Load backup tracking
+    const savedLastBackup = localStorage.getItem('driver_last_backup');
+    const savedEntriesSince = localStorage.getItem('driver_entries_since_backup');
+    if (savedLastBackup) setLastBackupDate(savedLastBackup);
+    if (savedEntriesSince) setEntriesSinceBackup(parseInt(savedEntriesSince) || 0);
   }, []);
 
   // Save to local storage
