@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trip, Expense, DailyWorkLog, Settings, DEFAULT_SETTINGS, PlayerStats, DriverRole } from './types';
+import { Trip, Expense, DailyWorkLog, Settings, DEFAULT_SETTINGS, PlayerStats, DriverRole, RecurringExpense, ExpenseCategory } from './types';
 import { Dashboard } from './components/Dashboard';
 import { MileageLog } from './components/MileageLog';
 import { ExpenseLog } from './components/ExpenseLog';
@@ -9,6 +9,7 @@ import { TaxAssistant } from './components/TaxAssistant';
 import { ArcadeMode } from './components/ArcadeMode';
 import { LiveTracker } from './components/LiveTracker';
 import { BackupRestore } from './components/BackupRestore';
+import { RecurringExpenseManager } from './components/RecurringExpenseManager';
 import { LayoutDashboard, Car, Receipt, Settings as SettingsIcon, Download, AlertCircle, X, ShieldCheck, Bell, Clock, TrendingUp, PiggyBank, Wrench, CreditCard, Zap, Gauge, Scale, CheckCircle, AlertTriangle, Navigation, Package, Utensils, User, Truck, HelpCircle, Check } from 'lucide-react';
 
 const DEFAULT_STATS: PlayerStats = {
