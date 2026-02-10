@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.REACT_APP_BACKEND_URL': JSON.stringify(env.REACT_APP_BACKEND_URL)
       },
+      optimizeDeps: {
+        include: ['react-is', 'recharts', 'es-toolkit/compat/get'],
+      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, './src'),
