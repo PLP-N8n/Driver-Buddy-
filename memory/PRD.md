@@ -39,7 +39,8 @@ User requested to get the project from GitHub repo https://github.com/PLP-N8n/Dr
 - [x] Arcade Mode overlay functional
 - [x] Live GPS Tracker overlay functional
 - [x] Settings page with role selection, claim method, odometer tracking, financial allocations
-- [x] Testing passed 100% (backend + frontend)
+- [x] **Feature #1: Backup/Restore** - AES-256-GCM encrypted backup export (.dtpbak), password-protected restore, auto-backup reminder after 10+ entries, stats dashboard (Total Records, Since Backup, Last Backup)
+- [x] Testing passed (iteration 1: 100%, iteration 2: 95% - minor display edge case)
 
 ## Prioritized Backlog
 ### P0 (Critical)
