@@ -73,7 +73,7 @@ async function decryptData(encoded: string, password: string): Promise<string> {
 }
 
 export const BackupRestore: React.FC<BackupRestoreProps> = ({
-  trips, expenses, dailyLogs, settings, playerStats,
+  trips, expenses, dailyLogs, settings, playerStats, recurringExpenses,
   onRestore, lastBackupDate, entriesSinceBackup
 }) => {
   const [password, setPassword] = useState('');
