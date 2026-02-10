@@ -104,7 +104,7 @@ export const BackupRestore: React.FC<BackupRestoreProps> = ({
       const payload = JSON.stringify({
         version: BACKUP_VERSION,
         exportedAt: new Date().toISOString(),
-        data: { trips, expenses, dailyLogs, settings, playerStats }
+        data: { trips, expenses, dailyLogs, settings, playerStats, recurringExpenses }
       });
 
       const encrypted = await encryptData(payload, password);
