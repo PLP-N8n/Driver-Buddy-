@@ -80,6 +80,85 @@ export default function App() {
     const savedEntriesSince = localStorage.getItem('driver_entries_since_backup');
     if (savedLastBackup) setLastBackupDate(savedLastBackup);
     if (savedEntriesSince) setEntriesSinceBackup(parseInt(savedEntriesSince) || 0);
+
+    // Load recurring expenses
+    const savedRecurring = localStorage.getItem('driver_recurring_expenses');
+    if (savedRecurring) {
+      const parsed: RecurringExpense[] = JSON.parse(savedRecurring);
+      setRecurringExpenses(parsed);
+
+      // Auto-generate due expenses
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const existingExpenses: Expense[] = savedExpenses ? JSON.parse(savedExpenses) : [];
+      const newExpenses: Expense[] = [];
+      const updatedRecurring = parsed.map(rec => {
+        if (!rec.isActive) return rec;
+
+        const start = new Date(rec.startDate);
+        start.setHours(0, 0, 0, 0);
+        if (start > today) return rec;
+
+        const lastGen = rec.lastGeneratedDate ? new Date(rec.lastGeneratedDate) : new Date(rec.startDate);
+        lastGen.setHours(0, 0, 0, 0);
+
+        // Calculate next due date from lastGen
+        let cursor = new Date(lastGen);
+        let latestGenDate = rec.lastGeneratedDate;
+
+        const advanceCursor = (d: Date, freq: string): Date => {
+          const next = new Date(d);
+          if (freq === 'weekly') next.setDate(next.getDate() + 7);
+          else if (freq === 'monthly') next.setMonth(next.getMonth() + 1);
+          else if (freq === 'annual') next.setFullYear(next.getFullYear() + 1);
+          return next;
+        };
+
+        // If never generated, first due is startDate itself
+        if (!rec.lastGeneratedDate) {
+          if (start <= today) {
+            newExpenses.push({
+              id: Date.now().toString() + '_auto_' + rec.id + '_0',
+              date: rec.startDate,
+              category: rec.category,
+              amount: rec.amount,
+              description: `[Auto] ${rec.description}`,
+              isVatClaimable: rec.isVatClaimable,
+            });
+            latestGenDate = rec.startDate;
+            cursor = new Date(rec.startDate);
+          }
+        }
+
+        // Generate for each period that's passed
+        let next = advanceCursor(cursor, rec.frequency);
+        let safetyCounter = 0;
+        while (next <= today && safetyCounter < 52) {
+          const dateStr = next.toISOString().split('T')[0];
+          newExpenses.push({
+            id: Date.now().toString() + '_auto_' + rec.id + '_' + (safetyCounter + 1),
+            date: dateStr,
+            category: rec.category,
+            amount: rec.amount,
+            description: `[Auto] ${rec.description}`,
+            isVatClaimable: rec.isVatClaimable,
+          });
+          latestGenDate = dateStr;
+          next = advanceCursor(next, rec.frequency);
+          safetyCounter++;
+        }
+
+        return { ...rec, lastGeneratedDate: latestGenDate };
+      });
+
+      if (newExpenses.length > 0) {
+        const merged = [...existingExpenses, ...newExpenses];
+        setExpenses(merged);
+        localStorage.setItem('driver_expenses', JSON.stringify(merged));
+        setRecurringExpenses(updatedRecurring);
+        localStorage.setItem('driver_recurring_expenses', JSON.stringify(updatedRecurring));
+      }
+    }
   }, []);
 
   // Save to local storage
