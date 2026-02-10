@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Trip, Expense, DailyWorkLog, Settings, PlayerStats } from '../types';
+import { Trip, Expense, DailyWorkLog, Settings, PlayerStats, RecurringExpense } from '../types';
 import { Download, Upload, ShieldCheck, AlertCircle, CheckCircle, Lock, Unlock, X, HardDrive, Clock, FileWarning, Loader2 } from 'lucide-react';
 
 interface BackupRestoreProps {
@@ -8,12 +8,14 @@ interface BackupRestoreProps {
   dailyLogs: DailyWorkLog[];
   settings: Settings;
   playerStats: PlayerStats;
+  recurringExpenses?: RecurringExpense[];
   onRestore: (data: {
     trips: Trip[];
     expenses: Expense[];
     dailyLogs: DailyWorkLog[];
     settings: Settings;
     playerStats: PlayerStats;
+    recurringExpenses?: RecurringExpense[];
   }) => void;
   lastBackupDate: string | null;
   entriesSinceBackup: number;
