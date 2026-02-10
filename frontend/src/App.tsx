@@ -476,6 +476,20 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Backup & Restore */}
+                  <div className="pt-8 border-t border-slate-100">
+                    <BackupRestore
+                      trips={trips}
+                      expenses={expenses}
+                      dailyLogs={dailyLogs}
+                      settings={settings}
+                      playerStats={playerStats}
+                      onRestore={handleRestore}
+                      lastBackupDate={lastBackupDate}
+                      entriesSinceBackup={entriesSinceBackup}
+                    />
+                  </div>
               </div>
             </div>
           )}
