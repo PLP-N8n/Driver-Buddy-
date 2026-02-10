@@ -588,6 +588,7 @@ export default function App() {
                       dailyLogs={dailyLogs}
                       settings={settings}
                       playerStats={playerStats}
+                      recurringExpenses={recurringExpenses}
                       onRestore={handleRestore}
                       lastBackupDate={lastBackupDate}
                       entriesSinceBackup={entriesSinceBackup}
