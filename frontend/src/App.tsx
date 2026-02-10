@@ -167,6 +167,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('driver_daily_logs', JSON.stringify(dailyLogs)), [dailyLogs]);
   useEffect(() => localStorage.setItem('driver_settings', JSON.stringify(settings)), [settings]);
   useEffect(() => localStorage.setItem('driver_player_stats', JSON.stringify(playerStats)), [playerStats]);
+  useEffect(() => localStorage.setItem('driver_recurring_expenses', JSON.stringify(recurringExpenses)), [recurringExpenses]);
 
   // Handlers
   const incrementBackupCounter = () => {
