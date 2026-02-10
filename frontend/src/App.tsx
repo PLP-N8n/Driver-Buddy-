@@ -34,6 +34,9 @@ export default function App() {
   const [lastBackupDate, setLastBackupDate] = useState<string | null>(null);
   const [entriesSinceBackup, setEntriesSinceBackup] = useState(0);
 
+  // Recurring expenses state
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
+
   // Export State
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportConfig, setExportConfig] = useState({
