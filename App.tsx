@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trip, Expense, DailyWorkLog, Settings, DEFAULT_SETTINGS, PlayerStats, DriverRole } from './types';
+import { Trip, Expense, DailyWorkLog, Settings, DEFAULT_SETTINGS, PlayerStats, DriverRole, Debt } from './types';
 import { Dashboard } from './components/Dashboard';
 import { MileageLog } from './components/MileageLog';
 import { ExpenseLog } from './components/ExpenseLog';
@@ -8,7 +8,8 @@ import { TaxLogic } from './components/TaxLogic';
 import { TaxAssistant } from './components/TaxAssistant';
 import { ArcadeMode } from './components/ArcadeMode';
 import { LiveTracker } from './components/LiveTracker';
-import { LayoutDashboard, Car, Receipt, Settings as SettingsIcon, Download, AlertCircle, X, ShieldCheck, Bell, Clock, TrendingUp, PiggyBank, Wrench, CreditCard, Zap, Gauge, Scale, CheckCircle, AlertTriangle, Navigation, Package, Utensils, User, Truck, HelpCircle, Check } from 'lucide-react';
+import { DebtManager } from './components/DebtManager';
+import { LayoutDashboard, Car, Receipt, Settings as SettingsIcon, Download, AlertCircle, X, ShieldCheck, Bell, Clock, TrendingUp, PiggyBank, Wrench, CreditCard, Zap, Gauge, Scale, CheckCircle, AlertTriangle, Navigation, Package, Utensils, User, Truck, HelpCircle, Check, Upload, Trash2, Plus, ArrowDown, ArrowUp } from 'lucide-react';
 
 const DEFAULT_STATS: PlayerStats = {
   xp: 0,
@@ -19,7 +20,7 @@ const DEFAULT_STATS: PlayerStats = {
 
 export default function App() {
   // State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'mileage' | 'expenses' | 'worklog' | 'tax' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'mileage' | 'expenses' | 'worklog' | 'tax' | 'debt' | 'settings'>('dashboard');
   const [trips, setTrips] = useState<Trip[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [dailyLogs, setDailyLogs] = useState<DailyWorkLog[]>([]);
@@ -62,6 +63,10 @@ export default function App() {
       if (!parsed.driverRoles || parsed.driverRoles.length === 0) {
         parsed.driverRoles = ['COURIER'];
       }
+      // Migration: Add debts if missing
+      if (!parsed.debts) parsed.debts = [];
+      if (!parsed.debtStrategy) parsed.debtStrategy = 'AVALANCHE';
+
       setSettings({ ...DEFAULT_SETTINGS, ...parsed });
     }
     if (savedStats) setPlayerStats(JSON.parse(savedStats));
@@ -124,6 +129,55 @@ export default function App() {
     // XP Boost
     const newXp = playerStats.xp + 100; // Big bonus for live shift
     setPlayerStats({ ...playerStats, xp: newXp, totalLogs: playerStats.totalLogs + 1 });
+  };
+
+  const handleBackup = () => {
+    const data = {
+      trips,
+      expenses,
+      dailyLogs,
+      settings,
+      playerStats,
+      version: '1.0',
+      exportDate: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `DriverTaxPro_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestore = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+        
+        // Validation & Restoration
+        if (data.trips && Array.isArray(data.trips)) setTrips(data.trips);
+        if (data.expenses && Array.isArray(data.expenses)) setExpenses(data.expenses);
+        if (data.dailyLogs && Array.isArray(data.dailyLogs)) setDailyLogs(data.dailyLogs);
+        if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+        if (data.playerStats) setPlayerStats(data.playerStats);
+
+        alert('Data restored successfully!');
+      } catch (err) {
+        console.error('Failed to restore data', err);
+        alert('Invalid backup file. Please select a valid DriverTax Pro backup JSON.');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be selected again if needed
+    event.target.value = '';
   };
 
   const handleExport = () => {
@@ -222,6 +276,7 @@ export default function App() {
           <NavItem id="expenses" icon={Receipt} label="Expenses" />
           <NavItem id="worklog" icon={Clock} label="Work Log" />
           <NavItem id="tax" icon={Scale} label="Tax Logic" />
+          <NavItem id="debt" icon={CreditCard} label="Debt Mgr" />
           <NavItem id="settings" icon={SettingsIcon} label="Settings" />
         </div>
       </nav>
@@ -229,7 +284,7 @@ export default function App() {
       <main className="p-4 md:p-10 max-w-7xl mx-auto">
         <header className="flex justify-between items-center mb-10">
            <div>
-             <h2 className="text-3xl font-bold text-slate-800 capitalize tracking-tight">{activeTab === 'worklog' ? 'Performance' : activeTab}</h2>
+             <h2 className="text-3xl font-bold text-slate-800 capitalize tracking-tight">{activeTab === 'worklog' ? 'Performance' : activeTab === 'debt' ? 'Debt Management' : activeTab}</h2>
              <p className="text-slate-500 text-sm mt-1">Manage your self-employment records</p>
            </div>
            
@@ -239,7 +294,7 @@ export default function App() {
                  <div className="text-sm font-black text-slate-800">{playerStats.rankTitle}</div>
               </div>
 
-              {activeTab !== 'settings' && (
+              {activeTab !== 'settings' && activeTab !== 'debt' && (
                 <button onClick={() => setShowExportModal(true)} className="group flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-blue-600 bg-white hover:bg-blue-50 px-4 py-2.5 rounded-xl border border-slate-200 hover:border-blue-200 shadow-sm transition-all duration-200 active:scale-95">
                   <Download size={18} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
                   <span className="hidden sm:inline">Export CSV</span>
@@ -274,6 +329,13 @@ export default function App() {
           {activeTab === 'expenses' && <ExpenseLog expenses={expenses} onAddExpense={addExpense} onDeleteExpense={deleteExpense} />}
           {activeTab === 'worklog' && <WorkLog logs={dailyLogs} trips={trips} expenses={expenses} settings={settings} onAddLog={addDailyLog} onDeleteLog={deleteDailyLog} />}
           {activeTab === 'tax' && <TaxLogic trips={trips} expenses={expenses} dailyLogs={dailyLogs} settings={settings} onUpdateSettings={setSettings} />}
+          {activeTab === 'debt' && (
+             <DebtManager 
+               settings={settings} 
+               dailyLogs={dailyLogs} 
+               onUpdateSettings={setSettings} 
+             />
+          )}
           {activeTab === 'settings' && (
             <div className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-sm border border-slate-200 max-w-2xl">
               <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><SettingsIcon className="w-5 h-5 text-slate-400" />Configuration</h3>
@@ -423,18 +485,40 @@ export default function App() {
                           className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
                         />
                       </div>
+                    </div>
+                  </div>
 
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><CreditCard size={14} className="text-purple-500" /> Debt Repayment</label>
-                          <span className="text-sm font-bold text-purple-600">{settings.debtSetAsidePercent}%</span>
-                        </div>
-                        <input 
-                          type="range" min="0" max="50" step="1" 
-                          value={settings.debtSetAsidePercent} 
-                          onChange={(e) => setSettings({...settings, debtSetAsidePercent: parseInt(e.target.value)})}
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                        />
+                  {/* Data Management Section */}
+                  <div className="pt-8 border-t border-slate-100">
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                      <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                          <Download className="w-4 h-4 text-blue-500" /> Data Backup & Restore
+                      </h4>
+                      <p className="text-xs text-slate-500 mb-4">
+                        Save your data locally or restore from a previous backup file. Recommended before clearing browser data.
+                      </p>
+                      
+                      <div className="flex flex-col md:flex-row gap-4">
+                          <button 
+                            onClick={handleBackup}
+                            className="flex-1 bg-white border border-slate-200 text-slate-700 font-bold py-3 px-4 rounded-xl hover:bg-slate-50 hover:border-blue-300 transition-all flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            <Download size={18} className="text-blue-500" /> 
+                            Backup to File
+                          </button>
+                          
+                          <div className="relative flex-1">
+                            <input 
+                              type="file" 
+                              accept=".json"
+                              onChange={handleRestore}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            />
+                            <button className="w-full bg-white border border-slate-200 text-slate-700 font-bold py-3 px-4 rounded-xl hover:bg-slate-50 hover:border-emerald-300 transition-all flex items-center justify-center gap-2 shadow-sm">
+                              <Upload size={18} className="text-emerald-500" /> 
+                              Restore from File
+                            </button>
+                          </div>
                       </div>
                     </div>
                   </div>

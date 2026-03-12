@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Trip, Expense, Settings, DailyWorkLog } from '../types';
 import { DatePicker } from './DatePicker';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { TrendingUp, Wallet, Receipt, AlertCircle, Bell, Calendar, AlertTriangle, ArrowRight, CheckCircle, Car, Coins, User, Clock, Fuel, BarChart3, Briefcase, Filter, X, Gauge } from 'lucide-react';
+import { TrendingUp, Wallet, Receipt, AlertCircle, Bell, Calendar, AlertTriangle, ArrowRight, CheckCircle, Car, Coins, User, Clock, Fuel, BarChart3, Briefcase, Filter, X, Gauge, CreditCard, ArrowDown, ArrowUp } from 'lucide-react';
 
 interface DashboardProps {
   trips: Trip[];
@@ -104,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ trips, expenses, dailyLogs
       topProvider,
       estimatedOdometer,
       daysUntilCheck,
-      isCheckOverdue
+      isCheckOverdue,
     };
   }, [trips, expenses, dailyLogs, settings, startDate, endDate]);
 
@@ -184,7 +184,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ trips, expenses, dailyLogs
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Compliance / Odometer Card (NEW) */}
+        
+        {/* Compliance / Odometer Card */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between relative overflow-hidden">
            <div className="absolute top-0 right-0 p-6 opacity-5"><Gauge size={140} /></div>
            <div>
@@ -263,54 +264,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ trips, expenses, dailyLogs
         </div>
       </div>
         
-      {/* Revenue by Provider Pie Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
-          <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Earnings by Provider</h4>
-          <div className="flex-1 min-h-[250px] relative">
-            {stats.providerData.length === 0 ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
-                <Briefcase size={40} className="mb-2 opacity-20" />
-                <p className="text-xs font-medium">No revenue data yet</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.providerData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {stats.providerData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={0} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value: number) => `£${value.toFixed(2)}`}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-          {stats.providerData.length > 0 && (
-            <div className="mt-4 space-y-1">
-              {stats.providerData.slice(0, 3).map((provider, i) => (
-                <div key={provider.name} className="flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="font-medium text-slate-600">{provider.name}</span>
-                  </div>
-                  <span className="font-bold text-slate-800">£{provider.value.toFixed(2)}</span>
-                </div>
-              ))}
+      {/* Revenue by Provider Pie Chart - Full Width Row */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-8">
+        <div className="flex-1 min-h-[300px] relative">
+           <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 absolute top-0 left-0 z-10">Earnings by Provider</h4>
+          {stats.providerData.length === 0 ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
+              <Briefcase size={40} className="mb-2 opacity-20" />
+              <p className="text-xs font-medium">No revenue data yet</p>
             </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={stats.providerData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={80}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {stats.providerData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={0} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value: number) => `£${value.toFixed(2)}`}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
           )}
         </div>
+        
+        {stats.providerData.length > 0 && (
+          <div className="lg:w-1/3 flex flex-col justify-center space-y-4 border-t lg:border-t-0 lg:border-l border-slate-100 pt-6 lg:pt-0 lg:pl-6">
+            <h5 className="font-bold text-slate-800 mb-2">Breakdown</h5>
+            {stats.providerData.map((provider, i) => (
+              <div key={provider.name} className="flex justify-between items-center group">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                  <span className="font-medium text-slate-600 group-hover:text-slate-900 transition-colors">{provider.name}</span>
+                </div>
+                <div className="text-right">
+                   <span className="block font-bold text-slate-800">£{provider.value.toFixed(2)}</span>
+                   <span className="text-[10px] text-slate-400">
+                     {((provider.value / stats.providerData.reduce((acc, curr) => acc + curr.value, 0)) * 100).toFixed(1)}%
+                   </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -73,7 +73,7 @@ export const analyzeReceipt = async (base64Data: string, mimeType: string): Prom
       contents: {
         parts: [
           { inlineData: { data: base64Data.split(',')[1] || base64Data, mimeType } },
-          { text: `Analyze this UK receipt. Extract Total, Date (YYYY-MM-DD), Category, and Vendor. Return JSON.` },
+          { text: `Analyze this UK receipt. Extract Total, Date (YYYY-MM-DD), Category, Vendor, and Fuel Volume in Liters (if applicable). Return JSON.` },
         ]
       },
       config: {
@@ -85,6 +85,7 @@ export const analyzeReceipt = async (base64Data: string, mimeType: string): Prom
             date: { type: Type.STRING },
             category: { type: Type.STRING },
             description: { type: Type.STRING },
+            liters: { type: Type.NUMBER, description: "Fuel volume in liters if applicable, otherwise null" }
           },
           required: ["amount", "date", "description"]
         }

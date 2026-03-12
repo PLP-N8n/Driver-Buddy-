@@ -51,6 +51,14 @@ export interface ManualAllowance {
   amount: number;
 }
 
+export interface Debt {
+  id: string;
+  name: string;
+  balance: number;
+  apr: number;
+  minPayment: number;
+}
+
 export type DriverRole = 'COURIER' | 'FOOD_DELIVERY' | 'TAXI' | 'LOGISTICS' | 'OTHER';
 
 export interface Settings {
@@ -66,6 +74,9 @@ export interface Settings {
   taxSetAsidePercent: number;
   maintenanceSetAsidePercent: number;
   debtSetAsidePercent: number;
+  // Debt Management
+  debts: Debt[];
+  debtStrategy: 'AVALANCHE' | 'SNOWBALL';
   // Odometer Tracking
   financialYearStartOdometer: number;
   financialYearStartDate: string;
@@ -93,6 +104,8 @@ export const DEFAULT_SETTINGS: Settings = {
   taxSetAsidePercent: 20,
   maintenanceSetAsidePercent: 10,
   debtSetAsidePercent: 0,
+  debts: [],
+  debtStrategy: 'AVALANCHE',
   financialYearStartOdometer: 0,
   financialYearStartDate: '2024-04-06', // Default UK Tax Year
   lastOdometerCheckDate: new Date().toISOString().split('T')[0],

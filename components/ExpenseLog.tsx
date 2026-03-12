@@ -54,6 +54,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({ expenses, onAddExpense, 
         amount: data.amount || prev.amount,
         date: data.date || prev.date,
         description: data.description || prev.description,
+        liters: data.liters || prev.liters,
         // Basic category matching
         category: (Object.values(ExpenseCategory).find(c => 
           data.category?.toLowerCase().includes(c.toLowerCase())
@@ -216,7 +217,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({ expenses, onAddExpense, 
                   <Sparkles className="absolute inset-0 m-auto text-emerald-600 animate-pulse" size={24} />
                 </div>
                 <p className="font-bold text-slate-800">Gemini 3 Pro scanning receipt...</p>
-                <p className="text-xs text-slate-500">Extracting vendor, amount, and date.</p>
+                <p className="text-xs text-slate-500">Extracting vendor, amount, date, and fuel volume.</p>
              </div>
            )}
            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-600" />
