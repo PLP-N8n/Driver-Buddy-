@@ -1,0 +1,40 @@
+{
+  "name": "drivertax-pro",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "scripts\\build.cmd",
+    "build:vite": "vite build --configLoader native",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test",
+    "test:unit": "node .\\node_modules\\typescript\\lib\\tsc.js --project tsconfig.vitest.json && vitest --configLoader native run --reporter=verbose --config vitest.runtime.config.mjs"
+  },
+  "dependencies": {
+    "@sentry/browser": "^10.46.0",
+    "@sentry/react": "^10.47.0",
+    "@sentry/vite-plugin": "^5.1.1",
+    "clsx": "^2.1.1",
+    "decimal.js-light": "^2.5.1",
+    "es-toolkit": "^1.45.1",
+    "lucide-react": "^0.555.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@tailwindcss/vite": "^4.1.17",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.1.17",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^1.0.1",
+    "vitest": "^4.1.2"
+  }
+}

@@ -1,0 +1,850 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  Brain,
+  ChevronDown,
+  Clock3,
+  LoaderCircle,
+  MapPin,
+  PoundSterling,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-react';
+import {
+  ActiveWorkSession,
+  ActiveWorkSessionExpenseDraft,
+  CompletedShiftSummary,
+  DailyWorkLog,
+  DriverRole,
+  Expense,
+  ExpenseCategory,
+  Settings,
+  Trip,
+} from '../../types';
+import { EarningsSummary } from './EarningsSummary';
+import { HabitCard } from './HabitCard';
+import { IntelligenceFeed } from './IntelligenceFeed';
+import { QuickAddForm } from './QuickAddForm';
+import { TaxEstimateCard } from './TaxEstimateCard';
+import { WeeklySummary } from './WeeklySummary';
+import { getHabitState } from '../../utils/habitEngine';
+import { generateInsights } from '../../utils/insights';
+import { getMissedDays } from '../../utils/missedDays';
+import { DriverPrediction, generatePredictions } from '../../utils/predictions';
+import { predictNextShift } from '../../utils/shiftPredictor';
+import { calculateMileageClaim } from '../../utils/tax';
+import { todayUK, toUKDateString, ukWeekStart } from '../../utils/ukDate';
+import {
+  formatCurrency,
+  formatNumber,
+  getNumericInputProps,
+  inputClasses,
+  panelClasses,
+  primaryButtonClasses,
+  secondaryButtonClasses,
+  sheetBackdropClasses,
+  sheetPanelClasses,
+  subtlePanelClasses,
+} from '../../utils/ui';
+
+const DRAFT_STORAGE_KEY = 'dbt_draftEndShift';
+const LAST_END_ODOMETER_KEY = 'dbt_lastEndOdometer';
+const PREDICTION_DISMISS_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+
+const getProvidersByRole = (role: DriverRole): string[] => {
+  switch (role) {
+    case 'COURIER':
+      return ['Amazon Flex', 'DPD', 'Evri', 'Yodel', 'CitySprint', 'Royal Mail', 'Gophr'];
+    case 'FOOD_DELIVERY':
+      return ['Uber Eats', 'Deliveroo', 'Just Eat', 'Stuart', 'Beelivery', 'Gopuff'];
+    case 'TAXI':
+      return ['Uber', 'Bolt', 'FREENOW', 'Ola', 'Gett', 'Local Firm', 'Private Clients'];
+    case 'LOGISTICS':
+      return ['BCA Logistics', 'Engineius', 'Manheim', 'Drascombe', 'Auto Trader', 'Private Trade'];
+    default:
+      return ['Private client', 'Agency', 'Other'];
+  }
+};
+
+const getProviderOptions = (roles: DriverRole[], predictedProvider?: string) => {
+  const providers = Array.from(new Set(roles.flatMap(getProvidersByRole)));
+  if (predictedProvider && !providers.includes(predictedProvider)) {
+    providers.unshift(predictedProvider);
+  }
+  return providers;
+};
+
+const hashPrediction = (value: string) => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(16);
+};
+
+export interface DashboardManualEntryRequest {
+  token: number;
+  date?: string;
+}
+
+export interface ManualShiftPayload {
+  date: string;
+  provider: string;
+  hoursWorked: number;
+  revenue: number;
+  expenses: ActiveWorkSessionExpenseDraft[];
+  startOdometer?: number;
+  endOdometer?: number;
+  notes?: string;
+}
+
+interface DashboardProps {
+  trips: Trip[];
+  expenses: Expense[];
+  dailyLogs: DailyWorkLog[];
+  settings: Settings;
+  activeSession: ActiveWorkSession | null;
+  completedShiftSummary: CompletedShiftSummary | null;
+  startWorkDayRequest?: number | null;
+  manualEntryRequest?: DashboardManualEntryRequest | null;
+  onStartWorkDayRequestHandled?: () => void;
+  onManualEntryRequestHandled?: () => void;
+  onStartSession: (options: { provider: string; startOdometer?: number }) => void;
+  onUpdateSession: (updates: Partial<ActiveWorkSession>) => void;
+  onCompleteSession: (session: ActiveWorkSession) => CompletedShiftSummary;
+  onSaveManualShift: (payload: ManualShiftPayload) => CompletedShiftSummary;
+  onShowCompletedSummary: (summary: CompletedShiftSummary) => void;
+  onDismissCompletedSummary: () => void;
+  onOpenBackfill: () => void;
+  onOpenTaxTab?: () => void;
+}
+
+type EndSheetMode = 'active' | 'manual';
+type FuelChoice = 'yes' | 'no';
+
+interface EndShiftDraft {
+  earningsValue: string;
+  endOdometerValue: string;
+  fuelChoice: FuelChoice;
+  fuelAmountValue: string;
+  fuelLitersValue: string;
+  notesValue: string;
+  extraExpenseAmountValue: string;
+  extraExpenseDescriptionValue: string;
+  optionalExpanded: boolean;
+}
+
+const createEmptyDraft = (): EndShiftDraft => ({
+  earningsValue: '',
+  endOdometerValue: '',
+  fuelChoice: 'no',
+  fuelAmountValue: '',
+  fuelLitersValue: '',
+  notesValue: '',
+  extraExpenseAmountValue: '',
+  extraExpenseDescriptionValue: '',
+  optionalExpanded: false,
+});
+
+const formatTime = (value: string) =>
+  new Date(value).toLocaleTimeString('en-GB', {
+    timeZone: 'Europe/London',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+const formatDateKey = (date: Date) => toUKDateString(date);
+
+const getWeekRange = (dateValue: string) => {
+  const start = ukWeekStart(dateValue);
+  const endDate = new Date(`${start}T12:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + 6);
+  return { start, end: formatDateKey(endDate) };
+};
+
+const getWeekSnapshot = (dailyLogs: DailyWorkLog[], settings: Settings, dateValue = todayUK()) => {
+  const { start, end } = getWeekRange(dateValue);
+  const weekLogs = dailyLogs.filter((log) => log.date >= start && log.date <= end);
+  const revenue = weekLogs.reduce((sum, log) => sum + log.revenue, 0);
+  const taxToSetAside = revenue * (settings.taxSetAsidePercent / 100);
+  const expenses = weekLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
+  const kept = revenue - taxToSetAside - expenses;
+  return { revenue, taxToSetAside, kept };
+};
+
+const getDurationHours = (startedAt: string, endedAt = new Date(Date.now()).toISOString()) => {
+  const durationMs = Math.max(new Date(endedAt).getTime() - new Date(startedAt).getTime(), 0);
+  return Math.max(0.1, durationMs / (1000 * 60 * 60));
+};
+
+const getLastFuelExpense = (expenses: Expense[], targetDate: string) =>
+  [...expenses]
+    .filter((expense) => expense.category === ExpenseCategory.FUEL)
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .find((expense) => {
+      const target = new Date(`${targetDate}T12:00:00Z`);
+      const expenseDate = new Date(`${expense.date}T12:00:00Z`);
+      const diffDays = Math.abs(target.getTime() - expenseDate.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays <= 7;
+    });
+
+const getMostRecentShift = (logs: DailyWorkLog[]) => [...logs].sort((left, right) => right.date.localeCompare(left.date))[0] ?? null;
+
+const getOdometerTemplate = (trips: Trip[], settings: Settings, targetDate: string) => {
+  const previousTrip = [...trips]
+    .filter((trip) => trip.date <= targetDate)
+    .sort((left, right) => right.date.localeCompare(left.date))[0];
+
+  return previousTrip?.endOdometer ?? (settings.financialYearStartOdometer || 0);
+};
+
+const getProgressPercent = (current: number, target: number) => {
+  if (target <= 0) return 0;
+  return Math.max(0, Math.min(100, (current / target) * 100));
+};
+
+const pillButtonClass = (active: boolean) =>
+  `rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+    active ? 'bg-brand text-white' : 'border border-surface-border bg-surface-raised text-slate-300'
+  }`;
+
+const summaryStatClass = 'rounded-2xl border border-surface-border bg-surface-raised px-4 py-3';
+const getPredictionId = (prediction: DriverPrediction) => hashPrediction(`${prediction.type}:${prediction.message}`);
+
+export const DashboardScreen: React.FC<DashboardProps> = ({
+  trips,
+  expenses,
+  dailyLogs,
+  settings,
+  activeSession,
+  completedShiftSummary,
+  startWorkDayRequest,
+  manualEntryRequest,
+  onStartWorkDayRequestHandled,
+  onManualEntryRequestHandled,
+  onStartSession,
+  onUpdateSession,
+  onCompleteSession,
+  onSaveManualShift,
+  onShowCompletedSummary,
+  onDismissCompletedSummary,
+  onOpenBackfill,
+  onOpenTaxTab,
+}) => {
+  const [showStartSheet, setShowStartSheet] = useState(false);
+  const [showEndSheet, setShowEndSheet] = useState(false);
+  const [endSheetMode, setEndSheetMode] = useState<EndSheetMode>('active');
+  const [startProvider, setStartProvider] = useState('Work Day');
+  const [startOdometer, setStartOdometer] = useState('');
+  const [endShiftDraft, setEndShiftDraft] = useState<EndShiftDraft>(createEmptyDraft());
+  const [manualShiftDate, setManualShiftDate] = useState(todayUK());
+  const [manualProvider, setManualProvider] = useState('Work Day');
+  const [manualHoursWorked, setManualHoursWorked] = useState('');
+  const [manualStartOdometer, setManualStartOdometer] = useState<number | undefined>(undefined);
+  const [endingShift, setEndingShift] = useState(false);
+  const [dismissedInsight, setDismissedInsight] = useState<string | null>(null);
+  const [storedLastEndOdometer, setStoredLastEndOdometer] = useState<number | null>(null);
+  const [predictionRefreshToken, setPredictionRefreshToken] = useState(0);
+  const [expandedPredictionId, setExpandedPredictionId] = useState<string | null>(null);
+
+  const todayKey = todayUK();
+  const providerOptions = useMemo(() => getProviderOptions(settings.driverRoles ?? ['COURIER'], startProvider), [settings.driverRoles, startProvider]);
+  const todayLogs = useMemo(() => dailyLogs.filter((log) => log.date === todayKey), [dailyLogs, todayKey]);
+  const recentLogs = useMemo(() => [...dailyLogs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [dailyLogs]);
+  const mostRecentShift = useMemo(() => getMostRecentShift(dailyLogs), [dailyLogs]);
+  const missedDays = useMemo(() => getMissedDays(dailyLogs, settings.dayOffDates), [dailyLogs, settings.dayOffDates]);
+  const trackedMilesForSession = useMemo(() => {
+    if (!activeSession) return 0;
+    return trips
+      .filter((trip) => trip.date === activeSession.date && trip.purpose === 'Business')
+      .reduce((sum, trip) => sum + trip.totalMiles, 0);
+  }, [activeSession, trips]);
+
+  const activeDurationHours = activeSession ? getDurationHours(activeSession.startedAt) : 0;
+  const activeSessionExpenses = activeSession?.expenses ?? [];
+  const activeExpenseTotal = activeSessionExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const activeFuelLiters = activeSessionExpenses
+    .filter((expense) => expense.category === ExpenseCategory.FUEL)
+    .reduce((sum, expense) => sum + (expense.liters ?? 0), 0);
+  const liveRevenue = activeSession?.revenue ?? 0;
+  const liveMiles = activeSession?.miles ?? trackedMilesForSession;
+  const liveTax = liveRevenue * (settings.taxSetAsidePercent / 100);
+  const liveKept = liveRevenue - liveTax - activeExpenseTotal;
+  const habitState = useMemo(() => getHabitState(dailyLogs, settings), [dailyLogs, settings]);
+  const hasHabitCard =
+    habitState.currentStreak >= 3 ||
+    Boolean(habitState.reengagementMessage) ||
+    (habitState.weeklyTarget > 0 && habitState.weeklyProgress >= 0.9 && habitState.weeklyRevenue < habitState.weeklyTarget);
+
+  const todayRevenue = todayLogs.reduce((sum, log) => sum + log.revenue, 0);
+  const todayExpenses = todayLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
+  const todayTax = todayRevenue * (settings.taxSetAsidePercent / 100);
+  const todayKept = todayRevenue - todayTax - todayExpenses;
+
+  const outcomeStats = activeSession
+    ? { earned: liveRevenue, kept: liveKept, setAside: liveTax }
+    : { earned: todayRevenue, kept: todayKept, setAside: todayTax };
+
+  const weekSnapshot = useMemo(() => getWeekSnapshot(dailyLogs, settings), [dailyLogs, settings]);
+  const weekRevenue = weekSnapshot.revenue + (activeSession?.date === todayKey ? liveRevenue : 0);
+  const weekProgressPercent = getProgressPercent(weekRevenue, settings.weeklyRevenueTarget);
+  const activePrediction = useMemo(
+    () =>
+      activeSession
+        ? predictNextShift(dailyLogs, {
+            referenceDate: activeSession.date,
+            lastEndOdometer: storedLastEndOdometer,
+          })
+        : predictNextShift(dailyLogs, {
+            referenceDate: todayKey,
+            lastEndOdometer: storedLastEndOdometer,
+          }),
+    [activeSession, dailyLogs, storedLastEndOdometer, todayKey]
+  );
+  const rankedPredictions = useMemo(() => generatePredictions(dailyLogs, settings), [dailyLogs, settings]);
+  const topPrediction = useMemo(() => {
+    return rankedPredictions.find((prediction) => {
+      const key = `dbt_dismissed_prediction_${hashPrediction(`${prediction.type}:${prediction.message}`)}`;
+      const dismissedAt = Number(localStorage.getItem(key) ?? 0);
+      return !dismissedAt || Date.now() - dismissedAt > PREDICTION_DISMISS_FOR_MS;
+    }) ?? null;
+  }, [predictionRefreshToken, rankedPredictions]);
+  const manualPrediction = useMemo(
+    () =>
+      predictNextShift(dailyLogs, {
+        referenceDate: manualShiftDate,
+        lastEndOdometer: storedLastEndOdometer,
+      }),
+    [dailyLogs, manualShiftDate, storedLastEndOdometer]
+  );
+  const providerBreakdown = useMemo(() => {
+    const map = new Map<string, { revenue: number; days: number; hours: number }>();
+
+    for (const log of dailyLogs) {
+      const key = log.provider || 'Other';
+      const existing = map.get(key) ?? { revenue: 0, days: 0, hours: 0 };
+      map.set(key, {
+        revenue: existing.revenue + log.revenue,
+        days: existing.days + 1,
+        hours: existing.hours + log.hoursWorked,
+      });
+    }
+
+    return [...map.entries()]
+      .map(([name, values]) => ({ name, ...values }))
+      .sort((left, right) => right.revenue - left.revenue);
+  }, [dailyLogs]);
+
+  const taxYearTotals = useMemo(() => {
+    const totalRevenue = dailyLogs.reduce((sum, log) => sum + log.revenue, 0);
+    const totalExpenses = dailyLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
+    const totalBusinessMiles = trips
+      .filter((trip) => trip.purpose === 'Business')
+      .reduce((sum, trip) => sum + trip.totalMiles, 0);
+    const mileageClaim = calculateMileageClaim(
+      totalBusinessMiles,
+      settings.businessRateFirst10k,
+      settings.businessRateAfter10k
+    );
+
+    return {
+      totalRevenue,
+      totalExpenses,
+      totalBusinessMiles,
+      mileageClaim,
+      taxSetAside: totalRevenue * (settings.taxSetAsidePercent / 100),
+      workDays: dailyLogs.length,
+    };
+  }, [dailyLogs, settings, trips]);
+
+  const dashboardInsight = useMemo(() => {
+    const sourceLog =
+      activeSession
+        ? ({
+            id: activeSession.id,
+            date: activeSession.date,
+            provider: activeSession.provider || mostRecentShift?.provider || 'Work Day',
+            hoursWorked: activeDurationHours,
+            revenue: liveRevenue,
+            fuelLiters: activeFuelLiters || undefined,
+            expensesTotal: activeExpenseTotal || undefined,
+            milesDriven: liveMiles || undefined,
+          } satisfies DailyWorkLog)
+        : todayLogs.length > 0
+          ? ({
+              id: `today-${todayKey}`,
+              date: todayKey,
+              provider: todayLogs[0]?.provider || 'Work Day',
+              hoursWorked: todayLogs.reduce((sum, log) => sum + log.hoursWorked, 0),
+              revenue: todayRevenue,
+              fuelLiters: todayLogs.reduce((sum, log) => sum + (log.fuelLiters ?? 0), 0) || undefined,
+              expensesTotal: todayExpenses || undefined,
+              milesDriven: todayLogs.reduce((sum, log) => sum + (log.milesDriven ?? 0), 0) || undefined,
+            } satisfies DailyWorkLog)
+          : mostRecentShift;
+
+    if (!sourceLog) return null;
+
+    const insightList = generateInsights(
+      sourceLog,
+      sourceLog.id.startsWith('today-') || sourceLog.id === activeSession?.id ? [...dailyLogs, sourceLog] : dailyLogs,
+      settings,
+      trips
+    );
+
+    return insightList[0] ?? null;
+  }, [
+    activeDurationHours,
+    activeExpenseTotal,
+    activeFuelLiters,
+    activeSession,
+    dailyLogs,
+    liveMiles,
+    liveRevenue,
+    mostRecentShift,
+    settings,
+    todayExpenses,
+    todayKey,
+    todayLogs,
+    trips,
+    todayRevenue,
+  ]);
+
+  const summaryInsight = completedShiftSummary?.insights[0]
+    ?? (completedShiftSummary
+      ? generateInsights(
+          {
+            id: completedShiftSummary.id,
+            date: completedShiftSummary.date,
+            provider: mostRecentShift?.provider || 'Work Day',
+            hoursWorked: completedShiftSummary.hoursWorked ?? getDurationHours(completedShiftSummary.startedAt, completedShiftSummary.endedAt),
+            revenue: completedShiftSummary.revenue,
+            fuelLiters: completedShiftSummary.fuelLiters || undefined,
+            expensesTotal: completedShiftSummary.expensesTotal || undefined,
+            milesDriven: completedShiftSummary.miles || undefined,
+          },
+          dailyLogs,
+          settings,
+          trips
+        )[0]
+      : null);
+
+  useEffect(() => {
+    const storedValue = localStorage.getItem(LAST_END_ODOMETER_KEY);
+    if (!storedValue) return;
+
+    const parsed = Number.parseFloat(storedValue);
+    if (Number.isFinite(parsed)) {
+      setStoredLastEndOdometer(parsed);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (dashboardInsight && dashboardInsight !== dismissedInsight) {
+      setDismissedInsight(null);
+    }
+  }, [dashboardInsight, dismissedInsight]);
+
+  useEffect(() => {
+    if (!topPrediction) {
+      setExpandedPredictionId(null);
+      return;
+    }
+
+    const predictionId = hashPrediction(`${topPrediction.type}:${topPrediction.message}`);
+    if (expandedPredictionId && expandedPredictionId !== predictionId) {
+      setExpandedPredictionId(null);
+    }
+  }, [expandedPredictionId, topPrediction]);
+
+  const openStartSheet = () => {
+    const prediction = predictNextShift(dailyLogs, {
+      referenceDate: todayKey,
+      lastEndOdometer: storedLastEndOdometer,
+    });
+
+    setStartProvider(prediction.provider || 'Work Day');
+    setStartOdometer(prediction.startOdometer != null ? String(prediction.startOdometer) : '');
+    setShowStartSheet(true);
+  };
+
+  useEffect(() => {
+    if (!startWorkDayRequest) return;
+    openStartSheet();
+    onStartWorkDayRequestHandled?.();
+  }, [onStartWorkDayRequestHandled, startWorkDayRequest]);
+
+  const applyDraftForContext = (mode: EndSheetMode, dateValue: string, defaultEndOdometer: string) => {
+    const storedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+    const draftScope = mode === 'active' && activeSession ? activeSession.id : `manual-${dateValue}`;
+
+    if (!storedDraft) {
+      setEndShiftDraft({ ...createEmptyDraft(), endOdometerValue: defaultEndOdometer });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedDraft) as { scope: string; values: EndShiftDraft };
+      if (parsed.scope === draftScope) {
+        setEndShiftDraft(parsed.values);
+        return;
+      }
+    } catch {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    }
+
+    setEndShiftDraft({ ...createEmptyDraft(), endOdometerValue: defaultEndOdometer });
+  };
+
+  const openManualEntry = (dateValue = todayKey) => {
+    const prediction = predictNextShift(dailyLogs, {
+      referenceDate: dateValue,
+      lastEndOdometer: storedLastEndOdometer,
+    });
+    const defaultStartOdometer = prediction.startOdometer ?? getOdometerTemplate(trips, settings, dateValue);
+    const defaultEndOdometer =
+      prediction.startOdometer != null && prediction.estimatedHours > 0 && mostRecentShift?.milesDriven != null && mostRecentShift.milesDriven > 0
+        ? String(Number((defaultStartOdometer + mostRecentShift.milesDriven).toFixed(1)))
+        : '';
+    const recentFuelExpense = getLastFuelExpense(expenses, dateValue);
+
+    setManualShiftDate(dateValue);
+    setManualProvider(prediction.provider || mostRecentShift?.provider || 'Work Day');
+    setManualHoursWorked(prediction.estimatedHours > 0 ? String(prediction.estimatedHours) : '');
+    setManualStartOdometer(Number.isFinite(defaultStartOdometer) ? defaultStartOdometer : undefined);
+    setEndSheetMode('manual');
+    setEndShiftDraft({
+      ...createEmptyDraft(),
+      endOdometerValue: defaultEndOdometer,
+      fuelChoice: recentFuelExpense ? 'yes' : 'no',
+      fuelAmountValue: recentFuelExpense ? String(recentFuelExpense.amount) : '',
+      fuelLitersValue: recentFuelExpense?.liters ? String(recentFuelExpense.liters) : '',
+    });
+    applyDraftForContext('manual', dateValue, defaultEndOdometer);
+    setShowEndSheet(true);
+  };
+
+  useEffect(() => {
+    if (!manualEntryRequest?.token) return;
+    openManualEntry(manualEntryRequest.date ?? todayKey);
+    onManualEntryRequestHandled?.();
+  }, [manualEntryRequest, onManualEntryRequestHandled, todayKey]);
+
+  useEffect(() => {
+    if (!showEndSheet) return;
+
+    const scope = endSheetMode === 'active' && activeSession ? activeSession.id : `manual-${manualShiftDate}`;
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ scope, values: endShiftDraft }));
+  }, [activeSession, endShiftDraft, endSheetMode, manualShiftDate, showEndSheet]);
+
+  const openActiveEndSheet = () => {
+    if (!activeSession) return;
+
+    const estimatedEndOdometer =
+      activeSession.startOdometer != null
+        ? String(Number((activeSession.startOdometer + (activeSession.miles ?? trackedMilesForSession ?? 0)).toFixed(1)))
+        : '';
+    const recentFuelExpense = getLastFuelExpense(expenses, activeSession.date);
+
+    setEndSheetMode('active');
+    setEndShiftDraft({
+      ...createEmptyDraft(),
+      earningsValue: activeSession.revenue != null ? String(activeSession.revenue) : '',
+      endOdometerValue: estimatedEndOdometer,
+      fuelChoice: recentFuelExpense ? 'yes' : 'no',
+      fuelAmountValue: recentFuelExpense ? String(recentFuelExpense.amount) : '',
+      fuelLitersValue: recentFuelExpense?.liters ? String(recentFuelExpense.liters) : '',
+      notesValue: '',
+    });
+    applyDraftForContext('active', activeSession.date, estimatedEndOdometer);
+    setShowEndSheet(true);
+  };
+
+  const startSession = () => {
+    const parsedOdometer = Number.parseFloat(startOdometer);
+    onStartSession({
+      provider: startProvider || activePrediction.provider || 'Work Day',
+      startOdometer: Number.isFinite(parsedOdometer) ? parsedOdometer : undefined,
+    });
+    setShowStartSheet(false);
+    setStartOdometer('');
+    setStartProvider(activePrediction.provider || 'Work Day');
+  };
+
+  const closeEndSheet = () => {
+    setShowEndSheet(false);
+  };
+
+  const updateEndShiftDraft = (patch: Partial<EndShiftDraft>) => {
+    setEndShiftDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const saveShift = () => {
+    const revenue = Number.parseFloat(endShiftDraft.earningsValue || '0');
+    if (!Number.isFinite(revenue) || revenue <= 0) {
+      return;
+    }
+
+    const manualHoursValue = Number.parseFloat(manualHoursWorked || '0');
+    if (endSheetMode === 'manual' && (!Number.isFinite(manualHoursValue) || manualHoursValue <= 0)) {
+      return;
+    }
+
+    const endOdometer = Number.parseFloat(endShiftDraft.endOdometerValue);
+    const fuelAmount = Number.parseFloat(endShiftDraft.fuelAmountValue);
+    const fuelLiters = Number.parseFloat(endShiftDraft.fuelLitersValue);
+    const extraExpenseAmount = Number.parseFloat(endShiftDraft.extraExpenseAmountValue);
+    const expenseItems: ActiveWorkSessionExpenseDraft[] = [];
+
+    if (endShiftDraft.fuelChoice === 'yes' && Number.isFinite(fuelAmount) && fuelAmount > 0) {
+      expenseItems.push({
+        id: `${Date.now()}_fuel`,
+        category: ExpenseCategory.FUEL,
+        amount: fuelAmount,
+        liters: Number.isFinite(fuelLiters) && fuelLiters > 0 ? fuelLiters : undefined,
+        description: 'Fuel',
+      });
+    }
+
+    if (Number.isFinite(extraExpenseAmount) && extraExpenseAmount > 0) {
+      expenseItems.push({
+        id: `${Date.now()}_extra`,
+        category: ExpenseCategory.OTHER,
+        amount: extraExpenseAmount,
+        description: endShiftDraft.extraExpenseDescriptionValue || 'Shift expense',
+      });
+    }
+
+    setEndingShift(true);
+
+    try {
+      const summary =
+        endSheetMode === 'active' && activeSession
+          ? onCompleteSession({
+              ...activeSession,
+              revenue,
+              miles:
+                Number.isFinite(endOdometer) && activeSession.startOdometer != null
+                  ? Math.max(0, endOdometer - activeSession.startOdometer)
+                  : activeSession.miles ?? trackedMilesForSession,
+              expenses: expenseItems,
+            })
+          : onSaveManualShift({
+              date: manualShiftDate,
+              provider: manualProvider,
+              hoursWorked: manualHoursValue,
+              revenue,
+              expenses: expenseItems,
+              startOdometer: manualStartOdometer,
+              endOdometer: Number.isFinite(endOdometer) ? endOdometer : undefined,
+              notes: endShiftDraft.notesValue || undefined,
+            });
+
+      if (Number.isFinite(endOdometer)) {
+        localStorage.setItem(LAST_END_ODOMETER_KEY, String(endOdometer));
+        setStoredLastEndOdometer(endOdometer);
+      }
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      setShowEndSheet(false);
+      window.setTimeout(() => {
+        onShowCompletedSummary(summary);
+        setEndingShift(false);
+      }, 350);
+    } catch {
+      setEndingShift(false);
+    }
+  };
+
+  const dismissPrediction = (predictionMessage: string, predictionType: string) => {
+    const key = `dbt_dismissed_prediction_${hashPrediction(`${predictionType}:${predictionMessage}`)}`;
+    localStorage.setItem(key, String(Date.now()));
+    setPredictionRefreshToken((current) => current + 1);
+    setExpandedPredictionId(null);
+  };
+
+  const summaryHoursWorked =
+    completedShiftSummary?.hoursWorked ?? (completedShiftSummary ? getDurationHours(completedShiftSummary.startedAt, completedShiftSummary.endedAt) : 0);
+  const summaryHourlyRate =
+    completedShiftSummary && summaryHoursWorked > 0
+      ? completedShiftSummary.revenue / summaryHoursWorked
+      : 0;
+  const summaryProgressPercent = completedShiftSummary
+    ? getProgressPercent(completedShiftSummary.weekRevenue, settings.weeklyRevenueTarget)
+    : 0;
+
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 pb-4 pt-2">
+      {completedShiftSummary ? (
+        <WeeklySummary
+          completedShiftSummary={completedShiftSummary}
+          summaryHoursWorked={summaryHoursWorked}
+          summaryHourlyRate={summaryHourlyRate}
+          summaryInsight={summaryInsight ?? null}
+          summaryProgressPercent={summaryProgressPercent}
+          weeklyRevenueTarget={settings.weeklyRevenueTarget}
+          onDismissCompletedSummary={onDismissCompletedSummary}
+        />
+      ) : (
+        <>
+          <EarningsSummary
+            activeSession={activeSession ? { startedAt: activeSession.startedAt } : null}
+            todayLogsCount={todayLogs.length}
+            outcomeStats={outcomeStats}
+            activeDurationHours={activeDurationHours}
+            weekRevenue={weekRevenue}
+            weeklyRevenueTarget={settings.weeklyRevenueTarget}
+            weekProgressPercent={weekProgressPercent}
+            onEndShift={openActiveEndSheet}
+            onQuickAddRevenue={() => onUpdateSession({ revenue: liveRevenue + 10 })}
+            onStartShift={openStartSheet}
+            onAddShift={() => openManualEntry()}
+            liveRevenue={liveRevenue}
+            liveMiles={liveMiles}
+            liveTax={liveTax}
+            formatTime={formatTime}
+          />
+
+          <section className={`${panelClasses} overflow-hidden p-5`}>
+            {hasHabitCard && (
+              <div>
+                <HabitCard state={habitState} />
+              </div>
+            )}
+
+            <IntelligenceFeed
+              dashboardInsight={dashboardInsight}
+              dismissedInsight={dismissedInsight}
+              onDismissInsight={setDismissedInsight}
+              topPrediction={topPrediction}
+              isPredictionExpanded={topPrediction ? expandedPredictionId === getPredictionId(topPrediction) : false}
+              onTogglePrediction={() => {
+                if (!topPrediction) return;
+                const predictionId = getPredictionId(topPrediction);
+                setExpandedPredictionId((current) => (current === predictionId ? null : predictionId));
+              }}
+              onDismissPrediction={dismissPrediction}
+              onOpenTaxTab={onOpenTaxTab}
+              missedDays={missedDays}
+              onOpenBackfill={onOpenBackfill}
+            />
+          </section>
+
+          {taxYearTotals.workDays > 0 ? (
+            <>
+              <TaxEstimateCard totals={taxYearTotals} />
+
+              {providerBreakdown.length > 0 && (
+                <section className={`${panelClasses} p-5`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">By platform</p>
+                  <div className="mt-3 space-y-2">
+                    {providerBreakdown.map((provider) => (
+                      <div key={provider.name} className={`${subtlePanelClasses} flex items-center justify-between px-4 py-3`}>
+                        <div>
+                          <p className="text-sm font-medium text-white">{provider.name}</p>
+                          <p className="text-xs text-slate-500">{provider.days} day{provider.days !== 1 ? 's' : ''} · {formatNumber(provider.hours, 1)} hrs</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-sm font-semibold tracking-tight text-white">{formatCurrency(provider.revenue)}</p>
+                          {provider.hours > 0 && (
+                            <p className="font-mono text-xs tracking-tight text-slate-500">{formatCurrency(provider.revenue / provider.hours)}/hr</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {recentLogs.length > 0 && (
+                <section className={`${panelClasses} p-5`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent shifts</p>
+                  <div className="mt-3 space-y-2">
+                    {recentLogs.map((log) => (
+                      <div key={log.id} className={`${subtlePanelClasses} flex items-center justify-between px-4 py-3`}>
+                        <div>
+                          <p className="text-sm font-medium text-white">
+                            {new Date(`${log.date}T12:00:00Z`).toLocaleDateString('en-GB', {
+                              timeZone: 'Europe/London',
+                              weekday: 'short',
+                              day: 'numeric',
+                              month: 'short',
+                            })}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {log.provider}{log.hoursWorked > 0 ? ` · ${formatNumber(log.hoursWorked, 1)} hrs` : ''}{log.jobCount ? ` · ${log.jobCount} jobs` : ''}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-sm font-semibold tracking-tight text-white">{formatCurrency(log.revenue)}</p>
+                          {log.hoursWorked > 0 && (
+                            <p className="font-mono text-xs tracking-tight text-slate-500">{formatCurrency(log.revenue / log.hoursWorked)}/hr</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          ) : (
+            <section className={`${panelClasses} p-6`}>
+              <div className="space-y-3">
+                <div className={`${subtlePanelClasses} flex items-start gap-3 p-4`}>
+                  <PoundSterling className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                  <div>
+                    <p className="text-sm font-medium text-white">Track your earnings</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Start a shift when you want the timer, or use Add shift if you just need the numbers in.</p>
+                  </div>
+                </div>
+                <div className={`${subtlePanelClasses} flex items-start gap-3 p-4`}>
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+                  <div>
+                    <p className="text-sm font-medium text-white">Track your mileage</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Every business mile matters when you work out what stays in your pocket.</p>
+                  </div>
+                </div>
+                <div className={`${subtlePanelClasses} flex items-start gap-3 p-4`}>
+                  <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                  <div>
+                    <p className="text-sm font-medium text-white">See your real take-home</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Tax set-aside, expenses, and weekly pace are all kept in view.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      <QuickAddForm
+        showStartSheet={showStartSheet}
+        showEndSheet={showEndSheet}
+        endingShift={endingShift}
+        providerOptions={providerOptions}
+        startProvider={startProvider}
+        onStartProviderChange={setStartProvider}
+        startOdometer={startOdometer}
+        onStartOdometerChange={setStartOdometer}
+        storedLastEndOdometer={storedLastEndOdometer}
+        activePrediction={activePrediction}
+        onCloseStartSheet={() => setShowStartSheet(false)}
+        onStartSession={startSession}
+        onCloseEndSheet={closeEndSheet}
+        endSheetMode={endSheetMode}
+        activeDurationHours={activeDurationHours}
+        manualShiftDate={manualShiftDate}
+        manualPrediction={manualPrediction}
+        manualProviderOptions={getProviderOptions(settings.driverRoles ?? ['COURIER'], manualProvider)}
+        manualProvider={manualProvider}
+        onManualProviderChange={setManualProvider}
+        manualHoursWorked={manualHoursWorked}
+        onManualHoursWorkedChange={setManualHoursWorked}
+        endShiftDraft={endShiftDraft}
+        onUpdateEndShiftDraft={updateEndShiftDraft}
+        onSaveShift={saveShift}
+        activeSessionEstimatedRevenue={activePrediction}
+        settings={settings}
+      />
+    </div>
+  );
+};

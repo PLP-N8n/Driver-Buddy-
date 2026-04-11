@@ -1,0 +1,7 @@
+{
+  "name": "DriverTax Pro",
+  "description": "A comprehensive, HMRC-compliant mileage and expense log for self-employed delivery drivers, featuring an AI Tax Assistant.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

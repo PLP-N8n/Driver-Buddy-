@@ -1,0 +1,54 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tmp-vitest",
+    "rootDir": ".",
+    "module": "ESNext",
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "sourceMap": false,
+    "declaration": false,
+    "allowImportingTsExtensions": false,
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@testing-library/react": [
+        "./test-support/testing-library-react.ts"
+      ],
+      "#react-local": [
+        "./node_modules/react/index.js"
+      ],
+      "#react-dom-client-local": [
+        "./node_modules/react-dom/client.js"
+      ],
+      "#react-dom-test-utils-local": [
+        "./node_modules/react-dom/test-utils.js"
+      ]
+    }
+  },
+  "include": [
+    "hooks/**/*.ts",
+    "services/**/*.ts",
+    "src/**/*.ts",
+    "test-support/**/*.ts",
+    "utils/**/*.ts",
+    "types.ts",
+    "hooks/**/*.test.ts",
+    "services/**/*.test.ts",
+    "utils/**/*.test.ts",
+    "react-shim.d.ts",
+    "vite-env.d.ts"
+  ],
+  "exclude": [
+    "e2e/**",
+    "node_modules/**",
+    ".tmp-unit/**",
+    ".tmp-unit-run/**",
+    ".tmp-unit-run2/**",
+    ".tmp-unit-run3/**",
+    ".tmp-vitest/**"
+  ]
+}
