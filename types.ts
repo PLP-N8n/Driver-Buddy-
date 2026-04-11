@@ -218,6 +218,7 @@ export interface ActiveWorkSession {
   revenue?: number;
   miles?: number;
   expenses: ActiveWorkSessionExpenseDraft[];
+  providerSplits?: ProviderSplit[];
 }
 
 export interface CompletedShiftSummary {

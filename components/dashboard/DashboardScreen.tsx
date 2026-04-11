@@ -18,6 +18,7 @@ import {
   DriverRole,
   Expense,
   ExpenseCategory,
+  ProviderSplit,
   Settings,
   Trip,
 } from '../../types';
@@ -96,6 +97,7 @@ export interface ManualShiftPayload {
   startOdometer?: number;
   endOdometer?: number;
   notes?: string;
+  providerSplits?: ProviderSplit[];
 }
 
 interface DashboardProps {
@@ -122,8 +124,15 @@ interface DashboardProps {
 type EndSheetMode = 'active' | 'manual';
 type FuelChoice = 'yes' | 'no';
 
+interface ProviderDraftRow {
+  id: string;
+  provider: string;
+  revenue: string;
+  jobCount: string;
+}
+
 interface EndShiftDraft {
-  earningsValue: string;
+  providers: ProviderDraftRow[];
   endOdometerValue: string;
   fuelChoice: FuelChoice;
   fuelAmountValue: string;
@@ -134,8 +143,8 @@ interface EndShiftDraft {
   optionalExpanded: boolean;
 }
 
-const createEmptyDraft = (): EndShiftDraft => ({
-  earningsValue: '',
+const createEmptyDraft = (defaultProvider = 'Work Day'): EndShiftDraft => ({
+  providers: [{ id: '1', provider: defaultProvider, revenue: '', jobCount: '' }],
   endOdometerValue: '',
   fuelChoice: 'no',
   fuelAmountValue: '',
@@ -474,26 +483,36 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     onStartWorkDayRequestHandled?.();
   }, [onStartWorkDayRequestHandled, startWorkDayRequest]);
 
-  const applyDraftForContext = (mode: EndSheetMode, dateValue: string, defaultEndOdometer: string) => {
+  const applyDraftForContext = (mode: EndSheetMode, dateValue: string, defaultDraft: EndShiftDraft) => {
     const storedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
     const draftScope = mode === 'active' && activeSession ? activeSession.id : `manual-${dateValue}`;
 
     if (!storedDraft) {
-      setEndShiftDraft({ ...createEmptyDraft(), endOdometerValue: defaultEndOdometer });
+      setEndShiftDraft(defaultDraft);
       return;
     }
 
     try {
-      const parsed = JSON.parse(storedDraft) as { scope: string; values: EndShiftDraft };
+      const parsed = JSON.parse(storedDraft) as { scope: string; values: EndShiftDraft & { earningsValue?: string } };
       if (parsed.scope === draftScope) {
-        setEndShiftDraft(parsed.values);
+        const restored = parsed.values;
+        // Migrate old drafts that stored a single earningsValue instead of providers array
+        if (!restored.providers) {
+          restored.providers = [{
+            id: '1',
+            provider: defaultDraft.providers[0]?.provider ?? 'Work Day',
+            revenue: restored.earningsValue ?? '',
+            jobCount: '',
+          }];
+        }
+        setEndShiftDraft(restored);
         return;
       }
     } catch {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
     }
 
-    setEndShiftDraft({ ...createEmptyDraft(), endOdometerValue: defaultEndOdometer });
+    setEndShiftDraft(defaultDraft);
   };
 
   const openManualEntry = (dateValue = todayKey) => {
@@ -508,19 +527,20 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         : '';
     const recentFuelExpense = getLastFuelExpense(expenses, dateValue);
 
+    const defaultProvider = prediction.provider || mostRecentShift?.provider || 'Work Day';
     setManualShiftDate(dateValue);
-    setManualProvider(prediction.provider || mostRecentShift?.provider || 'Work Day');
+    setManualProvider(defaultProvider);
     setManualHoursWorked(prediction.estimatedHours > 0 ? String(prediction.estimatedHours) : '');
     setManualStartOdometer(Number.isFinite(defaultStartOdometer) ? defaultStartOdometer : undefined);
     setEndSheetMode('manual');
-    setEndShiftDraft({
-      ...createEmptyDraft(),
+    const manualDefaultDraft: EndShiftDraft = {
+      ...createEmptyDraft(defaultProvider),
       endOdometerValue: defaultEndOdometer,
       fuelChoice: recentFuelExpense ? 'yes' : 'no',
       fuelAmountValue: recentFuelExpense ? String(recentFuelExpense.amount) : '',
       fuelLitersValue: recentFuelExpense?.liters ? String(recentFuelExpense.liters) : '',
-    });
-    applyDraftForContext('manual', dateValue, defaultEndOdometer);
+    };
+    applyDraftForContext('manual', dateValue, manualDefaultDraft);
     setShowEndSheet(true);
   };
 
@@ -547,16 +567,21 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     const recentFuelExpense = getLastFuelExpense(expenses, activeSession.date);
 
     setEndSheetMode('active');
-    setEndShiftDraft({
-      ...createEmptyDraft(),
-      earningsValue: activeSession.revenue != null ? String(activeSession.revenue) : '',
+    const activeDefaultDraft: EndShiftDraft = {
+      ...createEmptyDraft(activeSession.provider ?? 'Work Day'),
+      providers: [{
+        id: '1',
+        provider: activeSession.provider ?? 'Work Day',
+        revenue: activeSession.revenue != null ? String(activeSession.revenue) : '',
+        jobCount: '',
+      }],
       endOdometerValue: estimatedEndOdometer,
       fuelChoice: recentFuelExpense ? 'yes' : 'no',
       fuelAmountValue: recentFuelExpense ? String(recentFuelExpense.amount) : '',
       fuelLitersValue: recentFuelExpense?.liters ? String(recentFuelExpense.liters) : '',
       notesValue: '',
-    });
-    applyDraftForContext('active', activeSession.date, estimatedEndOdometer);
+    };
+    applyDraftForContext('active', activeSession.date, activeDefaultDraft);
     setShowEndSheet(true);
   };
 
@@ -580,10 +605,20 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   };
 
   const saveShift = () => {
-    const revenue = Number.parseFloat(endShiftDraft.earningsValue || '0');
-    if (!Number.isFinite(revenue) || revenue <= 0) {
+    const validProviders = endShiftDraft.providers.filter((row) => {
+      const rev = Number.parseFloat(row.revenue);
+      return Number.isFinite(rev) && rev > 0;
+    });
+    const revenue = validProviders.reduce((sum, row) => sum + Number.parseFloat(row.revenue), 0);
+    if (revenue <= 0) {
       return;
     }
+    const providerSplits: ProviderSplit[] = validProviders.map((row) => ({
+      provider: row.provider,
+      revenue: Number.parseFloat(row.revenue),
+      ...(Number.parseInt(row.jobCount) > 0 && { jobCount: Number.parseInt(row.jobCount) }),
+    }));
+    const primaryProvider = validProviders[0]?.provider ?? manualProvider;
 
     const manualHoursValue = Number.parseFloat(manualHoursWorked || '0');
     if (endSheetMode === 'manual' && (!Number.isFinite(manualHoursValue) || manualHoursValue <= 0)) {
@@ -628,16 +663,18 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
                   ? Math.max(0, endOdometer - activeSession.startOdometer)
                   : activeSession.miles ?? trackedMilesForSession,
               expenses: expenseItems,
+              providerSplits,
             })
           : onSaveManualShift({
               date: manualShiftDate,
-              provider: manualProvider,
+              provider: primaryProvider,
               hoursWorked: manualHoursValue,
               revenue,
               expenses: expenseItems,
               startOdometer: manualStartOdometer,
               endOdometer: Number.isFinite(endOdometer) ? endOdometer : undefined,
               notes: endShiftDraft.notesValue || undefined,
+              providerSplits,
             });
 
       if (Number.isFinite(endOdometer)) {
@@ -835,6 +872,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         manualShiftDate={manualShiftDate}
         manualPrediction={manualPrediction}
         manualProviderOptions={getProviderOptions(settings.driverRoles ?? ['COURIER'], manualProvider)}
+        endShiftProviderOptions={getProviderOptions(settings.driverRoles ?? ['COURIER'])}
         manualProvider={manualProvider}
         onManualProviderChange={setManualProvider}
         manualHoursWorked={manualHoursWorked}

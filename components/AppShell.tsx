@@ -444,6 +444,7 @@ export function AppShell() {
       linkedTripId,
       startedAt: session.startedAt,
       endedAt,
+      providerSplits: session.providerSplits,
     };
 
     addDailyLog(completedLog);
@@ -546,6 +547,7 @@ export function AppShell() {
       linkedTripId,
       startedAt,
       endedAt,
+      providerSplits: payload.providerSplits,
     };
 
     addDailyLog(completedLog);

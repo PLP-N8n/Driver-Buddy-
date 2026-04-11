@@ -16,8 +16,15 @@ import {
 type EndSheetMode = 'active' | 'manual';
 type FuelChoice = 'yes' | 'no';
 
+type ProviderDraftRow = {
+  id: string;
+  provider: string;
+  revenue: string;
+  jobCount: string;
+};
+
 type EndShiftDraft = {
-  earningsValue: string;
+  providers: ProviderDraftRow[];
   endOdometerValue: string;
   fuelChoice: FuelChoice;
   fuelAmountValue: string;
@@ -47,6 +54,7 @@ type QuickAddFormProps = {
   manualShiftDate: string;
   manualPrediction: ShiftPrediction;
   manualProviderOptions: string[];
+  endShiftProviderOptions: string[];
   manualProvider: string;
   onManualProviderChange: (value: string) => void;
   manualHoursWorked: string;
@@ -82,6 +90,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
   manualShiftDate,
   manualPrediction,
   manualProviderOptions,
+  endShiftProviderOptions,
   manualProvider,
   onManualProviderChange,
   manualHoursWorked,
@@ -220,18 +229,64 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
             )}
 
             <div>
-              <label htmlFor="end-shift-earnings" className="block text-sm font-medium text-slate-300">
-                Earnings
-              </label>
-              <input
-                id="end-shift-earnings"
-                {...getNumericInputProps()}
-                autoFocus
-                value={endShiftDraft.earningsValue}
-                onChange={(event) => onUpdateEndShiftDraft({ earningsValue: event.target.value })}
-                placeholder={`e.g. ${formatCurrency(Math.round((endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).estimatedRevenueAvg))}`}
-                className={`${inputClasses} mt-2`}
-              />
+              <label className="block text-sm font-medium text-slate-300">Earnings by platform</label>
+              <div className="mt-2 space-y-2">
+                {endShiftDraft.providers.map((row, index) => (
+                  <div key={row.id} className="flex items-center gap-2">
+                    <select
+                      value={row.provider}
+                      onChange={(event) => {
+                        const updated = endShiftDraft.providers.map((p) =>
+                          p.id === row.id ? { ...p, provider: event.target.value } : p
+                        );
+                        onUpdateEndShiftDraft({ providers: updated });
+                      }}
+                      className={`${inputClasses} flex-1`}
+                    >
+                      {endShiftProviderOptions.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                    <input
+                      {...getNumericInputProps()}
+                      autoFocus={index === 0}
+                      value={row.revenue}
+                      onChange={(event) => {
+                        const updated = endShiftDraft.providers.map((p) =>
+                          p.id === row.id ? { ...p, revenue: event.target.value } : p
+                        );
+                        onUpdateEndShiftDraft({ providers: updated });
+                      }}
+                      placeholder={index === 0 ? `e.g. ${formatCurrency(Math.round((endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).estimatedRevenueAvg))}` : '£0.00'}
+                      className={`${inputClasses} w-28`}
+                    />
+                    {endShiftDraft.providers.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateEndShiftDraft({ providers: endShiftDraft.providers.filter((p) => p.id !== row.id) })}
+                        className="p-2 text-slate-500 hover:text-red-400 transition-colors"
+                        aria-label="Remove platform"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateEndShiftDraft({
+                    providers: [
+                      ...endShiftDraft.providers,
+                      { id: Date.now().toString(), provider: endShiftProviderOptions[1] ?? endShiftProviderOptions[0] ?? 'Work Day', revenue: '', jobCount: '' },
+                    ],
+                  })
+                }
+                className="mt-2 text-xs text-brand hover:underline"
+              >
+                + Add platform
+              </button>
             </div>
             <div>
               <label htmlFor="end-shift-odometer" className="block text-sm font-medium text-slate-300">
