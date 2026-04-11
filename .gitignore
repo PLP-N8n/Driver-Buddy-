@@ -10,7 +10,20 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-split-test
 *.local
+
+# Temp test runner dirs
+.tmp-unit/
+.tmp-unit-run/
+.tmp-unit-run2/
+.tmp-unit-run3/
+.tmp-vitest/
+
+# Build outputs / tooling
+graphify-out/
+output/
+screenshots/
 
 # Editor directories and files
 .vscode/*
