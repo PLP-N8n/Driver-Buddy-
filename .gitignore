@@ -14,16 +14,21 @@ dist-split-test
 *.local
 
 # Temp test runner dirs
-.tmp-unit/
-.tmp-unit-run/
-.tmp-unit-run2/
-.tmp-unit-run3/
-.tmp-vitest/
+.tmp-unit*/
+.tmp-vitest*/
+
+# Wrangler / Cloudflare
+.wrangler/
 
 # Build outputs / tooling
-graphify-out/
 output/
-screenshots/
+dist-split-test/
+
+# Design / external tooling
+.superdesign/
+
+# Knowledge graph (generated — open docs/graphify/graph.html to view)
+docs/graphify/
 
 # Editor directories and files
 .vscode/*
