@@ -6,6 +6,7 @@ import { primaryButtonClasses, secondaryButtonClasses } from '../utils/ui';
 
 interface OnboardingModalProps {
   settings: Settings;
+  onSkip?: () => void;
   onComplete: (updates: Partial<Settings>, options?: { startWorkDay?: boolean }) => void;
 }
 
@@ -17,7 +18,7 @@ const roleOptions: Array<{ role: DriverRole; label: string; icon: React.Componen
   { role: 'OTHER', label: 'Other', icon: HelpCircle },
 ];
 
-export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onComplete }) => {
+export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSkip, onComplete }) => {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedRole, setSelectedRole] = useState<DriverRole>(settings.driverRoles[0] ?? 'COURIER');
@@ -87,6 +88,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onCo
             </div>
             <button type="button" onClick={() => setStep(2)} className={`${primaryButtonClasses} mt-6 w-full justify-center`}>
               Continue <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem('drivertax_onboarded', '1');
+                onSkip?.();
+              }}
+              className="mt-3 w-full text-center text-sm text-slate-500 transition-colors hover:text-slate-300"
+            >
+              Skip for now
             </button>
           </>
         )}

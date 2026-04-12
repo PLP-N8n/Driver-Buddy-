@@ -33,6 +33,7 @@ import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { SyncIndicator } from './SyncIndicator';
 import { FeedbackSheet } from './FeedbackSheet';
 import { OnboardingModal } from './OnboardingModal';
+import { SetupReminderBanner } from './SetupReminderBanner';
 import { UpdateBanner } from './UpdateBanner';
 import { Skeleton } from './Skeleton';
 import { Spinner } from './Spinner';
@@ -759,6 +760,7 @@ export function AppShell() {
               </div>
             </section>
           )}
+          <SetupReminderBanner onOpenSetup={() => setShowOnboarding(true)} />
           {!hasHydrated ? (
             <section className="rounded-[28px] border border-white/6 bg-surface/90 p-6 shadow-xl shadow-black/20 backdrop-blur-xl">
               <div className="flex items-center gap-3">
@@ -892,7 +894,7 @@ export function AppShell() {
         </Suspense>
       )}
 
-      {!showMoreMenu && !showFeedback && !showFaq && !showExportModal && !showOnboarding && !isBackfillOpen && (
+      {!showMoreMenu && !showFeedback && !showFaq && !showExportModal && !isBackfillOpen && (
       <div className="bottom-dock fixed left-0 right-0 z-50 px-4 pb-1">
         <div className="app-dock mx-auto flex max-w-sm gap-2 rounded-[24px] p-1.5 dock-shadow">
           {isAdvancedUser && (
@@ -1074,6 +1076,7 @@ export function AppShell() {
       {showOnboarding && (
         <OnboardingModal
           settings={settings}
+          onSkip={() => setShowOnboarding(false)}
           onComplete={(updates, options) => {
             setSettings((s) => ({ ...s, ...updates }));
             setShowOnboarding(false);
