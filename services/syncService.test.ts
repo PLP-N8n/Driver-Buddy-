@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, ExpenseCategory, type SyncPullPayload } from '../types';
 
 vi.mock('./sessionManager', () => ({
-  buildAuthHeaders: vi.fn(async () => ({ Authorization: 'Bearer test-token' })),
+  buildAuthHeaders: vi.fn(async () => ({ 'X-Session-Token': 'test-token' })),
 }));
 
 vi.mock('./deviceId', () => ({
@@ -38,11 +38,7 @@ describe('syncService', () => {
 
     service.schedulePush({ expenses: ['queued'] });
 
-    await vi.advanceTimersByTimeAsync(3_000);
-    await vi.advanceTimersByTimeAsync(5_000);
-    await vi.advanceTimersByTimeAsync(10_000);
-    await vi.advanceTimersByTimeAsync(20_000);
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.runAllTimersAsync();
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(statuses.at(-1)).toBe('error');

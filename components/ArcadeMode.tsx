@@ -39,7 +39,7 @@ export const ArcadeMode: React.FC<ArcadeModeProps> = ({
     
     if (calculatedLevel > newLevel) {
       newLevel = calculatedLevel;
-      newRank = RANKS[newLevel - 1] || RANKS[RANKS.length - 1];
+      newRank = RANKS[newLevel - 1] ?? RANKS[RANKS.length - 1] ?? playerStats.rankTitle;
       setRewardMessage(`LEVEL UP! ${newRank}`);
     } else {
       setRewardMessage(`+${amount} XP: ${message}`);
@@ -66,13 +66,15 @@ export const ArcadeMode: React.FC<ArcadeModeProps> = ({
     setTempData({});
   };
 
+  const today = (): string => new Date().toISOString().split('T')[0] ?? new Date().toISOString();
+
   // Handlers
   const handleMileageSelect = () => {
     const miles = parseFloat(inputValue);
     // Auto-save simplified business trip
     onAddTrip({
       id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
+      date: today(),
       startLocation: 'Quick Entry',
       endLocation: 'Business Round',
       startOdometer: 0,
@@ -92,7 +94,7 @@ export const ArcadeMode: React.FC<ArcadeModeProps> = ({
   const handleExpenseSave = (category: string) => {
     onAddExpense({
       id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
+      date: today(),
       category: category as ExpenseCategory,
       amount: tempData.amount,
       description: 'Quick Arcade Entry',
@@ -109,7 +111,7 @@ export const ArcadeMode: React.FC<ArcadeModeProps> = ({
   const handleRevenueSave = (provider: string) => {
     onAddLog({
       id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
+      date: today(),
       provider: provider,
       hoursWorked: 0, // Default to 0 if not entered, user can edit later
       revenue: tempData.amount,
@@ -120,8 +122,8 @@ export const ArcadeMode: React.FC<ArcadeModeProps> = ({
 
   if (!isOpen) return null;
 
-  const currentLevelXp = LEVEL_THRESHOLDS[playerStats.level - 1] || 0;
-  const nextLevelXp = LEVEL_THRESHOLDS[playerStats.level] || 10000;
+  const currentLevelXp = LEVEL_THRESHOLDS[playerStats.level - 1] ?? 0;
+  const nextLevelXp = LEVEL_THRESHOLDS[playerStats.level] ?? 10000;
   const progressPercent = ((playerStats.xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100;
 
   return (

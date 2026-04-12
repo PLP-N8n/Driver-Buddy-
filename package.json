@@ -13,6 +13,7 @@
     "test:unit": "node .\\node_modules\\typescript\\lib\\tsc.js --project tsconfig.vitest.json && vitest --configLoader native run --reporter=verbose --config vitest.runtime.config.mjs"
   },
   "dependencies": {
+    "@google/genai": "^1.49.0",
     "@sentry/browser": "^10.46.0",
     "@sentry/react": "^10.47.0",
     "@sentry/vite-plugin": "^5.1.1",
@@ -25,9 +26,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.1.17",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
-    "@tailwindcss/vite": "^4.1.17",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "jsdom": "^26.1.0",

@@ -20,6 +20,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 import { DriverRole, Settings } from '../types';
+import { PlaidSyncToggle } from './PlaidSyncToggle';
 import {
   fieldLabelClasses,
   getNumericInputProps,
@@ -585,6 +586,14 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
           </div>
           <p className="text-xs text-slate-400">To move your data to a new device, use the backup code above or download a CSV.</p>
         </div>
+      </section>
+
+      <section className={`${panelClasses} p-5`}>
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-white">Bank Account Sync (Beta)</h2>
+          <p className="text-sm text-slate-400">Optional open banking import for transactions only. Off by default until you explicitly connect it.</p>
+        </div>
+        <PlaidSyncToggle />
       </section>
     </div>
   );

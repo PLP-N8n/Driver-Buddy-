@@ -115,7 +115,7 @@ export async function buildAuthHeaders(
 
   const token = await getSessionToken(accountId);
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    headers['X-Session-Token'] = token;
   }
 
   return headers;

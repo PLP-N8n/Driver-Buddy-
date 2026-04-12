@@ -137,30 +137,35 @@ export async function requestReceiptUpload(
   const workerUrl = import.meta.env.VITE_SYNC_WORKER_URL;
   if (!workerUrl) return null;
 
+  void expenseId;
+
   const headers = await buildAuthHeaders();
-  if (!headers.Authorization) return null;
+  if (!headers['X-Session-Token']) return null;
 
-  const formData = new FormData();
-  formData.append('file', blob, filename);
-  formData.append('expenseId', expenseId);
-
-  const res = await fetch(`${workerUrl}/api/receipts/upload`, {
+  const res = await fetch(`${workerUrl}/api/receipts/request-upload`, {
     method: 'POST',
-    headers,
-    body: formData,
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename,
+      contentType: blob.type || 'image/jpeg',
+    }),
   });
 
   if (!res.ok) return null;
 
-  const { key, url } = (await res.json()) as { key?: string; url?: string };
-  const receiptId =
-    typeof key === 'string'
-      ? key
-      : typeof url === 'string'
-        ? decodeURIComponent(url.split('/api/receipts/')[1] ?? '')
-        : '';
-  if (!receiptId) return null;
-  return { receiptId };
+  const { uploadUrl, key } = (await res.json()) as { uploadUrl?: string; key?: string };
+  if (!uploadUrl || !key) return null;
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': blob.type || 'image/jpeg',
+    },
+    body: blob,
+  });
+
+  if (!uploadRes.ok) return null;
+  return { receiptId: key };
 }
 
 export async function readRemoteReceipt(receiptId: string): Promise<Blob | null> {
@@ -168,7 +173,7 @@ export async function readRemoteReceipt(receiptId: string): Promise<Blob | null>
   if (!workerUrl) return null;
 
   const headers = await buildAuthHeaders();
-  if (!headers.Authorization) return null;
+  if (!headers['X-Session-Token']) return null;
 
   const encodedKey = encodeURIComponent(receiptId);
   const res = await fetch(`${workerUrl}/api/receipts/${encodedKey}`, {
@@ -176,6 +181,17 @@ export async function readRemoteReceipt(receiptId: string): Promise<Blob | null>
   });
 
   if (!res.ok) return null;
+
+  const contentType = res.headers.get('Content-Type') ?? '';
+  if (contentType.includes('application/json')) {
+    const data = (await res.json()) as { url?: string };
+    if (!data.url) return null;
+
+    const blobRes = await fetch(data.url);
+    if (!blobRes.ok) return null;
+    return await blobRes.blob();
+  }
+
   return await res.blob();
 }
 
@@ -184,7 +200,7 @@ export async function deleteRemoteReceipt(receiptId: string): Promise<void> {
   if (!workerUrl) return;
 
   const headers = await buildAuthHeaders();
-  if (!headers.Authorization) return;
+  if (!headers['X-Session-Token']) return;
 
   const encodedKey = encodeURIComponent(receiptId);
   await fetch(`${workerUrl}/api/receipts/${encodedKey}`, {
@@ -198,7 +214,7 @@ export async function migrateLegacyReceipt(legacyUrl: string): Promise<string | 
   if (!workerUrl) return null;
 
   const headers = await buildAuthHeaders();
-  if (!headers.Authorization) return null;
+  if (!headers['X-Session-Token']) return null;
 
   try {
     const res = await fetch(`${workerUrl}/api/receipts/migrate-legacy`, {

@@ -1,8 +1,9 @@
 import { CORS_HEADERS, handleOptions } from './lib/cors';
-import { handleAuthSession } from './routes/auth';
+import { handleAuthRegister, handleAuthSession } from './routes/auth';
 import { handleEvents } from './routes/events';
 import { handleFeedback } from './routes/feedback';
 import { handleHealth } from './routes/health';
+import { handlePlaidDisconnect, handlePlaidStatus } from './routes/plaid';
 import {
   handleDeleteReceipt,
   handleGetReceipt,
@@ -26,12 +27,15 @@ export default {
     const method = request.method;
 
     if (path === '/api/health' && method === 'GET') return handleHealth();
+    if (path === '/api/auth/register' && method === 'POST') return handleAuthRegister(request, env);
     if (path === '/api/auth/session' && method === 'POST') return handleAuthSession(request, env);
     if (path === '/api/events' && method === 'POST') return handleEvents(request, env);
     if (path === '/feedback' && method === 'POST') return handleFeedback(request, env);
     if (path === '/sync/push' && method === 'POST') return handleSyncPush(request, env);
     if (path === '/sync/pull' && (method === 'GET' || method === 'POST')) return handleSyncPull(request, env);
     if (path === '/sync/account' && method === 'DELETE') return handleSyncDeleteAccount(request, env);
+    if (path === '/api/plaid/status' && method === 'GET') return handlePlaidStatus(request, env);
+    if (path === '/api/plaid/disconnect' && method === 'POST') return handlePlaidDisconnect(request, env);
     if (path === '/api/receipts/request-upload' && method === 'POST') return handleRequestUpload(request, env);
     if (path === '/api/receipts/migrate-legacy' && method === 'POST') return handleMigrateLegacy(request, env);
 

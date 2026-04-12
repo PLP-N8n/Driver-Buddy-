@@ -1,11 +1,12 @@
 import { jsonErr, jsonOk } from '../lib/json';
+import { verifySessionToken } from '../lib/session';
 
 export interface Env {
   DB: D1Database;
+  RECEIPT_SECRET: string;
 }
 
 type SyncPayload = {
-  accountId?: string;
   workLogs?: Array<Record<string, unknown>>;
   mileageLogs?: Array<Record<string, unknown>>;
   expenses?: Array<Record<string, unknown>>;
@@ -20,14 +21,33 @@ async function readJson<T>(request: Request): Promise<T | null> {
   }
 }
 
-function getAccountId(request: Request, body?: { accountId?: string } | null): string | null {
-  return request.headers.get('X-Device-ID') ?? body?.accountId ?? null;
+async function getAuthenticatedAccountId(request: Request, env: Env): Promise<string | null> {
+  const sessionHeader = request.headers.get('X-Session-Token');
+  if (sessionHeader) {
+    const payload = await verifySessionToken(sessionHeader, env.RECEIPT_SECRET);
+    if (payload?.sub) return payload.sub;
+  }
+
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
+  if (!token) {
+    return null;
+  }
+
+  const payload = await verifySessionToken(token, env.RECEIPT_SECRET);
+  return payload?.sub ?? null;
 }
 
 export async function handleSyncPush(request: Request, env: Env): Promise<Response> {
   const body = await readJson<SyncPayload>(request);
-  const accountId = getAccountId(request, body);
-  if (!accountId || !body) return jsonErr('accountId required');
+  if (!body) return jsonErr('invalid json');
+
+  const accountId = await getAuthenticatedAccountId(request, env);
+  if (!accountId) return jsonErr('unauthorized', 401);
 
   const now = Date.now();
   await env.DB.prepare(
@@ -62,9 +82,13 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
 }
 
 export async function handleSyncPull(request: Request, env: Env): Promise<Response> {
-  const body = request.method === 'POST' ? await readJson<{ accountId?: string }>(request) : null;
-  const accountId = getAccountId(request, body);
-  if (!accountId) return jsonErr('accountId required');
+  if (request.method === 'POST') {
+    const body = await readJson<Record<string, unknown>>(request);
+    if (!body) return jsonErr('invalid json');
+  }
+
+  const accountId = await getAuthenticatedAccountId(request, env);
+  if (!accountId) return jsonErr('unauthorized', 401);
 
   const [workLogs, mileageLogs, expenses, settings] = await Promise.all([
     env.DB.prepare('SELECT * FROM work_logs WHERE device_id = ?').bind(accountId).all(),
@@ -83,11 +107,13 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
 }
 
 export async function handleSyncDeleteAccount(request: Request, env: Env): Promise<Response> {
-  const body = request.headers.get('Content-Type')?.includes('application/json')
-    ? await readJson<{ accountId?: string }>(request)
-    : null;
-  const accountId = getAccountId(request, body);
-  if (!accountId) return jsonErr('accountId required');
+  if (request.headers.get('Content-Type')?.includes('application/json')) {
+    const body = await readJson<Record<string, unknown>>(request);
+    if (!body) return jsonErr('invalid json');
+  }
+
+  const accountId = await getAuthenticatedAccountId(request, env);
+  if (!accountId) return jsonErr('unauthorized', 401);
 
   await Promise.all([
     env.DB.prepare('DELETE FROM work_logs WHERE device_id = ?').bind(accountId).run(),

@@ -39,6 +39,7 @@
     "hooks/**/*.test.ts",
     "services/**/*.test.ts",
     "utils/**/*.test.ts",
+    "google-genai-shim.d.ts",
     "react-shim.d.ts",
     "vite-env.d.ts"
   ],
