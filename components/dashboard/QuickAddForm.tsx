@@ -250,6 +250,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
                     <input
                       {...getNumericInputProps()}
                       autoFocus={index === 0}
+                      aria-label={index === 0 ? 'Earnings' : `Platform ${index + 1} earnings`}
                       value={row.revenue}
                       onChange={(event) => {
                         const updated = endShiftDraft.providers.map((p) =>
