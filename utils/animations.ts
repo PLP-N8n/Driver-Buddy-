@@ -28,3 +28,17 @@ export const useReducedMotion = (): boolean => {
 
 export const getAnimationClass = (baseClass: string, reducedMotion: boolean): string =>
   reducedMotion ? '' : baseClass;
+
+export const durations = {
+  fast: 75,
+  normal: 150,
+  slow: 300,
+  slower: 500,
+} as const;
+
+export const easings = {
+  standard: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  out: 'cubic-bezier(0, 0, 0.2, 1)',
+  in: 'cubic-bezier(0.4, 0, 1, 1)',
+  spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+} as const;

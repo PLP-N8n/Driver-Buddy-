@@ -111,7 +111,7 @@ const BottomNavButton: React.FC<{
       active ? 'relative bg-brand/[0.07]' : ''
     } flex min-h-[56px] min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl px-3 py-2 transition-all duration-200 active:scale-95 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)]`}
   >
-    {active && <div className="absolute inset-x-3 top-1 h-[3px] rounded-full bg-brand" />}
+    <div className={`absolute inset-x-3 top-1 h-[3px] rounded-full bg-brand transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
     <Icon className={`h-5 w-5 ${active ? 'text-brand' : 'text-slate-500'}`} />
     <span className={`text-[10px] leading-none tracking-wide ${active ? 'font-semibold text-brand' : 'font-medium text-slate-500'}`}>
       {label}
