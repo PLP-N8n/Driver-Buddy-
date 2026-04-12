@@ -5,7 +5,7 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "drivertax-sync"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "d6290c6d-27b5-4a06-8cb9-b90a192c35e8"
 
 [[r2_buckets]]
 binding = "RECEIPTS"
