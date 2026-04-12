@@ -1,4 +1,4 @@
-import { CORS_HEADERS, handleOptions } from './lib/cors';
+import { getCorsHeaders, handleOptions } from './lib/cors';
 import { handleAuthRegister, handleAuthSession } from './routes/auth';
 import { handleEvents } from './routes/events';
 import { handleFeedback } from './routes/feedback';
@@ -21,12 +21,12 @@ export interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === 'OPTIONS') return handleOptions();
+    if (request.method === 'OPTIONS') return handleOptions(request);
 
     const { pathname: path } = new URL(request.url);
     const method = request.method;
 
-    if (path === '/api/health' && method === 'GET') return handleHealth();
+    if (path === '/api/health' && method === 'GET') return handleHealth(request);
     if (path === '/api/auth/register' && method === 'POST') return handleAuthRegister(request, env);
     if (path === '/api/auth/session' && method === 'POST') return handleAuthSession(request, env);
     if (path === '/api/events' && method === 'POST') return handleEvents(request, env);
@@ -47,6 +47,6 @@ export default {
       return handleDeleteReceipt(request, env, decodeURIComponent(path.slice('/api/receipts/'.length)));
     }
 
-    return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
+    return new Response('Not Found', { status: 404, headers: getCorsHeaders(request) });
   },
 };

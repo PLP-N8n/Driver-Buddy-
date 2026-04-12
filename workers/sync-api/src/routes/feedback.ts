@@ -11,15 +11,15 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
   try {
     body = (await request.json()) as { type?: string; message?: string; page?: string };
   } catch {
-    return jsonErr('invalid json');
+    return jsonErr(request, 'invalid json');
   }
 
-  if (!body.message || !body.type) return jsonErr('type and message required');
+  if (!body.message || !body.type) return jsonErr(request, 'type and message required');
 
   const id = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   await env.DB.prepare(
     'INSERT INTO feedback (id, device_id, type, message, app_page, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).bind(id, deviceId ?? null, body.type, body.message, body.page ?? null, Date.now()).run();
 
-  return jsonOk({ ok: true });
+  return jsonOk(request, { ok: true });
 }

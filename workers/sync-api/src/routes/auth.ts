@@ -1,4 +1,5 @@
 import { jsonErr, jsonOk } from '../lib/json';
+import { checkRateLimit } from '../lib/rateLimit';
 import { issueSessionToken } from '../lib/session';
 
 export interface Env {
@@ -26,28 +27,31 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 export async function handleAuthRegister(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'auth', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   let body: AuthRegisterBody;
 
   try {
     body = (await request.json()) as AuthRegisterBody;
   } catch {
-    return jsonErr('invalid json');
+    return jsonErr(request, 'invalid json');
   }
 
   if (!body.accountId || typeof body.accountId !== 'string') {
-    return jsonErr('accountId required');
+    return jsonErr(request, 'accountId required');
   }
 
   if (!ACCOUNT_ID_RE.test(body.accountId)) {
-    return jsonErr('invalid accountId');
+    return jsonErr(request, 'invalid accountId');
   }
 
   if (!body.deviceSecretHash || typeof body.deviceSecretHash !== 'string') {
-    return jsonErr('deviceSecretHash required');
+    return jsonErr(request, 'deviceSecretHash required');
   }
 
   if (!SHA256_HEX_RE.test(body.deviceSecretHash)) {
-    return jsonErr('invalid deviceSecretHash');
+    return jsonErr(request, 'invalid deviceSecretHash');
   }
 
   await env.DB.prepare(
@@ -56,40 +60,43 @@ export async function handleAuthRegister(request: Request, env: Env): Promise<Re
     .bind(body.accountId, body.deviceSecretHash.toLowerCase(), Date.now())
     .run();
 
-  return jsonOk({ registered: true });
+  return jsonOk(request, { registered: true });
 }
 
 export async function handleAuthSession(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'auth', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   let body: AuthSessionBody;
 
   try {
     body = (await request.json()) as AuthSessionBody;
   } catch {
-    return jsonErr('invalid json');
+    return jsonErr(request, 'invalid json');
   }
 
   if (!body.accountId || typeof body.accountId !== 'string') {
-    return jsonErr('accountId required');
+    return jsonErr(request, 'accountId required');
   }
 
   if (!ACCOUNT_ID_RE.test(body.accountId)) {
-    return jsonErr('invalid accountId');
+    return jsonErr(request, 'invalid accountId');
   }
 
   if (typeof body.timestamp !== 'number' || !Number.isFinite(body.timestamp)) {
-    return jsonErr('invalid timestamp');
+    return jsonErr(request, 'invalid timestamp');
   }
 
   if (Math.abs(Date.now() - body.timestamp) >= 300_000) {
-    return jsonErr('invalid timestamp');
+    return jsonErr(request, 'invalid timestamp');
   }
 
   if (!body.proof || typeof body.proof !== 'string') {
-    return jsonErr('proof required');
+    return jsonErr(request, 'proof required');
   }
 
   if (!SHA256_HEX_RE.test(body.proof)) {
-    return jsonErr('invalid proof');
+    return jsonErr(request, 'invalid proof');
   }
 
   const registration = await env.DB.prepare(
@@ -101,14 +108,14 @@ export async function handleAuthSession(request: Request, env: Env): Promise<Res
   const deviceRegistration = registration as { device_secret_hash: string } | null;
 
   if (!deviceRegistration?.device_secret_hash) {
-    return jsonErr('not registered', 401);
+    return jsonErr(request, 'not registered', 401);
   }
 
   const expectedProof = await sha256Hex(`${deviceRegistration.device_secret_hash}${body.timestamp}`);
   if (expectedProof !== body.proof.toLowerCase()) {
-    return jsonErr('unauthorized', 401);
+    return jsonErr(request, 'unauthorized', 401);
   }
 
   const token = await issueSessionToken(body.accountId, env.RECEIPT_SECRET);
-  return jsonOk({ token, expiresIn: 3600 });
+  return jsonOk(request, { token, expiresIn: 3600 });
 }

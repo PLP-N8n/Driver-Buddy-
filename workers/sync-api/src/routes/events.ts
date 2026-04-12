@@ -6,14 +6,14 @@ export interface Env {
 
 export async function handleEvents(request: Request, env: Env): Promise<Response> {
   const deviceId = request.headers.get('X-Device-ID');
-  if (!deviceId) return jsonErr('Missing X-Device-ID header');
-  if (!env.ANALYTICS) return jsonErr('Analytics engine is not configured', 503);
+  if (!deviceId) return jsonErr(request, 'Missing X-Device-ID header');
+  if (!env.ANALYTICS) return jsonErr(request, 'Analytics engine is not configured', 503);
 
   let body: { event?: string; properties?: Record<string, unknown> };
   try {
     body = (await request.json()) as { event?: string; properties?: Record<string, unknown> };
   } catch {
-    return jsonErr('invalid json');
+    return jsonErr(request, 'invalid json');
   }
 
   const event = typeof body.event === 'string' ? body.event : '';
@@ -22,7 +22,7 @@ export async function handleEvents(request: Request, env: Env): Promise<Response
       ? body.properties
       : {};
 
-  if (!event) return jsonErr('event is required');
+  if (!event) return jsonErr(request, 'event is required');
 
   env.ANALYTICS.writeDataPoint({
     blobs: [event, JSON.stringify(properties)],
@@ -30,5 +30,5 @@ export async function handleEvents(request: Request, env: Env): Promise<Response
     indexes: [deviceId],
   });
 
-  return jsonOk({ ok: true }, 202);
+  return jsonOk(request, { ok: true }, 202);
 }
