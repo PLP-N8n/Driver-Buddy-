@@ -40,3 +40,4 @@ docs/graphify/
 *.njsproj
 *.sln
 *.sw?
+.env.local
