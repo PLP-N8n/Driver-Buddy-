@@ -586,7 +586,7 @@ npx vitest run shared/calculations/__tests__/expenses.test.ts
 ```
 Expected: 13 tests pass.
 
-- [ ] 4.4 Commit:
+- [x] 4.4 Commit:
 ```bash
 git add shared/calculations/expenses.ts shared/calculations/__tests__/expenses.test.ts
 git commit -m "feat: add expense classification and deductible calculation functions with tests"
@@ -600,7 +600,7 @@ git commit -m "feat: add expense classification and deductible calculation funct
 - `shared/calculations/tax.ts`
 - `shared/calculations/__tests__/tax.test.ts`
 
-- [ ] 5.1 Create `shared/calculations/tax.ts`:
+- [x] 5.1 Create `shared/calculations/tax.ts`:
 
 ```typescript
 import type { Expense } from '../types/expense';
@@ -682,7 +682,7 @@ export function calcKept(
 }
 ```
 
-- [ ] 5.2 Create `shared/calculations/__tests__/tax.test.ts`:
+- [x] 5.2 Create `shared/calculations/__tests__/tax.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -776,7 +776,7 @@ describe('calcKept', () => {
 });
 ```
 
-- [ ] 5.3 Run tests:
+- [x] 5.3 Run tests:
 ```bash
 npx vitest run shared/calculations/__tests__/tax.test.ts
 ```
