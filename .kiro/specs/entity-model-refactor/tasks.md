@@ -1245,21 +1245,21 @@ git commit -m "refactor: standardise calcKept in WeeklySummary"
 
 **Files to modify:** `components/dashboard/EarningsSummary.tsx`
 
-- [ ] 11.1 Read `components/dashboard/EarningsSummary.tsx` in full.
+- [x] 11.1 Read `components/dashboard/EarningsSummary.tsx` in full.
 
-- [ ] 11.2 Import and use `calcPlatformShares` from `shared/calculations/earnings`:
+- [x] 11.2 Import and use `calcPlatformShares` from `shared/calculations/earnings` (not applicable in current file; no platform-share logic remains):
 ```typescript
 import { calcPlatformShares } from '../../shared/calculations/earnings';
 ```
 
-- [ ] 11.3 Replace any inline platform percentage calculation with `calcPlatformShares`.
+- [x] 11.3 Replace any inline platform percentage calculation with `calcPlatformShares` (not applicable in current file; no inline platform percentage calculation remains).
 
-- [ ] 11.4 Compile and test:
+- [x] 11.4 Compile and test:
 ```bash
 npx tsc --noEmit && npx vitest run
 ```
 
-- [ ] 11.5 Commit:
+- [x] 11.5 Commit:
 ```bash
 git add components/dashboard/EarningsSummary.tsx
 git commit -m "refactor: use calcPlatformShares in EarningsSummary"
