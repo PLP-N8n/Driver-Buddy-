@@ -10,6 +10,8 @@ type SyncPayload = {
   workLogs?: Array<Record<string, unknown>>;
   mileageLogs?: Array<Record<string, unknown>>;
   expenses?: Array<Record<string, unknown>>;
+  shifts?: Array<Record<string, unknown>>;
+  shiftEarnings?: Array<Record<string, unknown>>;
   settings?: unknown;
 };
 
@@ -20,6 +22,19 @@ async function readJson<T>(request: Request): Promise<T | null> {
     return null;
   }
 }
+
+const asStringOrNull = (value: unknown): string | null => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return null;
+  return String(value);
+};
+
+const asRequiredId = (value: unknown): string => {
+  const normalized = asStringOrNull(value);
+  return normalized ?? '';
+};
+
+const asFlag = (value: unknown, fallback = false) => (value ? 1 : fallback ? 1 : 0);
 
 export async function handleSyncPush(request: Request, env: Env): Promise<Response> {
   const body = await readJson<SyncPayload>(request);
@@ -47,8 +62,93 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
 
   for (const row of body.expenses ?? []) {
     await env.DB.prepare(
-      'INSERT INTO expenses (id, device_id, date, category, description, amount, tax_deductible, has_image, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, category=excluded.category, description=excluded.description, amount=excluded.amount, tax_deductible=excluded.tax_deductible, has_image=excluded.has_image, updated_at=excluded.updated_at'
-    ).bind(row.id, accountId, row.date, row.category ?? null, row.description ?? null, row.amount ?? null, row.taxDeductible ? 1 : 0, row.hasImage ? 1 : 0, now).run();
+      'INSERT INTO expenses (id, device_id, date, category, description, amount, tax_deductible, has_image, scope, business_use_percent, deductible_amount, non_deductible_amount, vehicle_expense_type, tax_treatment, linked_shift_id, source_type, review_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, category=excluded.category, description=excluded.description, amount=excluded.amount, tax_deductible=excluded.tax_deductible, has_image=excluded.has_image, scope=excluded.scope, business_use_percent=excluded.business_use_percent, deductible_amount=excluded.deductible_amount, non_deductible_amount=excluded.non_deductible_amount, vehicle_expense_type=excluded.vehicle_expense_type, tax_treatment=excluded.tax_treatment, linked_shift_id=excluded.linked_shift_id, source_type=excluded.source_type, review_status=excluded.review_status, updated_at=excluded.updated_at'
+    ).bind(
+      row.id,
+      accountId,
+      row.date,
+      row.category ?? null,
+      row.description ?? null,
+      row.amount ?? null,
+      asFlag(row.taxDeductible, true),
+      asFlag(row.hasImage),
+      asStringOrNull(row.scope) ?? 'business',
+      row.businessUsePercent ?? 100,
+      row.deductibleAmount ?? 0,
+      row.nonDeductibleAmount ?? 0,
+      asStringOrNull(row.vehicleExpenseType) ?? 'non_vehicle',
+      asStringOrNull(row.taxTreatment) ?? 'deductible',
+      asStringOrNull(row.linkedShiftId),
+      asStringOrNull(row.sourceType) ?? 'manual',
+      asStringOrNull(row.reviewStatus) ?? 'confirmed',
+      now
+    ).run();
+  }
+
+  const shiftIds = new Set<string>();
+
+  for (const row of body.shifts ?? []) {
+    const shiftId = asRequiredId(row.id);
+    if (!shiftId) continue;
+
+    shiftIds.add(shiftId);
+
+    await env.DB.prepare(
+      'INSERT INTO shifts (id, account_id, date, status, primary_platform, hours_worked, total_earnings, started_at, ended_at, start_odometer, end_odometer, business_miles, personal_gap_miles, gps_miles, mileage_source, start_lat, start_lng, end_lat, end_lng, fuel_liters, job_count, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM shifts WHERE id = ?), datetime(\'now\')), ?) ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, date=excluded.date, status=excluded.status, primary_platform=excluded.primary_platform, hours_worked=excluded.hours_worked, total_earnings=excluded.total_earnings, started_at=excluded.started_at, ended_at=excluded.ended_at, start_odometer=excluded.start_odometer, end_odometer=excluded.end_odometer, business_miles=excluded.business_miles, personal_gap_miles=excluded.personal_gap_miles, gps_miles=excluded.gps_miles, mileage_source=excluded.mileage_source, start_lat=excluded.start_lat, start_lng=excluded.start_lng, end_lat=excluded.end_lat, end_lng=excluded.end_lng, fuel_liters=excluded.fuel_liters, job_count=excluded.job_count, notes=excluded.notes, updated_at=excluded.updated_at'
+    ).bind(
+      shiftId,
+      accountId,
+      row.date,
+      asStringOrNull(row.status) ?? 'completed',
+      asStringOrNull(row.primary_platform),
+      row.hours_worked ?? null,
+      row.total_earnings ?? 0,
+      asStringOrNull(row.started_at),
+      asStringOrNull(row.ended_at),
+      row.start_odometer ?? null,
+      row.end_odometer ?? null,
+      row.business_miles ?? null,
+      row.personal_gap_miles ?? null,
+      row.gps_miles ?? null,
+      asStringOrNull(row.mileage_source),
+      row.start_lat ?? null,
+      row.start_lng ?? null,
+      row.end_lat ?? null,
+      row.end_lng ?? null,
+      row.fuel_liters ?? null,
+      row.job_count ?? null,
+      asStringOrNull(row.notes),
+      shiftId,
+      now
+    ).run();
+  }
+
+  const shiftEarningsByShiftId = new Map<string, Array<Record<string, unknown>>>();
+
+  for (const row of body.shiftEarnings ?? []) {
+    const shiftId = asRequiredId(row.shift_id);
+    if (!shiftId) continue;
+
+    const existing = shiftEarningsByShiftId.get(shiftId) ?? [];
+    existing.push(row);
+    shiftEarningsByShiftId.set(shiftId, existing);
+  }
+
+  for (const shiftId of shiftIds) {
+    await env.DB.prepare('DELETE FROM shift_earnings WHERE shift_id = ? AND account_id = ?').bind(shiftId, accountId).run();
+
+    for (const row of shiftEarningsByShiftId.get(shiftId) ?? []) {
+      await env.DB.prepare(
+        'INSERT INTO shift_earnings (id, shift_id, account_id, platform, amount, job_count) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET shift_id=excluded.shift_id, account_id=excluded.account_id, platform=excluded.platform, amount=excluded.amount, job_count=excluded.job_count'
+      ).bind(
+        row.id,
+        shiftId,
+        accountId,
+        asStringOrNull(row.platform) ?? 'other',
+        row.amount ?? 0,
+        row.job_count ?? null
+      ).run();
+    }
   }
 
   if (body.settings !== undefined) {
@@ -69,10 +169,12 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
   const accountId = await getAuthenticatedAccountId(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401);
 
-  const [workLogs, mileageLogs, expenses, settings] = await Promise.all([
+  const [workLogs, mileageLogs, expenses, shifts, shiftEarnings, settings] = await Promise.all([
     env.DB.prepare('SELECT * FROM work_logs WHERE device_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT * FROM mileage_logs WHERE device_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT * FROM expenses WHERE device_id = ?').bind(accountId).all(),
+    env.DB.prepare('SELECT * FROM shifts WHERE account_id = ?').bind(accountId).all(),
+    env.DB.prepare('SELECT * FROM shift_earnings WHERE account_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT data FROM settings WHERE device_id = ?').bind(accountId).first(),
   ]);
 
@@ -80,6 +182,8 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
     workLogs: workLogs.results ?? [],
     mileageLogs: mileageLogs.results ?? [],
     expenses: expenses.results ?? [],
+    shifts: shifts.results ?? [],
+    shiftEarnings: shiftEarnings.results ?? [],
     settings: settings?.data ? JSON.parse(String(settings.data)) : null,
     serverTime: Date.now(),
   });
@@ -98,6 +202,8 @@ export async function handleSyncDeleteAccount(request: Request, env: Env): Promi
     env.DB.prepare('DELETE FROM work_logs WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM mileage_logs WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM expenses WHERE device_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM shift_earnings WHERE account_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM shifts WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM settings WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM users WHERE device_id = ?').bind(accountId).run(),
   ]);
