@@ -1271,24 +1271,24 @@ git commit -m "refactor: use calcPlatformShares in EarningsSummary"
 
 **Files to modify:** `components/ExpenseLog.tsx`
 
-- [ ] 12.1 Read `components/ExpenseLog.tsx` in full.
+- [x] 12.1 Read `components/ExpenseLog.tsx` in full.
 
-- [ ] 12.2 Import `classifyExpense` and `calcDeductibleAmount` from `shared/calculations/expenses`:
+- [x] 12.2 Import `classifyExpense` and `calcDeductibleAmount` from `shared/calculations/expenses`:
 ```typescript
 import { classifyExpense, calcDeductibleAmount } from '../shared/calculations/expenses';
 import type { Expense } from '../shared/types/expense';
 ```
 
-- [ ] 12.3 When creating a new expense, derive and set all HMRC fields using `classifyExpense` and `calcDeductibleAmount`. The `claimMethod` value comes from the app settings (already available in the component's context).
+- [x] 12.3 When creating a new expense, derive and set all HMRC fields using `classifyExpense` and `calcDeductibleAmount`. The `claimMethod` value comes from the app settings (already available in the component's context).
 
-- [ ] 12.4 Where expenses are displayed, use `deductibleAmount` (already on the record) rather than recomputing.
+- [x] 12.4 Where expenses are displayed, use `deductibleAmount` (already on the record) rather than recomputing.
 
-- [ ] 12.5 Compile and test:
+- [x] 12.5 Compile and test:
 ```bash
 npx tsc --noEmit && npx vitest run
 ```
 
-- [ ] 12.6 Commit:
+- [x] 12.6 Commit:
 ```bash
 git add components/ExpenseLog.tsx
 git commit -m "feat: add HMRC expense classification on create in ExpenseLog"

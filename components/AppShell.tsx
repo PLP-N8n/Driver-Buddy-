@@ -45,13 +45,13 @@ import { generateInsights } from '../utils/insights';
 import { todayUK, ukWeekStart } from '../utils/ukDate';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { useAppState, type ToastState } from '../hooks/useAppState';
-import { useAnalytics } from '../hooks/useAnalytics';
 import { useExport } from '../hooks/useExport';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useHydration } from '../hooks/useHydration';
 import { usePersistence } from '../hooks/usePersistence';
 import { useReceiptMigration } from '../hooks/useReceiptMigration';
 import { useSyncOrchestrator } from '../hooks/useSyncOrchestrator';
+import { trackEvent } from '../services/analyticsService';
 import {
   dialogBackdropClasses,
   dialogPanelClasses,
@@ -94,8 +94,6 @@ const primaryTabs: Array<{ id: AppTab; label: string; icon: LucideIcon }> = [
   { id: 'worklog', label: 'Work Log', icon: Clock3 },
   { id: 'tax', label: 'Tax', icon: Calculator },
 ];
-
-const beginnerTabs: AppTab[] = ['dashboard', 'worklog', 'tax'];
 
 const BottomNavButton: React.FC<{
   active: boolean;
@@ -196,7 +194,6 @@ export function AppShell() {
     settings,
     hasHydrated,
   });
-  const { trackEvent } = useAnalytics(settings);
 
   const showToast = (message: string, type: ToastState['type'] = 'success', duration = 3000) => {
     setToast({ id: Date.now(), message, type, duration });
@@ -209,7 +206,9 @@ export function AppShell() {
   };
   const hasEverBeenAdvanced = playerStats.totalLogs >= 3 || localStorage.getItem('dbt_advanced') === '1';
   const isAdvancedUser = hasHydrated ? hasEverBeenAdvanced : true;
-  const visiblePrimaryTabs = isAdvancedUser ? primaryTabs : primaryTabs.filter((tab) => beginnerTabs.includes(tab.id));
+  useEffect(() => {
+    trackEvent('app_open');
+  }, []);
   useEffect(() => {
     if (playerStats.totalLogs >= 3) localStorage.setItem('dbt_advanced', '1');
   }, [playerStats.totalLogs]);
@@ -240,7 +239,7 @@ export function AppShell() {
   useEffect(() => {
     if (!hasHydrated) return;
     if (isAdvancedUser) return;
-    if (activeTab === 'mileage' || activeTab === 'expenses' || activeTab === 'debt') {
+    if (activeTab === 'debt') {
       navigateToTab('dashboard');
     }
   }, [activeTab, isAdvancedUser, hasHydrated]);
@@ -255,16 +254,34 @@ export function AppShell() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   }, [settings.colorTheme]);
-  const addTrip = (trip: Trip) => setTrips((current) => [...current, trip]);
-  const deleteTrip = (id: string) => setTrips((current) => current.filter((trip) => trip.id !== id));
+  const addTrip = (trip: Trip) => {
+    setTrips((current) => [...current, trip]);
+    trackEvent('trip_logged');
+  };
+  const deleteTrip = (id: string) => {
+    setTrips((current) => current.filter((trip) => trip.id !== id));
+    trackEvent('trip_deleted');
+  };
   const updateTrip = (id: string, updates: Partial<Trip>) =>
     setTrips((current) => current.map((trip) => (trip.id === id ? { ...trip, ...updates } : trip)));
-  const addExpense = (expense: Expense) => setExpenses((current) => [...current, expense]);
-  const deleteExpense = (id: string) => setExpenses((current) => current.filter((expense) => expense.id !== id));
+  const addExpense = (expense: Expense) => {
+    setExpenses((current) => [...current, expense]);
+    trackEvent('expense_added', { category: expense.category });
+  };
+  const deleteExpense = (id: string) => {
+    setExpenses((current) => current.filter((expense) => expense.id !== id));
+    trackEvent('expense_deleted');
+  };
   const updateExpense = (expense: Expense) =>
     setExpenses((current) => current.map((item) => (item.id === expense.id ? expense : item)));
-  const addDailyLog = (log: DailyWorkLog) => setDailyLogs((current) => [...current, log]);
-  const deleteDailyLog = (id: string) => setDailyLogs((current) => current.filter((log) => log.id !== id));
+  const addDailyLog = (log: DailyWorkLog) => {
+    setDailyLogs((current) => [...current, log]);
+    trackEvent('shift_logged', { platform: log.provider });
+  };
+  const deleteDailyLog = (id: string) => {
+    setDailyLogs((current) => current.filter((log) => log.id !== id));
+    trackEvent('shift_deleted');
+  };
   const updateDailyLog = (log: DailyWorkLog) =>
     setDailyLogs((current) => current.map((item) => (item.id === log.id ? log : item)));
 
@@ -451,8 +468,8 @@ export function AppShell() {
     addDailyLog(completedLog);
 
     const allLogs = [...dailyLogs, completedLog];
-    const weekStart = ukWeekStart(session.date);
-    const weekLogs = allLogs.filter((log) => ukWeekStart(log.date) === weekStart);
+    const weekStart = ukWeekStart(session.date, settings.workWeekStartDay);
+    const weekLogs = allLogs.filter((log) => ukWeekStart(log.date, settings.workWeekStartDay) === weekStart);
     const weekRevenue = weekLogs.reduce((sum, log) => sum + log.revenue, 0);
     const weekTaxToSetAside = weekRevenue * (settings.taxSetAsidePercent / 100);
     const weekExpenses = weekLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
@@ -554,8 +571,8 @@ export function AppShell() {
     addDailyLog(completedLog);
 
     const allLogs = [...dailyLogs, completedLog];
-    const weekStart = ukWeekStart(payload.date);
-    const weekLogs = allLogs.filter((log) => ukWeekStart(log.date) === weekStart);
+    const weekStart = ukWeekStart(payload.date, settings.workWeekStartDay);
+    const weekLogs = allLogs.filter((log) => ukWeekStart(log.date, settings.workWeekStartDay) === weekStart);
     const weekRevenue = weekLogs.reduce((sum, log) => sum + log.revenue, 0);
     const weekTaxToSetAside = weekRevenue * (settings.taxSetAsidePercent / 100);
     const weekExpenses = weekLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
@@ -822,6 +839,7 @@ export function AppShell() {
                 {activeTab === 'expenses' && (
                   <ExpenseLog
                     expenses={expenses}
+                    settings={settings}
                     onAddExpense={addExpense}
                     onUpdateExpense={updateExpense}
                     onDeleteExpense={deleteExpense}
@@ -940,7 +958,7 @@ export function AppShell() {
 
       <nav className="app-nav fixed bottom-0 inset-x-0 z-50 border-t backdrop-blur-xl pb-safe">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-around px-2 sm:px-4">
-          {visiblePrimaryTabs.map((tab) => (
+          {primaryTabs.map((tab) => (
             <BottomNavButton key={tab.id} active={activeTab === tab.id} icon={tab.icon} label={tab.label} onClick={() => navigateToTab(tab.id)} />
           ))}
           <BottomNavButton

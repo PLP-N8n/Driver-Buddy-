@@ -12,8 +12,10 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { Expense, ExpenseCategory, EXPENSE_CATEGORY_OPTIONS } from '../types';
+import { Expense, ExpenseCategory, EXPENSE_CATEGORY_OPTIONS, Settings } from '../types';
 import { deleteImage, getImageWithRemoteFallback, saveImage } from '../services/imageStore';
+import { calcDeductibleAmount, classifyExpense } from '../shared/calculations/expenses';
+import type { Expense as EnhancedExpense } from '../shared/types/expense';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
 import { todayUK, ukTaxYearStart } from '../utils/ukDate';
@@ -33,10 +35,13 @@ import {
   sheetPanelClasses,
 } from '../utils/ui';
 
+type ExpenseRecord = Expense & Partial<Omit<EnhancedExpense, keyof Expense>>;
+
 interface ExpenseLogProps {
-  expenses: Expense[];
-  onAddExpense: (expense: Expense) => void;
-  onUpdateExpense: (expense: Expense) => void;
+  expenses: ExpenseRecord[];
+  settings: Settings;
+  onAddExpense: (expense: ExpenseRecord) => void;
+  onUpdateExpense: (expense: ExpenseRecord) => void;
   onDeleteExpense: (id: string) => void;
   openFormSignal?: number;
   onOpenFormHandled?: () => void;
@@ -56,8 +61,16 @@ type ReceiptUrlCacheEntry = {
   url: string;
 };
 
-const getReceiptSourceKey = (expense: Expense) =>
+const getReceiptSourceKey = (expense: ExpenseRecord) =>
   `${expense.id}:${expense.receiptId ?? expense.receiptUrl ?? (expense.hasReceiptImage ? 'local-receipt' : 'no-receipt')}`;
+
+const getStoredDeductibleAmount = (expense: ExpenseRecord) => {
+  if (typeof expense.deductibleAmount === 'number') {
+    return expense.deductibleAmount;
+  }
+
+  return expense.isVatClaimable ? expense.amount / 1.2 : expense.amount;
+};
 
 const getReceiptBlobKey = async (expenseId: string, blob: Blob) => {
   const fingerprintBase = `${expenseId}:${blob.size}:${blob.type}`;
@@ -89,7 +102,7 @@ const categoryMeta: Record<ExpenseCategory, { icon: typeof Fuel; circle: string 
   [ExpenseCategory.OTHER]: { icon: Receipt, circle: 'bg-slate-500/20 text-slate-300' },
 };
 
-const createDefaultExpenseDraft = (): Partial<Expense> => ({
+const createDefaultExpenseDraft = (): Partial<ExpenseRecord> => ({
   date: todayUK(),
   category: ExpenseCategory.FUEL,
   amount: 0,
@@ -100,14 +113,14 @@ const createDefaultExpenseDraft = (): Partial<Expense> => ({
   liters: undefined,
 });
 
-function TaxYearDeductibleCallout({ expenses }: { expenses: Expense[] }) {
+function TaxYearDeductibleCallout({ expenses }: { expenses: ExpenseRecord[] }) {
   const taxYearStart = ukTaxYearStart();
   const taxYearExpenses = expenses.filter((expense) => expense.date >= taxYearStart);
 
   if (taxYearExpenses.length === 0) return null;
 
   const totalDeductible = taxYearExpenses.reduce(
-    (sum, expense) => sum + (expense.isVatClaimable ? expense.amount / 1.2 : expense.amount),
+    (sum, expense) => sum + getStoredDeductibleAmount(expense),
     0
   );
 
@@ -124,7 +137,7 @@ function TaxYearDeductibleCallout({ expenses }: { expenses: Expense[] }) {
   );
 }
 
-function MonthlySummaryBar({ expenses }: { expenses: Expense[] }) {
+function MonthlySummaryBar({ expenses }: { expenses: ExpenseRecord[] }) {
   const monthKey = todayUK().slice(0, 7);
   const monthExpenses = expenses.filter((expense) => expense.date.startsWith(monthKey));
 
@@ -167,6 +180,7 @@ function MonthlySummaryBar({ expenses }: { expenses: Expense[] }) {
 
 export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   expenses,
+  settings,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
@@ -174,7 +188,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   onOpenFormHandled,
 }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editingExpense, setEditingExpense] = useState<ExpenseRecord | null>(null);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<'All' | ExpenseCategory>(() => {
     const stored = sessionStorage.getItem(EXPENSE_FILTER_KEY);
@@ -182,7 +196,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
       ? (stored as 'All' | ExpenseCategory) || 'All'
       : 'All';
   });
-  const [newExpense, setNewExpense] = useState<Partial<Expense>>(createDefaultExpenseDraft());
+  const [newExpense, setNewExpense] = useState<Partial<ExpenseRecord>>(createDefaultExpenseDraft());
   const [amountInput, setAmountInput] = useState('');
   const [litersInput, setLitersInput] = useState('');
   const [pricePerLitreInput, setPricePerLitreInput] = useState('');
@@ -191,7 +205,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({});
   const receiptUrlsRef = useRef<Record<string, ReceiptUrlCacheEntry>>({});
-  const previousExpensesRef = useRef<Map<string, Expense>>(new Map());
+  const previousExpensesRef = useRef<Map<string, ExpenseRecord>>(new Map());
   const handledOpenFormSignalRef = useRef<number | undefined>(undefined);
   const receiptPreviewState = useMemo(() => {
     const dirtyIds = new Set<string>();
@@ -386,7 +400,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
     event.target.value = '';
   };
 
-  const openEdit = (expense: Expense) => {
+  const openEdit = (expense: ExpenseRecord) => {
     setEditingExpense(expense);
     setSelectedReceiptBlob(null);
     setIsReceiptRemoved(false);
@@ -420,15 +434,35 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
 
     const isMetadataOnlyEdit = editingExpense && !selectedReceiptBlob && !isReceiptRemoved;
 
-    const expenseData: Expense = {
+    const category = (newExpense.category as ExpenseCategory) || ExpenseCategory.FUEL;
+    const amount = parseFloat(amountInput) || 0;
+    const scope: NonNullable<EnhancedExpense['scope']> = 'business';
+    const businessUsePercent = 100;
+    const { vehicleExpenseType, taxTreatment } = classifyExpense(category, scope, settings.claimMethod);
+    const { deductibleAmount, nonDeductibleAmount } = calcDeductibleAmount(
+      amount,
+      taxTreatment,
+      businessUsePercent
+    );
+
+    const expenseData: ExpenseRecord = {
       id,
       date: newExpense.date,
-      category: (newExpense.category as ExpenseCategory) || ExpenseCategory.FUEL,
-      amount: parseFloat(amountInput) || 0,
+      category,
+      amount,
       description: newExpense.description || '',
       hasReceiptImage,
       isVatClaimable: newExpense.isVatClaimable || false,
       liters: litersInput ? parseFloat(litersInput) : undefined,
+      scope,
+      businessUsePercent,
+      deductibleAmount,
+      nonDeductibleAmount,
+      vehicleExpenseType,
+      taxTreatment,
+      linkedShiftId: editingExpense?.linkedShiftId ?? null,
+      sourceType: editingExpense?.sourceType ?? 'manual',
+      reviewStatus: editingExpense ? 'edited' : 'confirmed',
       ...(isMetadataOnlyEdit && {
         receiptId: editingExpense.receiptId,
         receiptUrl: editingExpense.receiptUrl,
