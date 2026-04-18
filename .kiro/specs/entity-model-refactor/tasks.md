@@ -290,7 +290,7 @@ npx vitest run shared/calculations/__tests__/mileage.test.ts
 ```
 Expected: 8 tests pass, 0 fail.
 
-- [ ] 2.4 Commit:
+- [x] 2.4 Commit:
 ```bash
 git add shared/calculations/
 git commit -m "feat: add mileage calculation functions with tests"
@@ -304,7 +304,7 @@ git commit -m "feat: add mileage calculation functions with tests"
 - `shared/calculations/earnings.ts`
 - `shared/calculations/__tests__/earnings.test.ts`
 
-- [ ] 3.1 Create `shared/calculations/earnings.ts`:
+- [x] 3.1 Create `shared/calculations/earnings.ts`:
 
 ```typescript
 import type { ShiftEarning } from '../types/shift';
@@ -341,7 +341,7 @@ export function calcPlatformShares(
 }
 ```
 
-- [ ] 3.2 Create `shared/calculations/__tests__/earnings.test.ts`:
+- [x] 3.2 Create `shared/calculations/__tests__/earnings.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -392,7 +392,7 @@ describe('calcPlatformShares', () => {
 });
 ```
 
-- [ ] 3.3 Run tests:
+- [x] 3.3 Run tests:
 ```bash
 npx vitest run shared/calculations/__tests__/earnings.test.ts
 ```
