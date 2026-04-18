@@ -398,7 +398,7 @@ npx vitest run shared/calculations/__tests__/earnings.test.ts
 ```
 Expected: 7 tests pass.
 
-- [ ] 3.4 Commit:
+- [x] 3.4 Commit:
 ```bash
 git add shared/calculations/earnings.ts shared/calculations/__tests__/earnings.test.ts
 git commit -m "feat: add earnings calculation functions with tests"
@@ -412,7 +412,7 @@ git commit -m "feat: add earnings calculation functions with tests"
 - `shared/calculations/expenses.ts`
 - `shared/calculations/__tests__/expenses.test.ts`
 
-- [ ] 4.1 Create `shared/calculations/expenses.ts`:
+- [x] 4.1 Create `shared/calculations/expenses.ts`:
 
 ```typescript
 import type {
@@ -499,7 +499,7 @@ export function sumDeductibleExpenses(expenses: Expense[]): number {
 }
 ```
 
-- [ ] 4.2 Create `shared/calculations/__tests__/expenses.test.ts`:
+- [x] 4.2 Create `shared/calculations/__tests__/expenses.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -580,7 +580,7 @@ describe('sumDeductibleExpenses', () => {
 });
 ```
 
-- [ ] 4.3 Run tests:
+- [x] 4.3 Run tests:
 ```bash
 npx vitest run shared/calculations/__tests__/expenses.test.ts
 ```
