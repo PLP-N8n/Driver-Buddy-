@@ -1193,21 +1193,21 @@ git commit -m "refactor: replace inline tax calculations in TaxLogic with shared
 
 **Files to modify:** `components/dashboard/TaxEstimateCard.tsx`
 
-- [ ] 9.1 Read `components/dashboard/TaxEstimateCard.tsx` in full.
+- [x] 9.1 Read `components/dashboard/TaxEstimateCard.tsx` in full.
 
-- [ ] 9.2 Import and use `calcKept`, `calcTaxBuffer` from `shared/calculations/tax`:
+- [x] 9.2 Import and use `calcKept`, `calcTaxBuffer` from `shared/calculations/tax`:
 ```typescript
 import { calcKept, calcTaxBuffer } from '../../shared/calculations/tax';
 ```
 
-- [ ] 9.3 Replace any inline "Kept" or tax buffer calculation with the imported functions. Do not change JSX structure.
+- [x] 9.3 Replace any inline "Kept" or tax buffer calculation with the imported functions. Do not change JSX structure.
 
-- [ ] 9.4 Compile and test:
+- [x] 9.4 Compile and test:
 ```bash
 npx tsc --noEmit && npx vitest run
 ```
 
-- [ ] 9.5 Commit:
+- [x] 9.5 Commit:
 ```bash
 git add components/dashboard/TaxEstimateCard.tsx
 git commit -m "refactor: use calcKept and calcTaxBuffer from shared/calculations in TaxEstimateCard"
