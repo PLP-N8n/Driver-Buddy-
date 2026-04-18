@@ -1219,21 +1219,21 @@ git commit -m "refactor: use calcKept and calcTaxBuffer from shared/calculations
 
 **Files to modify:** `components/dashboard/WeeklySummary.tsx`
 
-- [ ] 10.1 Read `components/dashboard/WeeklySummary.tsx` in full.
+- [x] 10.1 Read `components/dashboard/WeeklySummary.tsx` in full.
 
-- [ ] 10.2 Import and use `calcKept` from `shared/calculations/tax`:
+- [x] 10.2 Import and use `calcKept` from `shared/calculations/tax`:
 ```typescript
 import { calcKept } from '../../shared/calculations/tax';
 ```
 
-- [ ] 10.3 Replace any inline "Kept" calculation with `calcKept`. If the formula differs from `totalEarnings - deductibleExpenses - taxBuffer`, document the discrepancy as a comment and bring it in line with the canonical formula.
+- [x] 10.3 Replace any inline "Kept" calculation with `calcKept`. If the formula differs from `totalEarnings - deductibleExpenses - taxBuffer`, document the discrepancy as a comment and bring it in line with the canonical formula.
 
-- [ ] 10.4 Compile and test:
+- [x] 10.4 Compile and test:
 ```bash
 npx tsc --noEmit && npx vitest run
 ```
 
-- [ ] 10.5 Commit:
+- [x] 10.5 Commit:
 ```bash
 git add components/dashboard/WeeklySummary.tsx
 git commit -m "refactor: standardise calcKept in WeeklySummary"
