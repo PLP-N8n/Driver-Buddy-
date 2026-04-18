@@ -782,7 +782,7 @@ npx vitest run shared/calculations/__tests__/tax.test.ts
 ```
 Expected: 12 tests pass.
 
-- [ ] 5.4 Commit:
+- [x] 5.4 Commit:
 ```bash
 git add shared/calculations/tax.ts shared/calculations/__tests__/tax.test.ts
 git commit -m "feat: add tax calculation functions including canonical calcKept formula"
@@ -798,7 +798,7 @@ git commit -m "feat: add tax calculation functions including canonical calcKept 
 - `shared/migrations/__tests__/migrateShift.test.ts`
 - `shared/migrations/__tests__/migrateExpense.test.ts`
 
-- [ ] 6.1 Create `shared/migrations/migrateShift.ts`:
+- [x] 6.1 Create `shared/migrations/migrateShift.ts`:
 
 ```typescript
 import type { Shift, ActiveShift, ShiftEarning } from '../types/shift';
@@ -886,7 +886,7 @@ function normalisePlatform(provider: string): import('../types/shift').Platform 
 }
 ```
 
-- [ ] 6.2 Create `shared/migrations/migrateExpense.ts`:
+- [x] 6.2 Create `shared/migrations/migrateExpense.ts`:
 
 ```typescript
 import type { Expense } from '../types/expense';
@@ -949,7 +949,7 @@ export function migrateLegacyExpenses(
 }
 ```
 
-- [ ] 6.3 Create `shared/migrations/__tests__/migrateShift.test.ts`:
+- [x] 6.3 Create `shared/migrations/__tests__/migrateShift.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -1018,7 +1018,7 @@ describe('migrateActiveWorkSession', () => {
 });
 ```
 
-- [ ] 6.4 Create `shared/migrations/__tests__/migrateExpense.test.ts`:
+- [x] 6.4 Create `shared/migrations/__tests__/migrateExpense.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -1086,7 +1086,7 @@ describe('migrateLegacyExpenses', () => {
 });
 ```
 
-- [ ] 6.5 Run all migration tests:
+- [x] 6.5 Run all migration tests:
 ```bash
 npx vitest run shared/migrations/__tests__/
 ```
