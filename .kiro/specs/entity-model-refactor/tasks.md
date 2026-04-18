@@ -155,7 +155,7 @@ npx tsc --noEmit
 ```
 Expected: zero errors relating to the new files (other pre-existing errors are acceptable at this stage).
 
-- [ ] 1.5 Commit:
+- [x] 1.5 Commit:
 ```bash
 git add shared/types/
 git commit -m "feat: add canonical Shift and Expense types in shared/types/"
@@ -169,7 +169,7 @@ git commit -m "feat: add canonical Shift and Expense types in shared/types/"
 - `shared/calculations/mileage.ts`
 - `shared/calculations/__tests__/mileage.test.ts`
 
-- [ ] 2.1 Create `shared/calculations/mileage.ts`:
+- [x] 2.1 Create `shared/calculations/mileage.ts`:
 
 ```typescript
 /**
@@ -218,7 +218,7 @@ export function validateOdoSequence(
 }
 ```
 
-- [ ] 2.2 Create `shared/calculations/__tests__/mileage.test.ts`:
+- [x] 2.2 Create `shared/calculations/__tests__/mileage.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -284,7 +284,7 @@ describe('validateOdoSequence', () => {
 });
 ```
 
-- [ ] 2.3 Run tests and confirm they pass:
+- [x] 2.3 Run tests and confirm they pass:
 ```bash
 npx vitest run shared/calculations/__tests__/mileage.test.ts
 ```

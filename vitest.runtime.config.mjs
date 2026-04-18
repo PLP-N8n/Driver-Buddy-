@@ -8,7 +8,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['.tmp-vitest/hooks/**/*.test.js', '.tmp-vitest/services/**/*.test.js', '.tmp-vitest/utils/**/*.test.js'],
+    include: [
+      '.tmp-vitest/hooks/**/*.test.js',
+      '.tmp-vitest/services/**/*.test.js',
+      '.tmp-vitest/shared/**/*.test.js',
+      '.tmp-vitest/utils/**/*.test.js',
+    ],
     pool: 'threads',
     fileParallelism: false,
     setupFiles: ['./vitest.setup.js'],
