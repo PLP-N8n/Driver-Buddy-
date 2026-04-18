@@ -1,5 +1,6 @@
 import { DailyWorkLog, Expense, ExpenseCategory, ProviderSplit, Settings, SyncPullPayload, Trip } from '../types';
 import * as Sentry from '../src/sentry';
+import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
 import { saveImage } from './imageStore';
 
 type SyncTripMeta = {
@@ -31,6 +32,35 @@ type SyncExpenseMeta = {
   receiptUrl?: string;
 };
 
+type SyncShiftPushItem = {
+  id: string;
+  date: string;
+  status: string;
+  primary_platform?: string;
+  hours_worked?: number;
+  total_earnings: number;
+  started_at?: string;
+  ended_at?: string;
+  start_odometer?: number;
+  end_odometer?: number;
+  business_miles?: number;
+  fuel_liters?: number;
+  job_count?: number;
+  notes?: string;
+};
+
+type SyncShiftEarningPushItem = {
+  id: string;
+  shift_id: string;
+  platform: string;
+  amount: number;
+  job_count?: number;
+};
+
+type SyncShiftPullRow = SyncShiftPushItem;
+
+type SyncShiftEarningPullRow = SyncShiftEarningPushItem;
+
 const isTripPurpose = (value: string | null | undefined): value is Trip['purpose'] =>
   value === 'Business' || value === 'Personal' || value === 'Commute';
 const isExpenseCategory = (value: string | null | undefined): value is Expense['category'] =>
@@ -42,6 +72,28 @@ const parseSyncMeta = <T,>(value: string | null | undefined): T | null => {
   } catch (error) {
     Sentry.captureException(error);
     return null;
+  }
+};
+
+const toOptionalNumber = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const formatPlatformLabel = (value: string | null | undefined) => {
+  switch (value) {
+    case 'amazon_flex':
+      return 'Amazon Flex';
+    case 'just_eat':
+      return 'Just Eat';
+    case 'deliveroo':
+      return 'Deliveroo';
+    case 'uber':
+      return 'Uber';
+    case 'bolt':
+      return 'Bolt';
+    case 'other':
+      return 'Other';
+    default:
+      return value ?? 'Other';
   }
 };
 
@@ -92,57 +144,89 @@ export const prepareExpensesForLocalState = async (storedExpenses: Expense[]): P
   return preparedExpenses;
 };
 
-export const buildSyncPayload = (trips: Trip[], expenses: Expense[], dailyLogs: DailyWorkLog[], settings: Settings) => ({
-  workLogs: dailyLogs.map((log) => ({
-    id: log.id,
-    date: log.date,
-    platform: log.provider,
-    hours: log.hoursWorked,
-    earnings: log.revenue,
-    notes: JSON.stringify({
-      notes: log.notes,
-      fuelLiters: log.fuelLiters,
-      jobCount: log.jobCount,
-      milesDriven: log.milesDriven,
-      linkedTripId: log.linkedTripId,
-      expensesTotal: log.expensesTotal,
-      startedAt: log.startedAt,
-      endedAt: log.endedAt,
-      providerSplits: log.providerSplits,
-    } satisfies SyncWorkLogMeta),
-  })),
-  mileageLogs: trips.map((trip) => ({
-    id: trip.id,
-    date: trip.date,
-    description: JSON.stringify({
-      startLocation: trip.startLocation,
-      endLocation: trip.endLocation,
-      startOdometer: trip.startOdometer,
-      endOdometer: trip.endOdometer,
-      notes: trip.notes,
-      purpose: trip.purpose,
-    } satisfies SyncTripMeta),
-    miles: trip.totalMiles,
-    tripType: trip.purpose,
-    linkedWorkId: null,
-  })),
-  expenses: expenses.map((expense) => ({
-    id: expense.id,
-    date: expense.date,
-    category: expense.category,
-    description: JSON.stringify({
-      description: expense.description,
-      isVatClaimable: expense.isVatClaimable,
-      liters: expense.liters,
-      receiptId: expense.receiptId,
-      receiptUrl: expense.receiptUrl,
-    } satisfies SyncExpenseMeta),
-    amount: expense.amount,
-    taxDeductible: true,
-    hasImage: Boolean(expense.hasReceiptImage || expense.receiptId || expense.receiptUrl),
-  })),
-  settings,
-});
+export const buildSyncPayload = (trips: Trip[], expenses: Expense[], dailyLogs: DailyWorkLog[], settings: Settings) => {
+  const tripsById = new Map(trips.map((trip) => [trip.id, trip]));
+  const shifts = dailyLogs.map((log) => migrateDailyWorkLog(log, log.linkedTripId ? tripsById.get(log.linkedTripId) : undefined));
+  const shiftRows: SyncShiftPushItem[] = shifts.map((shift) => ({
+    id: shift.id,
+    date: shift.date,
+    status: shift.status,
+    primary_platform: shift.primaryPlatform,
+    hours_worked: shift.hoursWorked,
+    total_earnings: shift.totalEarnings,
+    started_at: shift.startedAt,
+    ended_at: shift.endedAt,
+    start_odometer: shift.startOdometer,
+    end_odometer: shift.endOdometer,
+    business_miles: shift.businessMiles,
+    fuel_liters: shift.fuelLiters,
+    job_count: shift.jobCount,
+    notes: shift.notes,
+  }));
+  const shiftEarningRows: SyncShiftEarningPushItem[] = shifts.flatMap((shift) =>
+    shift.earnings.map((earning) => ({
+      id: earning.id,
+      shift_id: shift.id,
+      platform: earning.platform,
+      amount: earning.amount,
+      job_count: earning.jobCount,
+    }))
+  );
+
+  return {
+    workLogs: dailyLogs.map((log) => ({
+      id: log.id,
+      date: log.date,
+      platform: log.provider,
+      hours: log.hoursWorked,
+      earnings: log.revenue,
+      notes: JSON.stringify({
+        notes: log.notes,
+        fuelLiters: log.fuelLiters,
+        jobCount: log.jobCount,
+        milesDriven: log.milesDriven,
+        linkedTripId: log.linkedTripId,
+        expensesTotal: log.expensesTotal,
+        startedAt: log.startedAt,
+        endedAt: log.endedAt,
+        providerSplits: log.providerSplits,
+      } satisfies SyncWorkLogMeta),
+    })),
+    shifts: shiftRows,
+    shiftEarnings: shiftEarningRows,
+    mileageLogs: trips.map((trip) => ({
+      id: trip.id,
+      date: trip.date,
+      description: JSON.stringify({
+        startLocation: trip.startLocation,
+        endLocation: trip.endLocation,
+        startOdometer: trip.startOdometer,
+        endOdometer: trip.endOdometer,
+        notes: trip.notes,
+        purpose: trip.purpose,
+      } satisfies SyncTripMeta),
+      miles: trip.totalMiles,
+      tripType: trip.purpose,
+      linkedWorkId: null,
+    })),
+    expenses: expenses.map((expense) => ({
+      id: expense.id,
+      date: expense.date,
+      category: expense.category,
+      description: JSON.stringify({
+        description: expense.description,
+        isVatClaimable: expense.isVatClaimable,
+        liters: expense.liters,
+        receiptId: expense.receiptId,
+        receiptUrl: expense.receiptUrl,
+      } satisfies SyncExpenseMeta),
+      amount: expense.amount,
+      taxDeductible: true,
+      hasImage: Boolean(expense.hasReceiptImage || expense.receiptId || expense.receiptUrl),
+    })),
+    settings,
+  };
+};
 
 function mergeRecordsByDate<T extends { id: string; date: string }>(localRecords: T[], pulledRecords: T[]): T[] {
   const merged = new Map(localRecords.map((record) => [record.id, record]));
@@ -205,6 +289,44 @@ export const applyPulledWorkLogs = (
       providerSplits: meta?.providerSplits,
     };
   }));
+
+export const applyPulledShiftWorkLogs = (
+  shiftRows: SyncShiftPullRow[],
+  shiftEarningRows: SyncShiftEarningPullRow[] = [],
+  localLogs: DailyWorkLog[] = []
+): DailyWorkLog[] => {
+  const earningsByShiftId = new Map<string, ProviderSplit[]>();
+
+  for (const row of shiftEarningRows) {
+    const existing = earningsByShiftId.get(row.shift_id) ?? [];
+    existing.push({
+      provider: formatPlatformLabel(row.platform),
+      revenue: Number(row.amount ?? 0),
+      ...(toOptionalNumber(row.job_count) !== undefined ? { jobCount: Number(row.job_count) } : {}),
+    });
+    earningsByShiftId.set(row.shift_id, existing);
+  }
+
+  return mergeRecordsByDate(localLogs, shiftRows.map((row) => {
+    const providerSplits = earningsByShiftId.get(row.id);
+    const primaryProvider = row.primary_platform ?? providerSplits?.[0]?.provider ?? 'Synced shift';
+
+    return {
+      id: row.id,
+      date: row.date,
+      provider: primaryProvider,
+      hoursWorked: Number(row.hours_worked ?? 0),
+      revenue: Number(row.total_earnings ?? 0),
+      notes: row.notes,
+      fuelLiters: toOptionalNumber(row.fuel_liters),
+      jobCount: toOptionalNumber(row.job_count),
+      milesDriven: toOptionalNumber(row.business_miles),
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      providerSplits: providerSplits?.length ? providerSplits : undefined,
+    };
+  }));
+};
 
 export const applyPulledExpenses = (
   rows: NonNullable<SyncPullPayload['expenses']>,

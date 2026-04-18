@@ -1304,9 +1304,9 @@ git commit -m "feat: add HMRC expense classification on create in ExpenseLog"
 - `services/syncTransforms.ts`
 - `services/syncTransforms.test.ts`
 
-- [ ] 13.1 Read `services/syncTransforms.ts` and `services/syncTransforms.test.ts` in full.
+- [x] 13.1 Read `services/syncTransforms.ts` and `services/syncTransforms.test.ts` in full.
 
-- [ ] 13.2 Add serialisation/deserialisation for `Shift` records. The sync payload format for shifts:
+- [x] 13.2 Add serialisation/deserialisation for `Shift` records. The sync payload format for shifts:
 ```typescript
 // Push payload (client → Worker)
 type ShiftPushItem = {
@@ -1327,17 +1327,17 @@ type ShiftPushItem = {
 };
 ```
 
-- [ ] 13.3 Keep existing `work_logs` and `mileage_logs` pull handling intact — these are needed during the transition period to hydrate data for users who haven't pushed new shifts yet.
+- [x] 13.3 Keep existing `work_logs` and `mileage_logs` pull handling intact — these are needed during the transition period to hydrate data for users who haven't pushed new shifts yet.
 
-- [ ] 13.4 Update tests in `syncTransforms.test.ts` to cover new Shift serialisation round-trip.
+- [x] 13.4 Update tests in `syncTransforms.test.ts` to cover new Shift serialisation round-trip.
 
-- [ ] 13.5 Run tests:
+- [x] 13.5 Run tests:
 ```bash
 npx vitest run services/syncTransforms.test.ts
 ```
 Expected: all tests pass.
 
-- [ ] 13.6 Commit:
+- [x] 13.6 Commit:
 ```bash
 git add services/syncTransforms.ts services/syncTransforms.test.ts
 git commit -m "feat: add Shift payload serialisation to syncTransforms"

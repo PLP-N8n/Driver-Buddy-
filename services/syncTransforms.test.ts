@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type DailyWorkLog, type Expense, ExpenseCategory, type Trip } from '../types';
-import { applyPulledExpenses, buildSyncPayload, sanitizeExpenseForStorage } from './syncTransforms';
+import { applyPulledExpenses, applyPulledShiftWorkLogs, buildSyncPayload, sanitizeExpenseForStorage } from './syncTransforms';
 
 describe('syncTransforms', () => {
   it('buildSyncPayload includes all changed records', () => {
@@ -37,15 +37,36 @@ describe('syncTransforms', () => {
         hoursWorked: 6,
         revenue: 180,
         notes: 'Evening shift',
+        linkedTripId: 'trip-1',
+        providerSplits: [
+          { provider: 'Uber', revenue: 120, jobCount: 8 },
+          { provider: 'Deliveroo', revenue: 60, jobCount: 4 },
+        ],
       },
     ];
 
     const payload = buildSyncPayload(trips, expenses, dailyLogs, DEFAULT_SETTINGS);
 
     expect(payload.workLogs).toHaveLength(1);
+    expect(payload.shifts).toHaveLength(1);
+    expect(payload.shiftEarnings).toHaveLength(2);
     expect(payload.mileageLogs).toHaveLength(1);
     expect(payload.expenses).toHaveLength(1);
     expect(payload.settings).toEqual(DEFAULT_SETTINGS);
+    expect(payload.shifts[0]).toEqual(
+      expect.objectContaining({
+        id: 'log-1',
+        total_earnings: 180,
+        start_odometer: 1000,
+        end_odometer: 1020,
+        business_miles: 20,
+      })
+    );
+    expect(payload.shiftEarnings[0]).toEqual(
+      expect.objectContaining({
+        shift_id: 'log-1',
+      })
+    );
     expect(payload.expenses[0]).toEqual(
       expect.objectContaining({
         id: 'expense-1',
@@ -111,5 +132,44 @@ describe('syncTransforms', () => {
         receiptId: 'receipt-2',
       })
     );
+  });
+
+  it('applyPulledShiftWorkLogs recreates local work logs from shift rows', () => {
+    const merged = applyPulledShiftWorkLogs(
+      [
+        {
+          id: 'shift-1',
+          date: '2026-04-06',
+          status: 'completed',
+          primary_platform: 'Uber',
+          hours_worked: 5,
+          total_earnings: 150,
+          started_at: '2026-04-06T10:00:00Z',
+          ended_at: '2026-04-06T15:00:00Z',
+          business_miles: 42,
+          fuel_liters: 12,
+          job_count: 10,
+          notes: 'Lunch rush',
+        },
+      ],
+      [
+        { id: 'earning-1', shift_id: 'shift-1', platform: 'uber', amount: 90, job_count: 6 },
+        { id: 'earning-2', shift_id: 'shift-1', platform: 'deliveroo', amount: 60, job_count: 4 },
+      ]
+    );
+
+    expect(merged).toEqual([
+      expect.objectContaining({
+        id: 'shift-1',
+        provider: 'Uber',
+        hoursWorked: 5,
+        revenue: 150,
+        milesDriven: 42,
+        providerSplits: [
+          { provider: 'Uber', revenue: 90, jobCount: 6 },
+          { provider: 'Deliveroo', revenue: 60, jobCount: 4 },
+        ],
+      }),
+    ]);
   });
 });
