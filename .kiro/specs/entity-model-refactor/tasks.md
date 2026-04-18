@@ -1162,26 +1162,26 @@ git commit -m "feat: run entity migration on data load in usePersistence"
 
 Read the file first. Replace any inline tax calculations with calls to functions from `shared/calculations/tax.ts`. The `calcKept` formula is the most critical — find every place "Kept" is computed and replace it.
 
-- [ ] 8.1 Read `components/TaxLogic.tsx` in full.
+- [x] 8.1 Read `components/TaxLogic.tsx` in full.
 
-- [ ] 8.2 Add imports at the top:
+- [x] 8.2 Add imports at the top:
 ```typescript
 import { calcSimplifiedDeduction, calcActualDeduction, compareTaxMethods, calcTaxableProfit, calcTaxBuffer, calcKept } from '../shared/calculations/tax';
 ```
 
-- [ ] 8.3 Replace each inline calculation with the corresponding imported function. Do not change any JSX structure or displayed text — only replace the computation.
+- [x] 8.3 Replace each inline calculation with the corresponding imported function. Do not change any JSX structure or displayed text — only replace the computation.
 
-- [ ] 8.4 Verify TypeScript compiles:
+- [x] 8.4 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```
 
-- [ ] 8.5 Run vitest:
+- [x] 8.5 Run vitest:
 ```bash
 npx vitest run
 ```
 
-- [ ] 8.6 Commit:
+- [x] 8.6 Commit:
 ```bash
 git add components/TaxLogic.tsx
 git commit -m "refactor: replace inline tax calculations in TaxLogic with shared/calculations/tax"

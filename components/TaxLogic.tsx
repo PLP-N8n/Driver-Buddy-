@@ -2,6 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Download, Info, PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { DailyWorkLog, Expense, Settings, Trip, getCurrentTaxYearLabel } from '../types';
 import {
+  calcActualDeduction,
+  calcKept,
+  calcSimplifiedDeduction,
+  calcTaxBuffer,
+  calcTaxableProfit,
+  compareTaxMethods,
+} from '../shared/calculations/tax';
+import {
   fieldErrorClasses,
   fieldLabelClasses,
   formatCurrency,
@@ -95,7 +103,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
       : projection.estimatedLiability < analysis.totalRevenue * 0.2
         ? 'text-amber-400'
         : 'text-red-400';
-  const taxSetAside = analysis.totalRevenue * (settings.taxSetAsidePercent / 100);
+  const taxSetAside = calcTaxBuffer(analysis.totalRevenue, settings.taxSetAsidePercent);
   const potPct = Math.min(1, taxSetAside / Math.max(1, projection.estimatedLiability));
   const potBarColour = potPct >= 1 ? 'bg-green-500' : potPct >= 0.5 ? 'bg-amber-400' : 'bg-red-500';
   const potGapAmount = Math.max(0, projection.estimatedLiability - taxSetAside);
