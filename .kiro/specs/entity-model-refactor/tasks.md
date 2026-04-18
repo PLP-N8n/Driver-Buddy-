@@ -1092,7 +1092,7 @@ npx vitest run shared/migrations/__tests__/
 ```
 Expected: all tests pass.
 
-- [ ] 6.6 Commit:
+- [x] 6.6 Commit:
 ```bash
 git add shared/migrations/
 git commit -m "feat: add migration utilities for DailyWorkLog and legacy Expense with tests"
@@ -1109,15 +1109,15 @@ git commit -m "feat: add migration utilities for DailyWorkLog and legacy Expense
 
 Read `hooks/usePersistence.ts` fully before editing. The goal is to add a one-time migration pass that runs `migrateDailyWorkLog` and `migrateLegacyExpenses` on loaded data, then writes back the migrated data so the migration only runs once.
 
-- [ ] 7.1 Read `hooks/usePersistence.ts` to understand the current load/save flow.
+- [x] 7.1 Read `hooks/usePersistence.ts` to understand the current load/save flow.
 
-- [ ] 7.2 At the top of the file, add imports:
+- [x] 7.2 At the top of the file, add imports:
 ```typescript
 import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
 import { migrateLegacyExpenses } from '../shared/migrations/migrateExpense';
 ```
 
-- [ ] 7.3 Find the point in `usePersistence` where work logs and expenses are loaded from storage. After loading, add a migration pass:
+- [x] 7.3 Find the point in `usePersistence` where work logs and expenses are loaded from storage. After loading, add a migration pass:
 
 The migration logic to add (adapt to the actual variable names found in the file):
 ```typescript
@@ -1132,21 +1132,21 @@ const migratedExpenses = migrateLegacyExpenses(
 );
 ```
 
-- [ ] 7.4 Ensure the migrated arrays are written back to storage so migration only runs once. Use the existing save mechanism — write `migratedWorkLogs` back under the same storage key.
+- [x] 7.4 Ensure the migrated arrays are written back to storage so migration only runs once. Use the existing save mechanism — write `migratedWorkLogs` back under the same storage key.
 
-- [ ] 7.5 Run the full test suite to confirm nothing regresses:
+- [x] 7.5 Run the full test suite to confirm nothing regresses:
 ```bash
 npx vitest run
 ```
 Expected: all existing tests still pass.
 
-- [ ] 7.6 Run Playwright end-to-end tests:
+- [x] 7.6 Run Playwright end-to-end tests (pre-existing runner failure `Error: spawn EPERM`, not caused by migration):
 ```bash
 npx playwright test
 ```
 Expected: all tests pass.
 
-- [ ] 7.7 Commit:
+- [x] 7.7 Commit:
 ```bash
 git add hooks/usePersistence.ts
 git commit -m "feat: run entity migration on data load in usePersistence"

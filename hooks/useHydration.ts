@@ -14,6 +14,8 @@ import { getBackupCode } from '../services/deviceId';
 import { initOPFS } from '../services/opfsStore';
 import { normalizeSettings, type StoredSettings } from '../services/settingsService';
 import { prepareExpensesForLocalState } from '../services/syncTransforms';
+import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
+import { migrateLegacyExpenses } from '../shared/migrations/migrateExpense';
 
 const parseStoredJson = <T,>(key: string): T | null => {
   const value = localStorage.getItem(key);
@@ -62,15 +64,39 @@ export function useHydration({
       const savedSettings = parseStoredJson<StoredSettings>('driver_settings');
       const savedStats = parseStoredJson<PlayerStats>('driver_player_stats');
       const nextBackupCode = getBackupCode();
+      const serializedSavedLogs = Array.isArray(savedLogs) ? JSON.stringify(savedLogs) : null;
+      const serializedSavedExpenses = Array.isArray(savedExpenses) ? JSON.stringify(savedExpenses) : null;
+      const tripsById = new Map((savedTrips ?? []).map((trip) => [trip.id, trip]));
+      const migratedWorkLogs = Array.isArray(savedLogs)
+        ? savedLogs.map((log) => ({
+            ...log,
+            ...migrateDailyWorkLog(log, log.linkedTripId ? tripsById.get(log.linkedTripId) : undefined),
+          }))
+        : null;
+      const migratedExpenses = Array.isArray(savedExpenses)
+        ? (migrateLegacyExpenses(savedExpenses, savedSettings?.claimMethod ?? 'SIMPLIFIED') as Expense[])
+        : null;
 
       if (cancelled) return;
 
       if (Array.isArray(savedTrips)) setTrips(savedTrips);
-      if (Array.isArray(savedExpenses)) {
-        const preparedExpenses = await prepareExpensesForLocalState(savedExpenses);
-        if (!cancelled) setExpenses(preparedExpenses);
+      if (Array.isArray(migratedExpenses)) {
+        const preparedExpenses = await prepareExpensesForLocalState(migratedExpenses);
+        if (cancelled) return;
+
+        setExpenses(preparedExpenses);
+        const serializedPreparedExpenses = JSON.stringify(preparedExpenses);
+        if (serializedPreparedExpenses !== serializedSavedExpenses) {
+          localStorage.setItem('driver_expenses', serializedPreparedExpenses);
+        }
       }
-      if (Array.isArray(savedLogs)) setDailyLogs(savedLogs);
+      if (Array.isArray(migratedWorkLogs)) {
+        setDailyLogs(migratedWorkLogs);
+        const serializedMigratedWorkLogs = JSON.stringify(migratedWorkLogs);
+        if (serializedMigratedWorkLogs !== serializedSavedLogs) {
+          localStorage.setItem('driver_daily_logs', serializedMigratedWorkLogs);
+        }
+      }
       if (savedActiveSession) setActiveSession(savedActiveSession);
       if (savedCompletedShiftSummary) setCompletedShiftSummary(savedCompletedShiftSummary);
       if (savedSettings) setSettings(normalizeSettings(savedSettings));
