@@ -744,6 +744,52 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className={fieldLabelClasses}>Business use</label>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {(['business', 'mixed', 'personal'] as const).map((scope) => (
+                    <button
+                      key={scope}
+                      type="button"
+                      onClick={() => {
+                        setScopeInput(scope);
+                        if (scope === 'business') setBusinessUsePercentInput(100);
+                        if (scope === 'personal') setBusinessUsePercentInput(0);
+                        if (scope === 'mixed') setBusinessUsePercentInput(50);
+                      }}
+                      className={`min-h-[44px] rounded-full px-4 py-2 text-sm transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
+                        scopeInput === scope
+                          ? 'bg-brand text-white'
+                          : 'border border-surface-border bg-surface-raised text-slate-400'
+                      }`}
+                    >
+                      {scope === 'business' ? '100% Business' : scope === 'personal' ? 'Personal' : 'Mixed use'}
+                    </button>
+                  ))}
+                </div>
+                {scopeInput === 'mixed' && (
+                  <div className="mt-3">
+                    <label htmlFor="expense-business-use" className={fieldLabelClasses}>
+                      Business use: {businessUsePercentInput}%
+                    </label>
+                    <input
+                      id="expense-business-use"
+                      type="range"
+                      min={1}
+                      max={99}
+                      value={businessUsePercentInput}
+                      onChange={(event) => setBusinessUsePercentInput(Number(event.target.value))}
+                      className="mt-1 w-full accent-brand"
+                    />
+                  </div>
+                )}
+                {scopeInput === 'personal' && (
+                  <p className="mt-2 text-xs text-amber-400">
+                    Personal expenses are not tax deductible.
+                  </p>
+                )}
+              </div>
+
               {newExpense.category === ExpenseCategory.FUEL && (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="block">
