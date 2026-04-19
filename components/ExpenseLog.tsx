@@ -200,6 +200,8 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   const [amountInput, setAmountInput] = useState('');
   const [litersInput, setLitersInput] = useState('');
   const [pricePerLitreInput, setPricePerLitreInput] = useState('');
+  const [scopeInput, setScopeInput] = useState<'business' | 'personal' | 'mixed'>('business');
+  const [businessUsePercentInput, setBusinessUsePercentInput] = useState(100);
   const [selectedReceiptBlob, setSelectedReceiptBlob] = useState<Blob | null>(null);
   const [isReceiptRemoved, setIsReceiptRemoved] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
@@ -366,6 +368,8 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
     setAmountInput('');
     setLitersInput('');
     setPricePerLitreInput('');
+    setScopeInput('business');
+    setBusinessUsePercentInput(100);
     setSelectedReceiptBlob(null);
     setIsReceiptRemoved(false);
   };
@@ -411,6 +415,8 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
     });
     setAmountInput(expense.amount ? expense.amount.toString() : '');
     setLitersInput(expense.liters ? expense.liters.toString() : '');
+    setScopeInput(expense.scope ?? 'business');
+    setBusinessUsePercentInput(expense.businessUsePercent ?? 100);
     setIsFormOpen(true);
   };
 
@@ -436,8 +442,8 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
 
     const category = (newExpense.category as ExpenseCategory) || ExpenseCategory.FUEL;
     const amount = parseFloat(amountInput) || 0;
-    const scope: NonNullable<EnhancedExpense['scope']> = 'business';
-    const businessUsePercent = 100;
+    const scope = scopeInput;
+    const businessUsePercent = scopeInput === 'personal' ? 0 : businessUsePercentInput;
     const { vehicleExpenseType, taxTreatment } = classifyExpense(category, scope, settings.claimMethod);
     const { deductibleAmount, nonDeductibleAmount } = calcDeductibleAmount(
       amount,

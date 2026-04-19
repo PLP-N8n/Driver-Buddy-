@@ -52,7 +52,7 @@ npx tsc --noEmit
 ```
 Expected: zero errors.
 
-- [ ] 2.6 Commit:
+- [x] 2.6 Commit:
 ```bash
 git add components/dashboard/DashboardScreen.tsx
 git commit -m "refactor: supply totalExpenses to TaxEstimateCard and use calcMileageAllowance"
@@ -64,27 +64,27 @@ git commit -m "refactor: supply totalExpenses to TaxEstimateCard and use calcMil
 
 **Files to modify:** `components/ExpenseLog.tsx`
 
-- [ ] 3.1 Read `components/ExpenseLog.tsx` in full (it is large — focus on the form state declarations around line 200, the `resetForm` function, the `openEdit` function, and the submit handler around lines 430–460).
+- [x] 3.1 Read `components/ExpenseLog.tsx` in full (it is large — focus on the form state declarations around line 200, the `resetForm` function, the `openEdit` function, and the submit handler around lines 430–460).
 
-- [ ] 3.2 Add two new state fields near the other form state declarations:
+- [x] 3.2 Add two new state fields near the other form state declarations:
 ```ts
 const [scopeInput, setScopeInput] = useState<'business' | 'personal' | 'mixed'>('business');
 const [businessUsePercentInput, setBusinessUsePercentInput] = useState(100);
 ```
 
-- [ ] 3.3 In the `resetForm` function, reset both fields:
+- [x] 3.3 In the `resetForm` function, reset both fields:
 ```ts
 setScopeInput('business');
 setBusinessUsePercentInput(100);
 ```
 
-- [ ] 3.4 In the `openEdit` function (where existing expense fields are loaded into form state), add:
+- [x] 3.4 In the `openEdit` function (where existing expense fields are loaded into form state), add:
 ```ts
 setScopeInput(expense.scope ?? 'business');
 setBusinessUsePercentInput(expense.businessUsePercent ?? 100);
 ```
 
-- [ ] 3.5 In the submit handler, replace the hardcoded lines:
+- [x] 3.5 In the submit handler, replace the hardcoded lines:
 ```ts
 // Remove these two lines:
 const scope: NonNullable<EnhancedExpense['scope']> = 'business';
@@ -95,7 +95,7 @@ const scope = scopeInput;
 const businessUsePercent = scopeInput === 'personal' ? 0 : businessUsePercentInput;
 ```
 
-- [ ] 3.6 Verify TypeScript compiles:
+- [x] 3.6 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```
@@ -218,6 +218,10 @@ Expected: deploy succeeds.
 git add -p
 git commit -m "chore: tax engine unification complete"
 ```
+
+
+
+
 
 
 
