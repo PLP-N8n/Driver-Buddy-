@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calculator,
   Car,
@@ -76,6 +76,35 @@ const FaqSheet = lazy(() => import('./FaqSheet').then((m) => ({ default: m.FaqSh
 const getTodayKey = todayUK;
 const nowIso = () => new Date(Date.now()).toISOString();
 const TAX_REMINDER_KEY_PREFIX = 'dbt_tax_reminder_shown_';
+const DELETED_IDS_KEY = 'driver_deleted_ids';
+
+type DeletedIdsState = {
+  workLogs: string[];
+  mileageLogs: string[];
+  expenses: string[];
+  shifts: string[];
+};
+
+const createEmptyDeletedIds = (): DeletedIdsState => ({
+  workLogs: [],
+  mileageLogs: [],
+  expenses: [],
+  shifts: [],
+});
+
+const loadDeletedIds = (): DeletedIdsState => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DELETED_IDS_KEY) ?? '{}') as Partial<DeletedIdsState>;
+    return {
+      workLogs: Array.isArray(parsed.workLogs) ? parsed.workLogs : [],
+      mileageLogs: Array.isArray(parsed.mileageLogs) ? parsed.mileageLogs : [],
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+      shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
+    };
+  } catch {
+    return createEmptyDeletedIds();
+  }
+};
 
 const pageMeta: Record<AppTab, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Revenue, mileage, and tax readiness at a glance.' },
@@ -143,6 +172,7 @@ export function AppShell() {
   const prefersReducedMotion = useReducedMotion();
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const exportModalRef = useRef<HTMLDivElement | null>(null);
+  const [deletedIds, setDeletedIds] = useState<DeletedIdsState>(() => loadDeletedIds());
   const {
     activeTab,
     setActiveTab,
@@ -185,6 +215,48 @@ export function AppShell() {
     showTaxReminder,
     setShowTaxReminder,
   } = useAppState();
+  const persistDeletedIds = (next: DeletedIdsState) => {
+    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(next));
+  };
+  const appendDeletedId = (key: keyof DeletedIdsState, id: string) => {
+    setDeletedIds((current) => {
+      if (current[key].includes(id)) {
+        return current;
+      }
+
+      const next = { ...current, [key]: [...current[key], id] };
+      persistDeletedIds(next);
+      return next;
+    });
+  };
+  const appendDeletedDailyLogId = (id: string) => {
+    setDeletedIds((current) => {
+      const workLogs = current.workLogs.includes(id) ? current.workLogs : [...current.workLogs, id];
+      const shifts = current.shifts.includes(id) ? current.shifts : [...current.shifts, id];
+      if (workLogs === current.workLogs && shifts === current.shifts) {
+        return current;
+      }
+
+      const next = {
+        ...current,
+        workLogs,
+        shifts,
+      };
+      persistDeletedIds(next);
+      return next;
+    });
+  };
+  const clearDeletedIds = () => {
+    setDeletedIds((current) => {
+      if (!current.workLogs.length && !current.mileageLogs.length && !current.expenses.length && !current.shifts.length) {
+        return current;
+      }
+
+      const next = createEmptyDeletedIds();
+      persistDeletedIds(next);
+      return next;
+    });
+  };
   useFocusTrap(moreMenuRef, showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(exportModalRef, showExportModal, () => setShowExportModal(false));
   const { isOnline, connectivityBanner } = useSyncOrchestrator({
@@ -192,7 +264,9 @@ export function AppShell() {
     expenses,
     dailyLogs,
     settings,
+    deletedIds,
     hasHydrated,
+    onPushSuccess: clearDeletedIds,
   });
 
   const showToast = (message: string, type: ToastState['type'] = 'success', duration = 3000) => {
@@ -260,6 +334,7 @@ export function AppShell() {
   };
   const deleteTrip = (id: string) => {
     setTrips((current) => current.filter((trip) => trip.id !== id));
+    appendDeletedId('mileageLogs', id);
     trackEvent('trip_deleted');
   };
   const updateTrip = (id: string, updates: Partial<Trip>) =>
@@ -270,6 +345,7 @@ export function AppShell() {
   };
   const deleteExpense = (id: string) => {
     setExpenses((current) => current.filter((expense) => expense.id !== id));
+    appendDeletedId('expenses', id);
     trackEvent('expense_deleted');
   };
   const updateExpense = (expense: Expense) =>
@@ -280,6 +356,7 @@ export function AppShell() {
   };
   const deleteDailyLog = (id: string) => {
     setDailyLogs((current) => current.filter((log) => log.id !== id));
+    appendDeletedDailyLogId(id);
     trackEvent('shift_deleted');
   };
   const updateDailyLog = (log: DailyWorkLog) =>

@@ -532,7 +532,7 @@ npx tsc --noEmit
 npx vitest run
 ```
 
-- [ ] 12.6 Commit:
+- [x] 12.6 Commit:
 ```bash
 git add services/syncService.ts
 git commit -m "feat: merge pulled shifts and apply tombstone deletions in mergePulledData"
@@ -544,9 +544,9 @@ git commit -m "feat: merge pulled shifts and apply tombstone deletions in mergeP
 
 **Files to modify:** `services/syncTransforms.ts`, `App.tsx`
 
-- [ ] 13.1 Read `App.tsx` — find the delete handlers (`handleDeleteTrip` or equivalent, `handleDeleteExpense`, `handleDeleteDailyLog` or equivalent). Also find where `buildSyncPayload` is called (likely in `useSyncOrchestrator` or `App.tsx`).
+- [x] 13.1 Read `App.tsx` — find the delete handlers (`handleDeleteTrip` or equivalent, `handleDeleteExpense`, `handleDeleteDailyLog` or equivalent). Also find where `buildSyncPayload` is called (likely in `useSyncOrchestrator` or `App.tsx`).
 
-- [ ] 13.2 Update `buildSyncPayload` in `services/syncTransforms.ts` to accept and include `deletedIds`:
+- [x] 13.2 Update `buildSyncPayload` in `services/syncTransforms.ts` to accept and include `deletedIds`:
 
 Add `deletedIds` as an optional last parameter:
 ```ts
@@ -564,7 +564,7 @@ export const buildSyncPayload = (
 };
 ```
 
-- [ ] 13.3 In `App.tsx` (or whichever file manages app state), add a `deletedIds` state with localStorage persistence:
+- [x] 13.3 In `App.tsx` (or whichever file manages app state), add a `deletedIds` state with localStorage persistence:
 
 ```ts
 const DELETED_IDS_KEY = 'driver_deleted_ids';
@@ -586,7 +586,7 @@ const [deletedIds, setDeletedIds] = useState<{
 }));
 ```
 
-- [ ] 13.4 In each delete handler, push the id to the appropriate array and persist:
+- [x] 13.4 In each delete handler, push the id to the appropriate array and persist:
 
 ```ts
 // handleDeleteTrip / handleDeleteMileageLog:
@@ -615,11 +615,11 @@ setDeletedIds((prev) => {
 });
 ```
 
-- [ ] 13.5 Pass `deletedIds` to `buildSyncPayload` wherever it is called. Confirm the call site (likely `hooks/useSyncOrchestrator.ts` or `App.tsx`) and add the argument.
+- [x] 13.5 Pass `deletedIds` to `buildSyncPayload` wherever it is called. Confirm the call site (likely `hooks/useSyncOrchestrator.ts` or `App.tsx`) and add the argument.
 
-- [ ] 13.6 After a successful push in `syncService.ts`, clear the local `deletedIds`. The push success callback or event emission is in `push()` (~line 164). Add a mechanism to clear: the simplest approach is to pass a `onPushSuccess` callback or expose a `clearDeletedIds` function that the push caller invokes. If `push()` doesn't support this cleanly, add a `clearDeletedIdsAfterPush` export to a small utility that `App.tsx` / the orchestrator can call.
+- [x] 13.6 After a successful push in `syncService.ts`, clear the local `deletedIds`. The push success callback or event emission is in `push()` (~line 164). Add a mechanism to clear: the simplest approach is to pass a `onPushSuccess` callback or expose a `clearDeletedIds` function that the push caller invokes. If `push()` doesn't support this cleanly, add a `clearDeletedIdsAfterPush` export to a small utility that `App.tsx` / the orchestrator can call.
 
-- [ ] 13.7 Verify TypeScript compiles:
+- [x] 13.7 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```

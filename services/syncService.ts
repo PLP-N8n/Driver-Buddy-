@@ -28,13 +28,23 @@ export type MergedSyncState = {
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
 type SyncStatusListener = (status: SyncStatus) => void;
+type PushSuccessListener = () => void;
 const listeners: SyncStatusListener[] = [];
+const pushSuccessListeners: PushSuccessListener[] = [];
 
 export function onSyncStatus(fn: SyncStatusListener) {
   listeners.push(fn);
   return () => {
     const index = listeners.indexOf(fn);
     if (index >= 0) listeners.splice(index, 1);
+  };
+}
+
+export function onPushSuccess(fn: PushSuccessListener) {
+  pushSuccessListeners.push(fn);
+  return () => {
+    const index = pushSuccessListeners.indexOf(fn);
+    if (index >= 0) pushSuccessListeners.splice(index, 1);
   };
 }
 
@@ -48,6 +58,7 @@ export function resetSyncServiceForTests() {
   isSyncing = false;
   queuedPushData = null;
   listeners.splice(0, listeners.length);
+  pushSuccessListeners.splice(0, pushSuccessListeners.length);
 }
 
 export function isSyncConfigured(): boolean {
@@ -162,6 +173,7 @@ export async function push(data: object): Promise<boolean> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     resetRetryState();
+    pushSuccessListeners.forEach((listener) => listener());
     emit('idle');
     trackEvent('sync_completed');
     return true;

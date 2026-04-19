@@ -32,6 +32,13 @@ type SyncExpenseMeta = {
   receiptUrl?: string;
 };
 
+type SyncDeletedIds = {
+  workLogs?: string[];
+  mileageLogs?: string[];
+  expenses?: string[];
+  shifts?: string[];
+};
+
 type SyncShiftPushItem = {
   id: string;
   date: string;
@@ -144,7 +151,13 @@ export const prepareExpensesForLocalState = async (storedExpenses: Expense[]): P
   return preparedExpenses;
 };
 
-export const buildSyncPayload = (trips: Trip[], expenses: Expense[], dailyLogs: DailyWorkLog[], settings: Settings) => {
+export const buildSyncPayload = (
+  trips: Trip[],
+  expenses: Expense[],
+  dailyLogs: DailyWorkLog[],
+  settings: Settings,
+  deletedIds?: SyncDeletedIds
+) => {
   const tripsById = new Map(trips.map((trip) => [trip.id, trip]));
   const shifts = dailyLogs.map((log) => migrateDailyWorkLog(log, log.linkedTripId ? tripsById.get(log.linkedTripId) : undefined));
   const shiftRows: SyncShiftPushItem[] = shifts.map((shift) => ({
@@ -225,6 +238,7 @@ export const buildSyncPayload = (trips: Trip[], expenses: Expense[], dailyLogs: 
       hasImage: Boolean(expense.hasReceiptImage || expense.receiptId || expense.receiptUrl),
     })),
     settings,
+    deletedIds,
   };
 };
 
