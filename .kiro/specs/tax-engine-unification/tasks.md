@@ -20,7 +20,7 @@ npx tsc --noEmit
 ```
 Expected: error on `DashboardScreen.tsx` referencing missing `totalExpenses`. This confirms the fix is wired correctly and the next task is needed.
 
-- [ ] 1.5 Commit:
+- [x] 1.5 Commit:
 ```bash
 git add components/dashboard/TaxEstimateCard.tsx
 git commit -m "fix: pass totalExpenses not mileageClaim to calcKept in TaxEstimateCard"
@@ -32,11 +32,11 @@ git commit -m "fix: pass totalExpenses not mileageClaim to calcKept in TaxEstima
 
 **Files to modify:** `components/dashboard/DashboardScreen.tsx`
 
-- [ ] 2.1 Read `components/dashboard/DashboardScreen.tsx` in full (it is large — focus on the `taxYearTotals` computation and the `TaxEstimateCard` usage).
+- [x] 2.1 Read `components/dashboard/DashboardScreen.tsx` in full (it is large — focus on the `taxYearTotals` computation and the `TaxEstimateCard` usage).
 
-- [ ] 2.2 Find where `taxYearTotals` is built (the object passed to `TaxEstimateCard`). Locate the `totalExpenses` computation nearby (it will be a `reduce` over `expensesTotal` on shifts/logs). Add `totalExpenses` to the returned `taxYearTotals` object.
+- [x] 2.2 Find where `taxYearTotals` is built (the object passed to `TaxEstimateCard`). Locate the `totalExpenses` computation nearby (it will be a `reduce` over `expensesTotal` on shifts/logs). Add `totalExpenses` to the returned `taxYearTotals` object.
 
-- [ ] 2.3 Find the import of `calculateMileageClaim` from `utils/tax`. Replace it:
+- [x] 2.3 Find the import of `calculateMileageClaim` from `utils/tax`. Replace it:
 ```ts
 // Remove:
 import { calculateMileageClaim } from '../../utils/tax';
@@ -44,9 +44,9 @@ import { calculateMileageClaim } from '../../utils/tax';
 import { calcMileageAllowance } from '../../shared/calculations/mileage';
 ```
 
-- [ ] 2.4 Find every call to `calculateMileageClaim(...)` in the file. Replace with `calcMileageAllowance(...)`. The arguments are the same: `(businessMiles, rateFirst10k?, rateAfter10k?)`. If the call doesn't pass rate overrides, the defaults match.
+- [x] 2.4 Find every call to `calculateMileageClaim(...)` in the file. Replace with `calcMileageAllowance(...)`. The arguments are the same: `(businessMiles, rateFirst10k?, rateAfter10k?)`. If the call doesn't pass rate overrides, the defaults match.
 
-- [ ] 2.5 Verify TypeScript now compiles cleanly:
+- [x] 2.5 Verify TypeScript now compiles cleanly:
 ```bash
 npx tsc --noEmit
 ```
@@ -218,4 +218,9 @@ Expected: deploy succeeds.
 git add -p
 git commit -m "chore: tax engine unification complete"
 ```
+
+
+
+
+
 

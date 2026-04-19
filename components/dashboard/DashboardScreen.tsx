@@ -33,7 +33,7 @@ import { generateInsights } from '../../utils/insights';
 import { getMissedDays } from '../../utils/missedDays';
 import { DriverPrediction, generatePredictions } from '../../utils/predictions';
 import { predictNextShift } from '../../utils/shiftPredictor';
-import { calculateMileageClaim } from '../../utils/tax';
+import { calcMileageAllowance } from '../../shared/calculations/mileage';
 import { todayUK, toUKDateString, ukWeekStart } from '../../utils/ukDate';
 import {
   formatCurrency,
@@ -164,15 +164,15 @@ const formatTime = (value: string) =>
 
 const formatDateKey = (date: Date) => toUKDateString(date);
 
-const getWeekRange = (dateValue: string) => {
-  const start = ukWeekStart(dateValue);
+const getWeekRange = (dateValue: string, startDay: Settings['workWeekStartDay']) => {
+  const start = ukWeekStart(dateValue, startDay);
   const endDate = new Date(`${start}T12:00:00Z`);
   endDate.setUTCDate(endDate.getUTCDate() + 6);
   return { start, end: formatDateKey(endDate) };
 };
 
 const getWeekSnapshot = (dailyLogs: DailyWorkLog[], settings: Settings, dateValue = todayUK()) => {
-  const { start, end } = getWeekRange(dateValue);
+  const { start, end } = getWeekRange(dateValue, settings.workWeekStartDay);
   const weekLogs = dailyLogs.filter((log) => log.date >= start && log.date <= end);
   const revenue = weekLogs.reduce((sum, log) => sum + log.revenue, 0);
   const taxToSetAside = revenue * (settings.taxSetAsidePercent / 100);
@@ -350,7 +350,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     const totalBusinessMiles = trips
       .filter((trip) => trip.purpose === 'Business')
       .reduce((sum, trip) => sum + trip.totalMiles, 0);
-    const mileageClaim = calculateMileageClaim(
+    const mileageClaim = calcMileageAllowance(
       totalBusinessMiles,
       settings.businessRateFirst10k,
       settings.businessRateAfter10k
