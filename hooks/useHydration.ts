@@ -14,7 +14,6 @@ import { getBackupCode } from '../services/deviceId';
 import { initOPFS } from '../services/opfsStore';
 import { normalizeSettings, type StoredSettings } from '../services/settingsService';
 import { prepareExpensesForLocalState } from '../services/syncTransforms';
-import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
 import { migrateLegacyExpenses } from '../shared/migrations/migrateExpense';
 
 const parseStoredJson = <T,>(key: string): T | null => {
@@ -66,13 +65,7 @@ export function useHydration({
       const nextBackupCode = getBackupCode();
       const serializedSavedLogs = Array.isArray(savedLogs) ? JSON.stringify(savedLogs) : null;
       const serializedSavedExpenses = Array.isArray(savedExpenses) ? JSON.stringify(savedExpenses) : null;
-      const tripsById = new Map((savedTrips ?? []).map((trip) => [trip.id, trip]));
-      const migratedWorkLogs = Array.isArray(savedLogs)
-        ? savedLogs.map((log) => ({
-            ...log,
-            ...migrateDailyWorkLog(log, log.linkedTripId ? tripsById.get(log.linkedTripId) : undefined),
-          }))
-        : null;
+      const migratedWorkLogs = Array.isArray(savedLogs) ? savedLogs : null;
       const migratedExpenses = Array.isArray(savedExpenses)
         ? (migrateLegacyExpenses(savedExpenses, savedSettings?.claimMethod ?? 'SIMPLIFIED') as Expense[])
         : null;

@@ -31,7 +31,7 @@ npx vitest run services/syncService.test.ts
 ```
 Expected: all tests pass, completes in under 10 seconds.
 
-- [ ] 1.5 Commit:
+- [x] 1.5 Commit:
 ```bash
 git add services/syncService.test.ts
 git commit -m "fix: use explicit timer advancement in syncService retry test"
@@ -43,22 +43,22 @@ git commit -m "fix: use explicit timer advancement in syncService retry test"
 
 **Files to modify:** `hooks/useHydration.ts`
 
-- [ ] 2.1 Read `hooks/useHydration.ts` in full.
+- [x] 2.1 Read `hooks/useHydration.ts` in full.
 
-- [ ] 2.2 Find the block where `migrateDailyWorkLog` is called (around lines 70-75). Note what it does - it spreads Shift fields onto DailyWorkLog objects using a `tripsById` map.
+- [x] 2.2 Find the block where `migrateDailyWorkLog` is called (around lines 70-75). Note what it does - it spreads Shift fields onto DailyWorkLog objects using a `tripsById` map.
 
-- [ ] 2.3 Check whether `tripsById` is used anywhere else in the file (not just for the migrate call). Make a note.
+- [x] 2.3 Check whether `tripsById` is used anywhere else in the file (not just for the migrate call). Make a note.
 
-- [ ] 2.4 Remove the `migrateDailyWorkLog` call and replace the `migratedWorkLogs` computation with:
+- [x] 2.4 Remove the `migrateDailyWorkLog` call and replace the `migratedWorkLogs` computation with:
 ```ts
 const migratedWorkLogs = Array.isArray(savedLogs) ? savedLogs : null;
 ```
 
-- [ ] 2.5 Remove the `migrateDailyWorkLog` import if it is no longer used anywhere in the file.
+- [x] 2.5 Remove the `migrateDailyWorkLog` import if it is no longer used anywhere in the file.
 
-- [ ] 2.6 If `tripsById` was only used for the migrate call (confirmed in 2.3), remove the `tripsById` computation too. If it is used elsewhere, leave it.
+- [x] 2.6 If `tripsById` was only used for the migrate call (confirmed in 2.3), remove the `tripsById` computation too. If it is used elsewhere, leave it.
 
-- [ ] 2.7 Run TypeScript:
+- [x] 2.7 Run TypeScript:
 ```bash
 npx tsc --noEmit
 ```
