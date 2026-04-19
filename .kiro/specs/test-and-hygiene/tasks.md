@@ -93,7 +93,7 @@ npx tsc --noEmit
 ```
 Expected: zero errors.
 
-- [ ] 3.4 Commit:
+- [x] 3.4 Commit:
 ```bash
 git add hooks/useHydration.ts
 git commit -m "feat: add schema version marker to useHydration"
@@ -105,18 +105,18 @@ git commit -m "feat: add schema version marker to useHydration"
 
 **Files to modify:** `workers/sync-api/src/routes/sync.ts`
 
-- [ ] 4.1 Read `workers/sync-api/src/routes/sync.ts` in full. Focus on:
+- [x] 4.1 Read `workers/sync-api/src/routes/sync.ts` in full. Focus on:
   - The `handleSyncDeleteAccount` function
   - The `Env` interface (or its import location)
   - The existing `Promise.all` that deletes core tables
 
-- [ ] 4.2 Find the `Env` interface used by the delete handler. It may be defined:
+- [x] 4.2 Find the `Env` interface used by the delete handler. It may be defined:
   - Locally in `sync.ts` (look for `interface Env`)
   - In a shared file (look for `import type { Env }` at the top)
   
   Add `RECEIPTS: R2Bucket` to that interface. If the interface is shared with other routes that don't use R2, add the field as optional: `RECEIPTS?: R2Bucket`. If it's only used by the sync routes (which already use R2 for receipts), make it required.
 
-- [ ] 4.3 In `handleSyncDeleteAccount`, extend the existing `Promise.all` to also delete from the missing tables. Add these alongside the existing DELETE statements:
+- [x] 4.3 In `handleSyncDeleteAccount`, extend the existing `Promise.all` to also delete from the missing tables. Add these alongside the existing DELETE statements:
 ```ts
 env.DB.prepare('DELETE FROM device_secrets WHERE account_id = ?').bind(accountId).run(),
 env.DB.prepare('DELETE FROM plaid_connections WHERE account_id = ?').bind(accountId).run(),
@@ -125,7 +125,7 @@ env.DB.prepare('DELETE FROM tombstones WHERE account_id = ?').bind(accountId).ru
 ```
 Note: `tombstones` table is created by the `sync-reliability` spec's `0006_tombstones.sql` migration. Include it here but the migration must be applied first.
 
-- [ ] 4.4 After the `Promise.all` resolves, add R2 receipt cleanup using cursor pagination:
+- [x] 4.4 After the `Promise.all` resolves, add R2 receipt cleanup using cursor pagination:
 ```ts
 if (env.RECEIPTS) {
   const prefix = `receipts/${accountId}/`;
@@ -140,7 +140,7 @@ if (env.RECEIPTS) {
 }
 ```
 
-- [ ] 4.5 Run TypeScript:
+- [x] 4.5 Run TypeScript:
 ```bash
 cd workers/sync-api && npx tsc --noEmit
 ```

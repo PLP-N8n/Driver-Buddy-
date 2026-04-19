@@ -5,7 +5,16 @@ import { checkRateLimit } from '../lib/rateLimit';
 export interface Env {
   DB: D1Database;
   RECEIPT_SECRET: string;
+  RECEIPTS?: R2Bucket;
 }
+
+type ReceiptBucket = R2Bucket & {
+  list: (options?: { prefix?: string; cursor?: string }) => Promise<{
+    objects: Array<{ key: string }>;
+    truncated: boolean;
+    cursor?: string;
+  }>;
+};
 
 type SyncPayload = {
   workLogs?: Array<Record<string, unknown>>;
@@ -258,11 +267,29 @@ export async function handleSyncDeleteAccount(request: Request, env: Env): Promi
     env.DB.prepare('DELETE FROM work_logs WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM mileage_logs WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM expenses WHERE device_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM device_secrets WHERE account_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM plaid_connections WHERE account_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM plaid_transactions WHERE account_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM tombstones WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM shift_earnings WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM shifts WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM settings WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM users WHERE device_id = ?').bind(accountId).run(),
   ]);
+
+  if (env.RECEIPTS) {
+    const receipts = env.RECEIPTS as ReceiptBucket;
+    const prefix = `receipts/${accountId}/`;
+    let cursor: string | undefined;
+
+    do {
+      const listed = await receipts.list({ prefix, cursor });
+      if (listed.objects.length > 0) {
+        await Promise.all(listed.objects.map((obj) => receipts.delete(obj.key)));
+      }
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+  }
 
   return jsonOk(request, { ok: true, deleted: true });
 }
