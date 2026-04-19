@@ -472,7 +472,7 @@ npx vitest run services/syncTransforms.test.ts
 ```
 Expected: all existing tests pass.
 
-- [ ] 11.5 Commit:
+- [x] 11.5 Commit:
 ```bash
 git add services/syncTransforms.ts
 git commit -m "refactor: use updatedAt for conflict resolution in mergeRecordsByDate"
@@ -484,11 +484,11 @@ git commit -m "refactor: use updatedAt for conflict resolution in mergeRecordsBy
 
 **File to modify:** `services/syncService.ts`
 
-- [ ] 12.1 Read `services/syncService.ts` in full, focusing on `mergePulledData` (~lines 211–220).
+- [x] 12.1 Read `services/syncService.ts` in full, focusing on `mergePulledData` (~lines 211–220).
 
-- [ ] 12.2 Add `import { applyPulledShiftWorkLogs } from './syncTransforms';` (or confirm it is already imported).
+- [x] 12.2 Add `import { applyPulledShiftWorkLogs } from './syncTransforms';` (or confirm it is already imported).
 
-- [ ] 12.3 Replace `mergePulledData` with:
+- [x] 12.3 Replace `mergePulledData` with:
 ```ts
 export function mergePulledData(
   localState: MergedSyncState,
@@ -522,12 +522,12 @@ export function mergePulledData(
 }
 ```
 
-- [ ] 12.4 Verify TypeScript compiles:
+- [x] 12.4 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```
 
-- [ ] 12.5 Run tests:
+- [x] 12.5 Run tests:
 ```bash
 npx vitest run
 ```

@@ -3,7 +3,7 @@ import { trackEvent } from './analyticsService';
 import { getDeviceId } from './deviceId';
 import { normalizeSettings } from './settingsService';
 import { buildAuthHeaders } from './sessionManager';
-import { applyPulledExpenses, applyPulledTrips, applyPulledWorkLogs } from './syncTransforms';
+import { applyPulledExpenses, applyPulledShiftWorkLogs, applyPulledTrips, applyPulledWorkLogs } from './syncTransforms';
 
 const env = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env;
 const WORKER_URL = env?.VITE_SYNC_WORKER_URL ?? '';
@@ -209,10 +209,22 @@ export async function pull(deviceIdOverride?: string): Promise<SyncPullPayload |
 }
 
 export function mergePulledData(localState: MergedSyncState, pulledData: SyncPullPayload): MergedSyncState {
+  const workLogsFromLegacy = applyPulledWorkLogs(pulledData.workLogs ?? [], localState.dailyLogs);
+  const mergedDailyLogs = pulledData.shifts?.length
+    ? applyPulledShiftWorkLogs(pulledData.shifts, pulledData.shiftEarnings ?? [], workLogsFromLegacy)
+    : workLogsFromLegacy;
+
+  const deletedWorkLogIds = new Set([
+    ...(pulledData.deletedIds?.workLogs ?? []),
+    ...(pulledData.deletedIds?.shifts ?? []),
+  ]);
+  const deletedMileageIds = new Set(pulledData.deletedIds?.mileageLogs ?? []);
+  const deletedExpenseIds = new Set(pulledData.deletedIds?.expenses ?? []);
+
   return {
-    trips: applyPulledTrips(pulledData.mileageLogs ?? [], localState.trips),
-    dailyLogs: applyPulledWorkLogs(pulledData.workLogs ?? [], localState.dailyLogs),
-    expenses: applyPulledExpenses(pulledData.expenses ?? [], localState.expenses),
+    trips: applyPulledTrips(pulledData.mileageLogs ?? [], localState.trips).filter((trip) => !deletedMileageIds.has(trip.id)),
+    dailyLogs: mergedDailyLogs.filter((log) => !deletedWorkLogIds.has(log.id)),
+    expenses: applyPulledExpenses(pulledData.expenses ?? [], localState.expenses).filter((expense) => !deletedExpenseIds.has(expense.id)),
     settings: pulledData.settings
       ? normalizeSettings({ ...localState.settings, ...pulledData.settings })
       : localState.settings,
