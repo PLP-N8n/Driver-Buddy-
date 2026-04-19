@@ -38,7 +38,14 @@ describe('syncService', () => {
 
     service.schedulePush({ expenses: ['queued'] });
 
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(3_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(20_000);
+    await Promise.resolve();
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(statuses.at(-1)).toBe('error');
