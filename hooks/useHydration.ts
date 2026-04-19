@@ -16,6 +16,9 @@ import { normalizeSettings, type StoredSettings } from '../services/settingsServ
 import { prepareExpensesForLocalState } from '../services/syncTransforms';
 import { migrateLegacyExpenses } from '../shared/migrations/migrateExpense';
 
+const DATA_SCHEMA_VERSION = 1;
+const SCHEMA_VERSION_KEY = 'driver_schema_version';
+
 const parseStoredJson = <T,>(key: string): T | null => {
   const value = localStorage.getItem(key);
   if (!value) return null;
@@ -96,6 +99,7 @@ export function useHydration({
       if (savedStats) setPlayerStats(savedStats);
 
       if (!cancelled) {
+        localStorage.setItem(SCHEMA_VERSION_KEY, String(DATA_SCHEMA_VERSION));
         setBackupCode(nextBackupCode);
         setHasHydrated(true);
       }

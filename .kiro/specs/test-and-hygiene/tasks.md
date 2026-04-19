@@ -64,7 +64,7 @@ npx tsc --noEmit
 ```
 Expected: zero errors.
 
-- [ ] 2.8 Commit:
+- [x] 2.8 Commit:
 ```bash
 git add hooks/useHydration.ts
 git commit -m "fix: remove Shift spread from DailyWorkLog objects in useHydration"
@@ -76,18 +76,18 @@ git commit -m "fix: remove Shift spread from DailyWorkLog objects in useHydratio
 
 **Files to modify:** `hooks/useHydration.ts`
 
-- [ ] 3.1 At the top of `useHydration.ts` (after imports, before the hook function), add:
+- [x] 3.1 At the top of `useHydration.ts` (after imports, before the hook function), add:
 ```ts
 const DATA_SCHEMA_VERSION = 1;
 const SCHEMA_VERSION_KEY = 'driver_schema_version';
 ```
 
-- [ ] 3.2 Find where the hook writes hydrated data back to state (after the localStorage reads and any transformations). Add the version marker write immediately after:
+- [x] 3.2 Find where the hook writes hydrated data back to state (after the localStorage reads and any transformations). Add the version marker write immediately after:
 ```ts
 localStorage.setItem(SCHEMA_VERSION_KEY, String(DATA_SCHEMA_VERSION));
 ```
 
-- [ ] 3.3 Run TypeScript:
+- [x] 3.3 Run TypeScript:
 ```bash
 npx tsc --noEmit
 ```
