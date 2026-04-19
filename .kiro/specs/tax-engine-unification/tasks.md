@@ -101,7 +101,7 @@ npx tsc --noEmit
 ```
 Expected: zero errors.
 
-- [ ] 3.7 Commit:
+- [x] 3.7 Commit:
 ```bash
 git add components/ExpenseLog.tsx
 git commit -m "feat: add scope and businessUsePercent state to expense form"
@@ -113,9 +113,9 @@ git commit -m "feat: add scope and businessUsePercent state to expense form"
 
 **Files to modify:** `components/ExpenseLog.tsx`
 
-- [ ] 4.1 Read the JSX of the expense form in `components/ExpenseLog.tsx` — find the area after the amount and description fields and before the receipt/camera section. This is where the scope toggle will be inserted.
+- [x] 4.1 Read the JSX of the expense form in `components/ExpenseLog.tsx` — find the area after the amount and description fields and before the receipt/camera section. This is where the scope toggle will be inserted.
 
-- [ ] 4.2 Insert the following JSX block at that location. Use the design tokens already present in the file (`fieldLabelClasses` or equivalent label class, existing button styles, `accent-brand` or equivalent for the slider):
+- [x] 4.2 Insert the following JSX block at that location. Use the design tokens already present in the file (`fieldLabelClasses` or equivalent label class, existing button styles, `accent-brand` or equivalent for the slider):
 
 ```tsx
 {/* Business use scope selector */}
@@ -167,13 +167,13 @@ git commit -m "feat: add scope and businessUsePercent state to expense form"
 
 Note: if the file uses a different token name than `border-brand`, `bg-brand/20`, `text-brand`, `border-surface-border`, `bg-surface-raised` — check the existing button/toggle styles in the same file and match them exactly.
 
-- [ ] 4.3 Verify TypeScript compiles:
+- [x] 4.3 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```
 Expected: zero errors.
 
-- [ ] 4.4 Run all unit tests:
+- [x] 4.4 Run all unit tests:
 ```bash
 npx vitest run
 ```
@@ -218,6 +218,11 @@ Expected: deploy succeeds.
 git add -p
 git commit -m "chore: tax engine unification complete"
 ```
+
+
+
+
+
 
 
 

@@ -1,4 +1,5 @@
 import type { DailyWorkLog, Expense, Settings, SyncPullPayload, Trip } from '../types';
+import { trackEvent } from './analyticsService';
 import { getDeviceId } from './deviceId';
 import { normalizeSettings } from './settingsService';
 import { buildAuthHeaders } from './sessionManager';
@@ -88,10 +89,10 @@ function scheduleRetry() {
   isRetrying = true;
   const delay = MIN_RETRY_BACKOFF_MS * 2 ** retryCount;
   retryCount += 1;
-  retryTimer = setTimeout(() => {
+  retryTimer = setTimeout(async () => {
     retryTimer = null;
     isRetrying = false;
-    void flushQueuedPush();
+    await flushQueuedPush();
   }, delay);
 }
 
@@ -101,9 +102,9 @@ export function schedulePush(data: object) {
   resetRetryState();
   queuedPushData = data;
   if (syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
+  syncTimer = setTimeout(async () => {
     syncTimer = null;
-    void flushQueuedPush();
+    await flushQueuedPush();
   }, SYNC_DEBOUNCE_MS);
 }
 
@@ -162,6 +163,7 @@ export async function push(data: object): Promise<boolean> {
 
     resetRetryState();
     emit('idle');
+    trackEvent('sync_completed');
     return true;
   } catch {
     queuedPushData = queuedPushData ?? data;
