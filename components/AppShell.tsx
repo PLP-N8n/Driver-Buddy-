@@ -329,7 +329,7 @@ export function AppShell() {
     document.documentElement.style.colorScheme = theme;
   }, [settings.colorTheme]);
   const addTrip = (trip: Trip) => {
-    setTrips((current) => [...current, trip]);
+    setTrips((current) => [...current, { ...trip, updatedAt: nowIso() }]);
     trackEvent('trip_logged');
   };
   const deleteTrip = (id: string) => {
@@ -338,9 +338,9 @@ export function AppShell() {
     trackEvent('trip_deleted');
   };
   const updateTrip = (id: string, updates: Partial<Trip>) =>
-    setTrips((current) => current.map((trip) => (trip.id === id ? { ...trip, ...updates } : trip)));
+    setTrips((current) => current.map((trip) => (trip.id === id ? { ...trip, ...updates, updatedAt: nowIso() } : trip)));
   const addExpense = (expense: Expense) => {
-    setExpenses((current) => [...current, expense]);
+    setExpenses((current) => [...current, { ...expense, updatedAt: nowIso() }]);
     trackEvent('expense_added', { category: expense.category });
   };
   const deleteExpense = (id: string) => {
@@ -349,9 +349,9 @@ export function AppShell() {
     trackEvent('expense_deleted');
   };
   const updateExpense = (expense: Expense) =>
-    setExpenses((current) => current.map((item) => (item.id === expense.id ? expense : item)));
+    setExpenses((current) => current.map((item) => (item.id === expense.id ? { ...expense, updatedAt: nowIso() } : item)));
   const addDailyLog = (log: DailyWorkLog) => {
-    setDailyLogs((current) => [...current, log]);
+    setDailyLogs((current) => [...current, { ...log, updatedAt: nowIso() }]);
     trackEvent('shift_logged', { platform: log.provider });
   };
   const deleteDailyLog = (id: string) => {
@@ -360,7 +360,7 @@ export function AppShell() {
     trackEvent('shift_deleted');
   };
   const updateDailyLog = (log: DailyWorkLog) =>
-    setDailyLogs((current) => current.map((item) => (item.id === log.id ? log : item)));
+    setDailyLogs((current) => current.map((item) => (item.id === log.id ? { ...log, updatedAt: nowIso() } : item)));
 
   const calculateMileageClaim = (miles: number) => {
     const totalBusinessMiles = trips.filter((trip) => trip.purpose === 'Business').reduce((sum, trip) => sum + trip.totalMiles, 0);
@@ -475,6 +475,7 @@ export function AppShell() {
     Sentry.addBreadcrumb({ category: 'shift', message: 'shift_completed' });
     trackEvent('shift_completed', { date: session.date });
     const endedAt = nowIso();
+    const updatedAt = nowIso();
     const revenue = Number(session.revenue ?? 0);
     const miles = Number(session.miles ?? 0);
     const sessionExpenses = session.expenses ?? [];
@@ -511,6 +512,7 @@ export function AppShell() {
         totalMiles: miles,
         purpose: 'Business',
         notes: 'Auto-created from Work Day',
+        updatedAt,
       };
       addTrip(linkedTripForInsights);
     }
@@ -523,6 +525,7 @@ export function AppShell() {
         amount: expense.amount,
         description: expense.description,
         liters: expense.liters,
+        updatedAt,
       });
     });
 
@@ -540,6 +543,7 @@ export function AppShell() {
       startedAt: session.startedAt,
       endedAt,
       providerSplits: session.providerSplits,
+      updatedAt,
     };
 
     addDailyLog(completedLog);
@@ -588,6 +592,7 @@ export function AppShell() {
 
     const startedAt = new Date(`${payload.date}T09:00:00`).toISOString();
     const endedAt = new Date(new Date(startedAt).getTime() + payload.hoursWorked * 60 * 60 * 1000).toISOString();
+    const updatedAt = nowIso();
     const expensesTotal = payload.expenses.reduce((sum, expense) => sum + expense.amount, 0);
     const fuelLiters = payload.expenses
       .filter((expense) => expense.category === ExpenseCategory.FUEL)
@@ -614,6 +619,7 @@ export function AppShell() {
         totalMiles: miles,
         purpose: 'Business',
         notes: 'Auto-created from quick add shift',
+        updatedAt,
       };
       addTrip(linkedTripForInsights);
     }
@@ -626,6 +632,7 @@ export function AppShell() {
         amount: expense.amount,
         description: expense.description,
         liters: expense.liters,
+        updatedAt,
       });
     });
 
@@ -643,6 +650,7 @@ export function AppShell() {
       startedAt,
       endedAt,
       providerSplits: payload.providerSplits,
+      updatedAt,
     };
 
     addDailyLog(completedLog);
@@ -707,6 +715,7 @@ export function AppShell() {
 
   const handleLiveShiftSave = (data: { miles: number; durationHours: number; revenue: number; provider: string; path?: Coordinate[] }) => {
     const today = todayUK();
+    const updatedAt = nowIso();
     if (data.miles > 0) {
       const startOdo = settings.financialYearStartOdometer
         ? settings.financialYearStartOdometer + trips.reduce((sum, trip) => sum + trip.totalMiles, 0)
@@ -723,6 +732,7 @@ export function AppShell() {
         purpose: 'Business',
         notes: `Live tracked shift (${data.durationHours.toFixed(2)}h)`,
         path: data.path,
+        updatedAt,
       });
     }
 
@@ -733,6 +743,7 @@ export function AppShell() {
       revenue: data.revenue,
       hoursWorked: data.durationHours,
       fuelLiters: 0,
+      updatedAt,
     });
     showToast('Saved', 'success', 1500);
   };

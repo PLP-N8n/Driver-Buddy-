@@ -624,7 +624,7 @@ setDeletedIds((prev) => {
 npx tsc --noEmit
 ```
 
-- [ ] 13.8 Commit:
+- [x] 13.8 Commit:
 ```bash
 git add services/syncTransforms.ts App.tsx hooks/useSyncOrchestrator.ts
 git commit -m "feat: track deleted record ids as tombstones and include in push payload"
@@ -636,16 +636,16 @@ git commit -m "feat: track deleted record ids as tombstones and include in push 
 
 **File to modify:** `App.tsx`
 
-- [ ] 14.1 Read `App.tsx` — identify all handlers that create or update `Trip`, `DailyWorkLog`, or `Expense` objects. Look for patterns like `{ id: ..., date: ..., provider: ..., revenue: ... }` object literals.
+- [x] 14.1 Read `App.tsx` — identify all handlers that create or update `Trip`, `DailyWorkLog`, or `Expense` objects. Look for patterns like `{ id: ..., date: ..., provider: ..., revenue: ... }` object literals.
 
-- [ ] 14.2 For every such object literal (create or update), add `updatedAt: new Date().toISOString()`. For updates that spread an existing record, add `updatedAt: new Date().toISOString()` to the spread result.
+- [x] 14.2 For every such object literal (create or update), add `updatedAt: new Date().toISOString()`. For updates that spread an existing record, add `updatedAt: new Date().toISOString()` to the spread result.
 
-- [ ] 14.3 Verify TypeScript compiles:
+- [x] 14.3 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```
 
-- [ ] 14.4 Run all tests:
+- [x] 14.4 Run all tests:
 ```bash
 npx vitest run
 ```
