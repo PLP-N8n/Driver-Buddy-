@@ -24,6 +24,7 @@ export interface Trip {
   purpose: TripPurpose;
   notes: string;
   path?: Coordinate[];
+  updatedAt?: string;
 }
 
 export interface Expense {
@@ -37,6 +38,7 @@ export interface Expense {
   hasReceiptImage?: boolean;
   isVatClaimable?: boolean;
   liters?: number;
+  updatedAt?: string;
 }
 
 export interface ProviderSplit {
@@ -84,6 +86,7 @@ export interface DailyWorkLog {
   providerSplits?: ProviderSplit[];
   startedAt?: string;
   endedAt?: string;
+  updatedAt?: string;
 }
 
 export enum ExpenseCategory {
@@ -134,12 +137,20 @@ export interface Debt {
   minPayment: number;
 }
 
+export interface DirectDebit {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number;
+}
+
 export type DriverRole = 'COURIER' | 'FOOD_DELIVERY' | 'TAXI' | 'LOGISTICS' | 'OTHER';
 
 export interface Settings {
   vehicleReg: string;
   driverRoles: DriverRole[]; // Changed from single role to array
   colorTheme: 'DARK' | 'LIGHT';
+  workWeekStartDay: 'MON' | 'SUN';
   claimMethod: 'SIMPLIFIED' | 'ACTUAL';
   analyticsConsent?: boolean; // default false - opt-in
   mileageTrackingEnabled: boolean;
@@ -156,6 +167,7 @@ export interface Settings {
   debtSetAsidePercent: number;
   // Debt Management
   debts: Debt[];
+  directDebits: DirectDebit[];
   debtStrategy: 'AVALANCHE' | 'SNOWBALL';
   // Odometer Tracking
   financialYearStartOdometer: number;
@@ -181,6 +193,7 @@ export type SyncPullPayload = {
     hours?: number | null;
     earnings?: number | null;
     notes?: string | null;
+    updated_at?: string | null;
   }>;
   mileageLogs?: Array<{
     id: string;
@@ -189,6 +202,7 @@ export type SyncPullPayload = {
     miles?: number | null;
     trip_type?: string | null;
     linked_work_id?: string | null;
+    updated_at?: string | null;
   }>;
   expenses?: Array<{
     id: string;
@@ -197,7 +211,39 @@ export type SyncPullPayload = {
     description?: string | null;
     amount?: number | null;
     has_image?: number | null;
+    updated_at?: string | null;
   }>;
+  shifts?: Array<{
+    id: string;
+    date: string;
+    status?: string | null;
+    primary_platform?: string | null;
+    hours_worked?: number | null;
+    total_earnings?: number | null;
+    started_at?: string | null;
+    ended_at?: string | null;
+    start_odometer?: number | null;
+    end_odometer?: number | null;
+    business_miles?: number | null;
+    fuel_liters?: number | null;
+    job_count?: number | null;
+    notes?: string | null;
+    updated_at?: string | null;
+  }>;
+  shiftEarnings?: Array<{
+    id: string;
+    shift_id: string;
+    account_id?: string | null;
+    platform?: string | null;
+    amount?: number | null;
+    job_count?: number | null;
+  }>;
+  deletedIds?: {
+    workLogs?: string[];
+    mileageLogs?: string[];
+    expenses?: string[];
+    shifts?: string[];
+  };
   settings?: Partial<Settings> | null;
 };
 
@@ -254,6 +300,7 @@ export const DEFAULT_SETTINGS: Settings = {
   vehicleReg: '',
   driverRoles: ['COURIER'],
   colorTheme: 'DARK',
+  workWeekStartDay: 'MON',
   claimMethod: 'SIMPLIFIED',
   analyticsConsent: false,
   mileageTrackingEnabled: false,
@@ -268,6 +315,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maintenanceSetAsidePercent: 10,
   debtSetAsidePercent: 0,
   debts: [],
+  directDebits: [],
   debtStrategy: 'AVALANCHE',
   financialYearStartOdometer: 0,
   financialYearStartDate: ukTaxYearStart(),
