@@ -9,13 +9,14 @@ type TaxEstimateCardProps = {
     taxSetAside: number;
     totalBusinessMiles: number;
     mileageClaim: number;
+    totalExpenses: number;
   };
 };
 
 export const TaxEstimateCard: React.FC<TaxEstimateCardProps> = ({ totals }) => {
   const taxSetAsidePercent = totals.totalRevenue > 0 ? (totals.taxSetAside / totals.totalRevenue) * 100 : 0;
   const taxSetAside = calcTaxBuffer(totals.totalRevenue, taxSetAsidePercent);
-  const keptEstimate = calcKept(totals.totalRevenue, totals.mileageClaim, taxSetAside);
+  const keptEstimate = calcKept(totals.totalRevenue, totals.totalExpenses, taxSetAside);
 
   return (
     <section className={`${panelClasses} p-5`} data-kept-estimate={keptEstimate.toFixed(2)}>
