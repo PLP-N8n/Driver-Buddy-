@@ -179,7 +179,7 @@ npx vitest run
 ```
 Expected: all tests pass.
 
-- [ ] 4.5 Commit:
+- [x] 4.5 Commit:
 ```bash
 git add components/ExpenseLog.tsx
 git commit -m "feat: add business-use scope selector UI to expense form"
@@ -189,19 +189,19 @@ git commit -m "feat: add business-use scope selector UI to expense form"
 
 ## Task 5: Final verification and deploy
 
-- [ ] 5.1 Run full unit test suite:
+- [x] 5.1 Run full unit test suite:
 ```bash
 npx vitest run
 ```
 Expected: all tests pass, 0 failures.
 
-- [ ] 5.2 Run TypeScript compile check:
+- [x] 5.2 Run TypeScript compile check:
 ```bash
 npx tsc --noEmit
 ```
 Expected: 0 errors.
 
-- [ ] 5.3 Run production build:
+- [x] 5.3 Run production build:
 ```bash
 npm run build
 ```
@@ -218,6 +218,10 @@ Expected: deploy succeeds.
 git add -p
 git commit -m "chore: tax engine unification complete"
 ```
+
+
+
+
 
 
 
