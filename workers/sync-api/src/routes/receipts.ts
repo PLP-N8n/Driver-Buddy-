@@ -1,5 +1,6 @@
 import { getCorsHeaders } from '../lib/cors';
 import { jsonErr, jsonOk } from '../lib/json';
+import { checkRateLimit } from '../lib/rateLimit';
 import { verifySessionToken } from '../lib/session';
 
 type ReceiptBucket = R2Bucket & {
@@ -10,6 +11,7 @@ type ReceiptBucket = R2Bucket & {
 };
 
 export interface Env {
+  DB: D1Database;
   RECEIPTS: R2Bucket;
   RECEIPT_SECRET: string;
 }
@@ -41,6 +43,9 @@ function presignUnavailable(
 }
 
 export async function handleRequestUpload(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'receipts', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   const accountId = await getSessionAccount(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401);
 
@@ -63,6 +68,9 @@ export async function handleRequestUpload(request: Request, env: Env): Promise<R
 }
 
 export async function handleGetReceipt(request: Request, env: Env, key: string): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'receipts', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   const accountId = await getSessionAccount(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401);
   if (!withReceiptPrefix(accountId, key)) return jsonErr(request, 'forbidden', 403);
@@ -83,6 +91,9 @@ export async function handleGetReceipt(request: Request, env: Env, key: string):
 }
 
 export async function handleDeleteReceipt(request: Request, env: Env, key: string): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'receipts', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   const accountId = await getSessionAccount(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401);
   if (!withReceiptPrefix(accountId, key)) return jsonErr(request, 'forbidden', 403);
@@ -91,6 +102,9 @@ export async function handleDeleteReceipt(request: Request, env: Env, key: strin
 }
 
 export async function handleMigrateLegacy(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'receipts', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   const accountId = await getSessionAccount(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401);
 

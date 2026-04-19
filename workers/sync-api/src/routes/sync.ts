@@ -1,5 +1,6 @@
 import { jsonErr, jsonOk } from '../lib/json';
 import { getAuthenticatedAccountId } from '../lib/auth';
+import { checkRateLimit } from '../lib/rateLimit';
 
 export interface Env {
   DB: D1Database;
@@ -37,6 +38,9 @@ const asRequiredId = (value: unknown): string => {
 const asFlag = (value: unknown, fallback = false) => (value ? 1 : fallback ? 1 : 0);
 
 export async function handleSyncPush(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   const body = await readJson<SyncPayload>(request);
   if (!body) return jsonErr(request, 'invalid json');
 
@@ -161,6 +165,9 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
 }
 
 export async function handleSyncPull(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   if (request.method === 'POST') {
     const body = await readJson<Record<string, unknown>>(request);
     if (!body) return jsonErr(request, 'invalid json');
@@ -190,6 +197,9 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
 }
 
 export async function handleSyncDeleteAccount(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   if (request.headers.get('Content-Type')?.includes('application/json')) {
     const body = await readJson<Record<string, unknown>>(request);
     if (!body) return jsonErr(request, 'invalid json');

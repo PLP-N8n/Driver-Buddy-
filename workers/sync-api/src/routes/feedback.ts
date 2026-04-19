@@ -1,10 +1,14 @@
 import { jsonErr, jsonOk } from '../lib/json';
+import { checkRateLimit } from '../lib/rateLimit';
 
 export interface Env {
   DB: D1Database;
 }
 
 export async function handleFeedback(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'feedback', env.DB);
+  if (limited) return jsonErr(request, 'too many requests', 429);
+
   const deviceId = request.headers.get('X-Device-ID');
 
   let body: { type?: string; message?: string; page?: string };
