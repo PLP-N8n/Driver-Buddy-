@@ -146,7 +146,7 @@ cd workers/sync-api && npx tsc --noEmit
 ```
 Expected: zero errors.
 
-- [ ] 4.6 Commit:
+- [x] 4.6 Commit:
 ```bash
 git add workers/sync-api/src/routes/sync.ts
 git commit -m "feat: complete account deletion including device_secrets, plaid tables, tombstones and R2 receipts"
@@ -156,37 +156,37 @@ git commit -m "feat: complete account deletion including device_secrets, plaid t
 
 ## Task 5: Final verification and deploy
 
-- [ ] 5.1 Run full unit test suite:
+- [x] 5.1 Run full unit test suite:
 ```bash
 npx vitest run
 ```
 Expected: all tests pass (including the previously-failing retry test), 0 failures.
 
-- [ ] 5.2 Run TypeScript compile check (both client and worker):
+- [x] 5.2 Run TypeScript compile check (both client and worker):
 ```bash
 npx tsc --noEmit && cd workers/sync-api && npx tsc --noEmit && cd ../..
 ```
 Expected: 0 errors.
 
-- [ ] 5.3 Run production build:
+- [x] 5.3 Run production build:
 ```bash
 npm run build
 ```
 Expected: build succeeds. Sentry sourcemap upload may fail (no token in this env) - that is acceptable.
 
-- [ ] 5.4 Deploy Worker:
+- [ ] 5.4 Deploy Worker (BLOCKED: `npx wrangler deploy` failed with `spawn EPERM`; Gayatri to handle):
 ```bash
 cd workers/sync-api && npx wrangler deploy && cd ../..
 ```
 Expected: deploy succeeds.
 
-- [ ] 5.5 Deploy PWA to Cloudflare Pages:
+- [ ] 5.5 Deploy PWA to Cloudflare Pages (BLOCKED: `npx wrangler pages deploy ...` failed with `spawn EPERM`; Gayatri to handle):
 ```bash
 npx wrangler pages deploy dist --project-name drivertax --commit-dirty=true
 ```
 Expected: deploy succeeds.
 
-- [ ] 5.6 Final commit if any files were changed during verification:
+- [x] 5.6 Final commit if any files were changed during verification:
 ```bash
 git add -p
 git commit -m "chore: test and hygiene fixes complete"
