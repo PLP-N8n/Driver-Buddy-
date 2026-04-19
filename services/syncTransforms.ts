@@ -57,9 +57,9 @@ type SyncShiftEarningPushItem = {
   job_count?: number;
 };
 
-type SyncShiftPullRow = SyncShiftPushItem;
+type SyncShiftPullRow = NonNullable<SyncPullPayload['shifts']>[number];
 
-type SyncShiftEarningPullRow = SyncShiftEarningPushItem;
+type SyncShiftEarningPullRow = NonNullable<SyncPullPayload['shiftEarnings']>[number];
 
 const isTripPurpose = (value: string | null | undefined): value is Trip['purpose'] =>
   value === 'Business' || value === 'Personal' || value === 'Commute';
@@ -262,6 +262,7 @@ export const applyPulledTrips = (
       totalMiles,
       purpose,
       notes: meta?.notes ?? row.description ?? '',
+      updatedAt: row.updated_at ?? undefined,
     };
   }));
 
@@ -287,6 +288,7 @@ export const applyPulledWorkLogs = (
       startedAt: meta?.startedAt,
       endedAt: meta?.endedAt,
       providerSplits: meta?.providerSplits,
+      updatedAt: row.updated_at ?? undefined,
     };
   }));
 
@@ -307,23 +309,24 @@ export const applyPulledShiftWorkLogs = (
     earningsByShiftId.set(row.shift_id, existing);
   }
 
-  return mergeRecordsByDate(localLogs, shiftRows.map((row) => {
-    const providerSplits = earningsByShiftId.get(row.id);
-    const primaryProvider = row.primary_platform ?? providerSplits?.[0]?.provider ?? 'Synced shift';
+  return mergeRecordsByDate(localLogs, shiftRows.map((shiftRow) => {
+    const providerSplits = earningsByShiftId.get(shiftRow.id);
+    const primaryProvider = shiftRow.primary_platform ?? providerSplits?.[0]?.provider ?? 'Synced shift';
 
     return {
-      id: row.id,
-      date: row.date,
+      id: shiftRow.id,
+      date: shiftRow.date,
       provider: primaryProvider,
-      hoursWorked: Number(row.hours_worked ?? 0),
-      revenue: Number(row.total_earnings ?? 0),
-      notes: row.notes,
-      fuelLiters: toOptionalNumber(row.fuel_liters),
-      jobCount: toOptionalNumber(row.job_count),
-      milesDriven: toOptionalNumber(row.business_miles),
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
+      hoursWorked: Number(shiftRow.hours_worked ?? 0),
+      revenue: Number(shiftRow.total_earnings ?? 0),
+      notes: shiftRow.notes ?? undefined,
+      fuelLiters: toOptionalNumber(shiftRow.fuel_liters),
+      jobCount: toOptionalNumber(shiftRow.job_count),
+      milesDriven: toOptionalNumber(shiftRow.business_miles),
+      startedAt: shiftRow.started_at ?? undefined,
+      endedAt: shiftRow.ended_at ?? undefined,
       providerSplits: providerSplits?.length ? providerSplits : undefined,
+      updatedAt: shiftRow.updated_at ?? undefined,
     };
   }));
 };
@@ -346,5 +349,6 @@ export const applyPulledExpenses = (
       hasReceiptImage: Boolean(row.has_image || meta?.receiptId || meta?.receiptUrl),
       isVatClaimable: Boolean(meta?.isVatClaimable),
       liters: meta?.liters,
+      updatedAt: row.updated_at ?? undefined,
     });
   }));

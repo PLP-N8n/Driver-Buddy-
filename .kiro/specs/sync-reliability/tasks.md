@@ -401,7 +401,7 @@ deletedIds?: {
 npx tsc --noEmit
 ```
 
-- [ ] 9.5 Commit:
+- [x] 9.5 Commit:
 ```bash
 git add types.ts
 git commit -m "feat: add updatedAt to entity types and extend SyncPullPayload"
@@ -413,17 +413,17 @@ git commit -m "feat: add updatedAt to entity types and extend SyncPullPayload"
 
 **File to modify:** `services/syncTransforms.ts`
 
-- [ ] 10.1 Read `services/syncTransforms.ts` in full.
+- [x] 10.1 Read `services/syncTransforms.ts` in full.
 
-- [ ] 10.2 In `applyPulledWorkLogs`: when constructing the `DailyWorkLog` object from the DB row, add `updatedAt: row.updated_at ?? undefined`.
+- [x] 10.2 In `applyPulledWorkLogs`: when constructing the `DailyWorkLog` object from the DB row, add `updatedAt: row.updated_at ?? undefined`.
 
-- [ ] 10.3 In `applyPulledTrips`: when constructing the `Trip` object, add `updatedAt: row.updated_at ?? undefined`.
+- [x] 10.3 In `applyPulledTrips`: when constructing the `Trip` object, add `updatedAt: row.updated_at ?? undefined`.
 
-- [ ] 10.4 In `applyPulledExpenses`: when constructing the `Expense` object, add `updatedAt: row.updated_at ?? undefined`.
+- [x] 10.4 In `applyPulledExpenses`: when constructing the `Expense` object, add `updatedAt: row.updated_at ?? undefined`.
 
-- [ ] 10.5 In `applyPulledShiftWorkLogs`: when constructing each `DailyWorkLog` from a shift row, add `updatedAt: shiftRow.updated_at ?? undefined`.
+- [x] 10.5 In `applyPulledShiftWorkLogs`: when constructing each `DailyWorkLog` from a shift row, add `updatedAt: shiftRow.updated_at ?? undefined`.
 
-- [ ] 10.6 Verify TypeScript compiles:
+- [x] 10.6 Verify TypeScript compiles:
 ```bash
 npx tsc --noEmit
 ```
