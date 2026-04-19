@@ -428,7 +428,7 @@ git commit -m "feat: add updatedAt to entity types and extend SyncPullPayload"
 npx tsc --noEmit
 ```
 
-- [ ] 10.7 Commit:
+- [x] 10.7 Commit:
 ```bash
 git add services/syncTransforms.ts
 git commit -m "feat: map updated_at to updatedAt in applyPulled functions"
@@ -440,11 +440,11 @@ git commit -m "feat: map updated_at to updatedAt in applyPulled functions"
 
 **File to modify:** `services/syncTransforms.ts`
 
-- [ ] 11.1 Find `mergeRecordsByDate` in `services/syncTransforms.ts`.
+- [x] 11.1 Find `mergeRecordsByDate` in `services/syncTransforms.ts`.
 
-- [ ] 11.2 Update the generic type constraint from `T extends { id: string; date: string }` to `T extends { id: string; date: string; updatedAt?: string }`.
+- [x] 11.2 Update the generic type constraint from `T extends { id: string; date: string }` to `T extends { id: string; date: string; updatedAt?: string }`.
 
-- [ ] 11.3 Update the conflict resolution logic inside the loop:
+- [x] 11.3 Update the conflict resolution logic inside the loop:
 ```ts
 for (const record of pulledRecords) {
   const existing = merged.get(record.id);
@@ -466,7 +466,7 @@ for (const record of pulledRecords) {
 }
 ```
 
-- [ ] 11.4 Run tests:
+- [x] 11.4 Run tests:
 ```bash
 npx vitest run services/syncTransforms.test.ts
 ```

@@ -228,12 +228,24 @@ export const buildSyncPayload = (trips: Trip[], expenses: Expense[], dailyLogs: 
   };
 };
 
-function mergeRecordsByDate<T extends { id: string; date: string }>(localRecords: T[], pulledRecords: T[]): T[] {
+function mergeRecordsByDate<T extends { id: string; date: string; updatedAt?: string }>(
+  localRecords: T[],
+  pulledRecords: T[]
+): T[] {
   const merged = new Map(localRecords.map((record) => [record.id, record]));
 
   for (const record of pulledRecords) {
     const existing = merged.get(record.id);
-    if (!existing || record.date >= existing.date) {
+    if (!existing) {
+      merged.set(record.id, record);
+      continue;
+    }
+
+    if (record.updatedAt && existing.updatedAt) {
+      if (record.updatedAt > existing.updatedAt) {
+        merged.set(record.id, record);
+      }
+    } else if (record.date >= existing.date) {
       merged.set(record.id, record);
     }
   }
