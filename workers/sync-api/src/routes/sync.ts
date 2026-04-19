@@ -14,6 +14,14 @@ type SyncPayload = {
   shifts?: Array<Record<string, unknown>>;
   shiftEarnings?: Array<Record<string, unknown>>;
   settings?: unknown;
+  deletedIds?: DeletedIds;
+};
+
+type DeletedIds = {
+  workLogs?: string[];
+  mileageLogs?: string[];
+  expenses?: string[];
+  shifts?: string[];
 };
 
 async function readJson<T>(request: Request): Promise<T | null> {
@@ -98,7 +106,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
     shiftIds.add(shiftId);
 
     await env.DB.prepare(
-      'INSERT INTO shifts (id, account_id, date, status, primary_platform, hours_worked, total_earnings, started_at, ended_at, start_odometer, end_odometer, business_miles, personal_gap_miles, gps_miles, mileage_source, start_lat, start_lng, end_lat, end_lng, fuel_liters, job_count, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM shifts WHERE id = ?), datetime(\'now\')), ?) ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, date=excluded.date, status=excluded.status, primary_platform=excluded.primary_platform, hours_worked=excluded.hours_worked, total_earnings=excluded.total_earnings, started_at=excluded.started_at, ended_at=excluded.ended_at, start_odometer=excluded.start_odometer, end_odometer=excluded.end_odometer, business_miles=excluded.business_miles, personal_gap_miles=excluded.personal_gap_miles, gps_miles=excluded.gps_miles, mileage_source=excluded.mileage_source, start_lat=excluded.start_lat, start_lng=excluded.start_lng, end_lat=excluded.end_lat, end_lng=excluded.end_lng, fuel_liters=excluded.fuel_liters, job_count=excluded.job_count, notes=excluded.notes, updated_at=excluded.updated_at'
+      'INSERT INTO shifts (id, account_id, date, status, primary_platform, hours_worked, total_earnings, started_at, ended_at, start_odometer, end_odometer, business_miles, personal_gap_miles, gps_miles, mileage_source, start_lat, start_lng, end_lat, end_lng, fuel_liters, job_count, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM shifts WHERE id = ? AND account_id = ?), datetime(\'now\')), ?) ON CONFLICT(id, account_id) DO UPDATE SET date=excluded.date, status=excluded.status, primary_platform=excluded.primary_platform, hours_worked=excluded.hours_worked, total_earnings=excluded.total_earnings, started_at=excluded.started_at, ended_at=excluded.ended_at, start_odometer=excluded.start_odometer, end_odometer=excluded.end_odometer, business_miles=excluded.business_miles, personal_gap_miles=excluded.personal_gap_miles, gps_miles=excluded.gps_miles, mileage_source=excluded.mileage_source, start_lat=excluded.start_lat, start_lng=excluded.start_lng, end_lat=excluded.end_lat, end_lng=excluded.end_lng, fuel_liters=excluded.fuel_liters, job_count=excluded.job_count, notes=excluded.notes, updated_at=excluded.updated_at'
     ).bind(
       shiftId,
       accountId,
@@ -123,6 +131,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
       row.job_count ?? null,
       asStringOrNull(row.notes),
       shiftId,
+      accountId,
       now
     ).run();
   }
@@ -143,7 +152,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
 
     for (const row of shiftEarningsByShiftId.get(shiftId) ?? []) {
       await env.DB.prepare(
-        'INSERT INTO shift_earnings (id, shift_id, account_id, platform, amount, job_count) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET shift_id=excluded.shift_id, account_id=excluded.account_id, platform=excluded.platform, amount=excluded.amount, job_count=excluded.job_count'
+        'INSERT INTO shift_earnings (id, shift_id, account_id, platform, amount, job_count) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id, account_id) DO UPDATE SET shift_id=excluded.shift_id, platform=excluded.platform, amount=excluded.amount, job_count=excluded.job_count'
       ).bind(
         row.id,
         shiftId,
@@ -159,6 +168,31 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
     await env.DB.prepare(
       'INSERT INTO settings (device_id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at'
     ).bind(accountId, JSON.stringify(body.settings), now).run();
+  }
+
+  const { deletedIds } = body;
+  if (deletedIds) {
+    const entityTypeMap: Record<keyof DeletedIds, string> = {
+      workLogs: 'work_log',
+      mileageLogs: 'mileage_log',
+      expenses: 'expense',
+      shifts: 'shift',
+    };
+
+    for (const [key, ids] of Object.entries(deletedIds) as [keyof DeletedIds, string[] | undefined][]) {
+      if (!ids?.length) continue;
+
+      const entityType = entityTypeMap[key];
+      await Promise.all(
+        ids.map((id) =>
+          env.DB.prepare(
+            `INSERT INTO tombstones (id, account_id, entity_type, deleted_at)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(id, account_id, entity_type) DO NOTHING`
+          ).bind(id, accountId, entityType, now).run()
+        )
+      );
+    }
   }
 
   return jsonOk(request, { ok: true, serverTime: now, synced_at: now });
