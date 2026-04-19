@@ -210,14 +210,25 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
   const accountId = await getAuthenticatedAccountId(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401);
 
-  const [workLogs, mileageLogs, expenses, shifts, shiftEarnings, settings] = await Promise.all([
+  const [workLogs, mileageLogs, expenses, shifts, shiftEarnings, settings, tombstonesResult] = await Promise.all([
     env.DB.prepare('SELECT * FROM work_logs WHERE device_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT * FROM mileage_logs WHERE device_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT * FROM expenses WHERE device_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT * FROM shifts WHERE account_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT * FROM shift_earnings WHERE account_id = ?').bind(accountId).all(),
     env.DB.prepare('SELECT data FROM settings WHERE device_id = ?').bind(accountId).first(),
+    env.DB.prepare('SELECT id, entity_type FROM tombstones WHERE account_id = ?').bind(accountId).all(),
   ]);
+
+  const tombstones = (tombstonesResult.results ?? []) as Array<{ id: string; entity_type: string }>;
+  const deletedIds = {
+    workLogs: tombstones.filter((tombstone) => tombstone.entity_type === 'work_log').map((tombstone) => tombstone.id),
+    mileageLogs: tombstones
+      .filter((tombstone) => tombstone.entity_type === 'mileage_log')
+      .map((tombstone) => tombstone.id),
+    expenses: tombstones.filter((tombstone) => tombstone.entity_type === 'expense').map((tombstone) => tombstone.id),
+    shifts: tombstones.filter((tombstone) => tombstone.entity_type === 'shift').map((tombstone) => tombstone.id),
+  };
 
   return jsonOk(request, {
     workLogs: workLogs.results ?? [],
@@ -225,6 +236,7 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
     expenses: expenses.results ?? [],
     shifts: shifts.results ?? [],
     shiftEarnings: shiftEarnings.results ?? [],
+    deletedIds,
     settings: settings?.data ? JSON.parse(String(settings.data)) : null,
     serverTime: Date.now(),
   });
