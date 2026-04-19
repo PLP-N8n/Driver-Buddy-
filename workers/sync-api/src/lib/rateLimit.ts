@@ -1,4 +1,3 @@
-const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 60_000;
 
 function getClientIp(request: Request): string {
@@ -19,7 +18,8 @@ function getClientIp(request: Request): string {
 export async function checkRateLimit(
   request: Request,
   endpoint: string,
-  db: D1Database
+  db: D1Database,
+  maxAttempts = 10
 ): Promise<{ limited: boolean }> {
   const ip = getClientIp(request);
   const now = Date.now();
@@ -34,7 +34,7 @@ export async function checkRateLimit(
 
   const countResult = result as { count?: number | string } | null;
 
-  if (Number(countResult?.count ?? 0) >= MAX_ATTEMPTS) {
+  if (Number(countResult?.count ?? 0) >= maxAttempts) {
     return { limited: true };
   }
 
