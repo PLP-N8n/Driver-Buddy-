@@ -8,6 +8,7 @@ type ErrorBoundaryProps = {
 
 type ErrorBoundaryState = {
   hasError: boolean;
+  isChunkError: boolean;
 };
 
 type SentryModule = typeof import('@sentry/browser');
@@ -113,10 +114,15 @@ export function captureException(error: unknown, context?: Parameters<SentryModu
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   declare props: Readonly<ErrorBoundaryProps>;
-  state: ErrorBoundaryState = { hasError: false };
+  state: ErrorBoundaryState = { hasError: false, isChunkError: false };
 
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    const isChunkError =
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('Importing a module script failed') ||
+      error.message?.includes('Loading chunk') ||
+      error.name === 'ChunkLoadError';
+    return { hasError: true, isChunkError };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
@@ -125,6 +131,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         componentStack: errorInfo.componentStack,
       },
     });
+
+    if (this.state.isChunkError && !sessionStorage.getItem('chunk_error_reloaded')) {
+      sessionStorage.setItem('chunk_error_reloaded', '1');
+      window.location.reload();
+    }
   }
 
   render(): ReactNode {
