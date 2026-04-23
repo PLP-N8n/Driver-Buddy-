@@ -142,11 +142,11 @@ export function PlaidSyncToggle() {
                 <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
                   isConnected ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-700/80 text-slate-300'
                 }`}>
-                  {isConnected ? 'On' : 'Off'}
+                  {isConnected ? 'On' : 'Coming soon'}
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-400">
-                Explicit opt-in only. Read-only transaction import for dates, amounts, merchants, and categories.
+                Plaid connection is still in development. For now, new bank connections stay disabled while the read-only import flow is finished.
               </p>
             </div>
           </div>
@@ -192,9 +192,9 @@ export function PlaidSyncToggle() {
         ) : (
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
             <div className={`${panelClasses} p-4`}>
-              <p className="text-sm font-semibold text-white">Coming soon - automatic earnings &amp; expense import</p>
+              <p className="text-sm font-semibold text-white">Bank sync is coming soon</p>
               <p className="mt-1 text-sm text-slate-400">
-                Bank sync stays off until you explicitly connect an account. We never store account numbers, sort codes, or balances.
+                New Plaid connections are not live yet. We&apos;ll enable read-only transaction import once the connection flow is ready.
               </p>
             </div>
             <button

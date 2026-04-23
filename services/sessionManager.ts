@@ -7,6 +7,7 @@ const SESSION_REFRESH_WINDOW_MS = 5 * 60_000;
 let cachedToken: string | null = null;
 let cachedAccountId: string | null = null;
 let cachedExpiry = 0;
+let lastDeviceCount: number | null = null;
 
 const registeredAccounts = new Set<string>();
 const registrationRequests = new Map<string, Promise<boolean>>();
@@ -28,19 +29,20 @@ function parseTokenExpiry(token: string): number {
   return Number.isFinite(expiresAt) ? expiresAt : 0;
 }
 
-async function getDeviceSecretHash(): Promise<string> {
-  return sha256Hex(getDeviceSecret());
+export async function getDeviceSecretHash(deviceSecret = getDeviceSecret()): Promise<string> {
+  return sha256Hex(deviceSecret);
 }
 
-async function registerAccount(accountId: string): Promise<boolean> {
+async function registerAccount(accountId: string, deviceSecret = getDeviceSecret()): Promise<boolean> {
   if (!WORKER_URL) return false;
-  if (registeredAccounts.has(accountId)) return true;
+  const cacheKey = `${accountId}:${await getDeviceSecretHash(deviceSecret)}`;
+  if (registeredAccounts.has(cacheKey)) return true;
 
-  const pendingRequest = registrationRequests.get(accountId);
+  const pendingRequest = registrationRequests.get(cacheKey);
   if (pendingRequest) return pendingRequest;
 
   const request = (async () => {
-    const deviceSecretHash = await getDeviceSecretHash();
+    const deviceSecretHash = await getDeviceSecretHash(deviceSecret);
     const response = await fetch(`${WORKER_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -51,21 +53,24 @@ async function registerAccount(accountId: string): Promise<boolean> {
       return false;
     }
 
-    registeredAccounts.add(accountId);
+    const data = (await response.json().catch(() => ({}))) as { deviceCount?: number };
+    lastDeviceCount = typeof data.deviceCount === 'number' && Number.isFinite(data.deviceCount) ? data.deviceCount : null;
+    registeredAccounts.add(cacheKey);
     return true;
   })()
     .catch(() => false)
     .finally(() => {
-      registrationRequests.delete(accountId);
+      registrationRequests.delete(cacheKey);
     });
 
-  registrationRequests.set(accountId, request);
+  registrationRequests.set(cacheKey, request);
   return request;
 }
 
-export async function getSessionToken(accountId = getAccountId()): Promise<string | null> {
+export async function getSessionToken(accountId = getAccountId(), deviceSecret = getDeviceSecret()): Promise<string | null> {
   if (!WORKER_URL) return null;
 
+  const deviceSecretHash = await getDeviceSecretHash(deviceSecret);
   if (
     cachedToken &&
     cachedAccountId === accountId &&
@@ -74,11 +79,10 @@ export async function getSessionToken(accountId = getAccountId()): Promise<strin
     return cachedToken;
   }
 
-  const registered = await registerAccount(accountId);
+  const registered = await registerAccount(accountId, deviceSecret);
   if (!registered) return null;
 
   const timestamp = Date.now();
-  const deviceSecretHash = await getDeviceSecretHash();
   const proof = await sha256Hex(`${deviceSecretHash}${timestamp}`);
 
   try {
@@ -107,13 +111,14 @@ export async function getSessionToken(accountId = getAccountId()): Promise<strin
 }
 
 export async function buildAuthHeaders(
-  accountId = getAccountId()
+  accountId = getAccountId(),
+  deviceSecret = getDeviceSecret()
 ): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'X-Device-ID': accountId,
   };
 
-  const token = await getSessionToken(accountId);
+  const token = await getSessionToken(accountId, deviceSecret);
   if (token) {
     headers['X-Session-Token'] = token;
   }
@@ -125,4 +130,23 @@ export function clearSessionCache(): void {
   cachedToken = null;
   cachedAccountId = null;
   cachedExpiry = 0;
+}
+
+export function clearRegistrationCache(accountId?: string): void {
+  if (accountId) {
+    registeredAccounts.delete(accountId);
+    registrationRequests.delete(accountId);
+    return;
+  }
+
+  registeredAccounts.clear();
+  registrationRequests.clear();
+}
+
+export function getLastDeviceCount(): number | null {
+  return lastDeviceCount;
+}
+
+export function getSyncWorkerUrl(): string {
+  return WORKER_URL;
 }

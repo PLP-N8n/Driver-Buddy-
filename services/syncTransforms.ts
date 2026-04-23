@@ -1,4 +1,4 @@
-import { DailyWorkLog, Expense, ExpenseCategory, ProviderSplit, Settings, SyncPullPayload, Trip } from '../types';
+import { DailyWorkLog, EnergyQuantityUnit, Expense, ExpenseCategory, ProviderSplit, Settings, SyncPullPayload, Trip } from '../types';
 import * as Sentry from '../src/sentry';
 import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
 import { saveImage } from './imageStore';
@@ -27,6 +27,8 @@ type SyncWorkLogMeta = {
 type SyncExpenseMeta = {
   description: string;
   isVatClaimable?: boolean;
+  energyQuantity?: number;
+  energyUnit?: EnergyQuantityUnit;
   liters?: number;
   receiptId?: string;
   receiptUrl?: string;
@@ -54,6 +56,7 @@ type SyncShiftPushItem = {
   fuel_liters?: number;
   job_count?: number;
   notes?: string;
+  updatedAt?: string;
 };
 
 type SyncShiftEarningPushItem = {
@@ -72,6 +75,8 @@ const isTripPurpose = (value: string | null | undefined): value is Trip['purpose
   value === 'Business' || value === 'Personal' || value === 'Commute';
 const isExpenseCategory = (value: string | null | undefined): value is Expense['category'] =>
   !!value && Object.values(ExpenseCategory).includes(value as ExpenseCategory);
+const isEnergyQuantityUnit = (value: string | null | undefined): value is EnergyQuantityUnit =>
+  value === 'litre' || value === 'kWh';
 const parseSyncMeta = <T,>(value: string | null | undefined): T | null => {
   if (!value) return null;
   try {
@@ -103,6 +108,9 @@ const formatPlatformLabel = (value: string | null | undefined) => {
       return value ?? 'Other';
   }
 };
+
+const toSyncTimestamp = (updatedAt: string | undefined, fallbackDate: string): string =>
+  updatedAt ?? `${fallbackDate}T12:00:00.000Z`;
 
 export const sanitizeExpenseForStorage = (expense: Expense): Expense => {
   const { receiptUrl: _receiptUrl, ...rest } = expense;
@@ -175,6 +183,7 @@ export const buildSyncPayload = (
     fuel_liters: shift.fuelLiters,
     job_count: shift.jobCount,
     notes: shift.notes,
+    updatedAt: toSyncTimestamp(dailyLogs.find((log) => log.id === shift.id)?.updatedAt, shift.date),
   }));
   const shiftEarningRows: SyncShiftEarningPushItem[] = shifts.flatMap((shift) =>
     shift.earnings.map((earning) => ({
@@ -204,6 +213,7 @@ export const buildSyncPayload = (
         endedAt: log.endedAt,
         providerSplits: log.providerSplits,
       } satisfies SyncWorkLogMeta),
+      updatedAt: toSyncTimestamp(log.updatedAt, log.date),
     })),
     shifts: shiftRows,
     shiftEarnings: shiftEarningRows,
@@ -221,6 +231,7 @@ export const buildSyncPayload = (
       miles: trip.totalMiles,
       tripType: trip.purpose,
       linkedWorkId: null,
+      updatedAt: toSyncTimestamp(trip.updatedAt, trip.date),
     })),
     expenses: expenses.map((expense) => ({
       id: expense.id,
@@ -229,6 +240,8 @@ export const buildSyncPayload = (
       description: JSON.stringify({
         description: expense.description,
         isVatClaimable: expense.isVatClaimable,
+        energyQuantity: expense.energyQuantity,
+        energyUnit: expense.energyUnit,
         liters: expense.liters,
         receiptId: expense.receiptId,
         receiptUrl: expense.receiptUrl,
@@ -236,6 +249,7 @@ export const buildSyncPayload = (
       amount: expense.amount,
       taxDeductible: true,
       hasImage: Boolean(expense.hasReceiptImage || expense.receiptId || expense.receiptUrl),
+      updatedAt: toSyncTimestamp(expense.updatedAt, expense.date),
     })),
     settings,
     deletedIds,
@@ -247,6 +261,13 @@ function mergeRecordsByDate<T extends { id: string; date: string; updatedAt?: st
   pulledRecords: T[]
 ): T[] {
   const merged = new Map(localRecords.map((record) => [record.id, record]));
+  const timestamp = (value: string | undefined) => {
+    if (!value) return null;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
 
   for (const record of pulledRecords) {
     const existing = merged.get(record.id);
@@ -256,7 +277,9 @@ function mergeRecordsByDate<T extends { id: string; date: string; updatedAt?: st
     }
 
     if (record.updatedAt && existing.updatedAt) {
-      if (record.updatedAt > existing.updatedAt) {
+      const recordTime = timestamp(record.updatedAt);
+      const existingTime = timestamp(existing.updatedAt);
+      if (recordTime != null && existingTime != null && recordTime > existingTime) {
         merged.set(record.id, record);
       }
     } else if (record.date >= existing.date) {
@@ -363,6 +386,9 @@ export const applyPulledExpenses = (
 ): Expense[] =>
   mergeRecordsByDate(localExpenses, rows.map((row) => {
     const meta = parseSyncMeta<SyncExpenseMeta>(row.description);
+    const legacyLiters = toOptionalNumber(meta?.liters);
+    const energyQuantity = toOptionalNumber(meta?.energyQuantity) ?? legacyLiters;
+    const energyUnit = isEnergyQuantityUnit(meta?.energyUnit) ? meta.energyUnit : energyQuantity !== undefined ? 'litre' : undefined;
 
     return sanitizeExpenseForStorage({
       id: row.id,
@@ -374,7 +400,9 @@ export const applyPulledExpenses = (
       receiptUrl: meta?.receiptUrl,
       hasReceiptImage: Boolean(row.has_image || meta?.receiptId || meta?.receiptUrl),
       isVatClaimable: Boolean(meta?.isVatClaimable),
-      liters: meta?.liters,
+      energyQuantity,
+      energyUnit,
+      liters: legacyLiters,
       updatedAt: row.updated_at ?? undefined,
     });
   }));

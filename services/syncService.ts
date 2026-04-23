@@ -69,6 +69,31 @@ function emit(status: SyncStatus) {
   listeners.forEach((fn) => fn(status));
 }
 
+function parseSyncTimestamp(value: string | undefined): number | null {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function mergeSettings(localSettings: Settings, pulledSettings: Partial<Settings> | null | undefined): Settings {
+  if (!pulledSettings) return localSettings;
+
+  const localUpdatedAt = parseSyncTimestamp(localSettings.updatedAt);
+  const pulledUpdatedAt = parseSyncTimestamp(pulledSettings.updatedAt);
+
+  if (localUpdatedAt != null && pulledUpdatedAt == null) {
+    return localSettings;
+  }
+
+  if (localUpdatedAt != null && pulledUpdatedAt != null && pulledUpdatedAt < localUpdatedAt) {
+    return localSettings;
+  }
+
+  return normalizeSettings({ ...localSettings, ...pulledSettings });
+}
+
 function clearRetryTimer() {
   if (!retryTimer) return;
 
@@ -190,7 +215,10 @@ export async function push(data: object): Promise<boolean> {
   }
 }
 
-export async function pull(deviceIdOverride?: string): Promise<SyncPullPayload | null> {
+export async function pull(
+  deviceIdOverride?: string,
+  deviceSecretOverride?: string
+): Promise<SyncPullPayload | null> {
   if (!WORKER_URL) {
     return null;
   }
@@ -204,7 +232,7 @@ export async function pull(deviceIdOverride?: string): Promise<SyncPullPayload |
 
   try {
     const accountId = deviceIdOverride ?? getDeviceId();
-    const authHeaders = await buildAuthHeaders(accountId);
+    const authHeaders = await buildAuthHeaders(accountId, deviceSecretOverride);
     const res = await fetch(`${WORKER_URL}/sync/pull`, {
       headers: authHeaders,
     });
@@ -237,17 +265,16 @@ export function mergePulledData(localState: MergedSyncState, pulledData: SyncPul
     trips: applyPulledTrips(pulledData.mileageLogs ?? [], localState.trips).filter((trip) => !deletedMileageIds.has(trip.id)),
     dailyLogs: mergedDailyLogs.filter((log) => !deletedWorkLogIds.has(log.id)),
     expenses: applyPulledExpenses(pulledData.expenses ?? [], localState.expenses).filter((expense) => !deletedExpenseIds.has(expense.id)),
-    settings: pulledData.settings
-      ? normalizeSettings({ ...localState.settings, ...pulledData.settings })
-      : localState.settings,
+    settings: mergeSettings(localState.settings, pulledData.settings),
   };
 }
 
 export async function pullAndMerge(
   localState: MergedSyncState,
-  deviceIdOverride?: string
+  deviceIdOverride?: string,
+  deviceSecretOverride?: string
 ): Promise<MergedSyncState | null> {
-  const pulledData = await pull(deviceIdOverride);
+  const pulledData = await pull(deviceIdOverride, deviceSecretOverride);
   if (!pulledData) return null;
 
   return mergePulledData(localState, pulledData);

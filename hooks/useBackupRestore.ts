@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { DailyWorkLog, Expense, PlayerStats, Settings, SyncPullPayload, Trip } from '../types';
-import { getBackupCode } from '../services/deviceId';
+import { commitRecoveryCode, getBackupCode, parseRecoveryCode } from '../services/deviceId';
 import { normalizeSettings } from '../services/settingsService';
+import { clearRegistrationCache, clearSessionCache, getLastDeviceCount } from '../services/sessionManager';
 import { isSyncConfigured, mergePulledData, pull } from '../services/syncService';
 import {
   prepareExpensesForLocalState,
@@ -9,9 +10,9 @@ import {
 import * as Sentry from '../src/sentry';
 import { todayUK } from '../utils/ukDate';
 
-const DEVICE_ID_STORAGE_KEY = 'drivertax_device_id';
 const LEGACY_BACKUP_CODE_KEY = 'backup_code';
-const BACKUP_CODE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ACCOUNT_ID_KEY = 'drivertax_device_id';
+const DEVICE_SECRET_KEY = 'driver_device_secret';
 
 function isObjectArray(value: unknown): boolean {
   return Array.isArray(value) && value.every((item) => typeof item === 'object' && item !== null);
@@ -54,6 +55,29 @@ type RestorePayload = Partial<{
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 type ShowToast = (message: string, type?: ToastType, duration?: number) => void;
 
+type RestoreRecordCounts = {
+  trips: number;
+  expenses: number;
+  dailyLogs: number;
+  settings: number;
+};
+
+export type RestoreReviewSummary = {
+  local: RestoreRecordCounts;
+  cloud: RestoreRecordCounts;
+  conflicts: RestoreRecordCounts;
+  merged: RestoreRecordCounts;
+  mode: 'keep-newest';
+};
+
+export type PendingRestoreReview = {
+  code: string;
+  accountId: string;
+  deviceSecret: string;
+  pulledData: SyncPullPayload;
+  summary: RestoreReviewSummary;
+};
+
 interface UseBackupRestoreParams {
   trips: Trip[];
   expenses: Expense[];
@@ -87,6 +111,9 @@ export function useBackupRestore({
 }: UseBackupRestoreParams) {
   const [backupCode, setBackupCode] = useState(() => getBackupCode());
   const [restoreStatusMessage, setRestoreStatusMessage] = useState<string | null>(null);
+  const [pendingRestoreReview, setPendingRestoreReview] = useState<PendingRestoreReview | null>(null);
+  const [isPreparingRestore, setIsPreparingRestore] = useState(false);
+  const [isApplyingRestore, setIsApplyingRestore] = useState(false);
 
   useEffect(() => {
     localStorage.removeItem('pending_identity');
@@ -122,6 +149,69 @@ export function useBackupRestore({
     };
   };
 
+  const countOverlappingChanges = <LocalRecord extends { id: string; updatedAt?: string }, CloudRecord extends { id: string; updated_at?: string | null }>(
+    localRecords: LocalRecord[],
+    cloudRecords: CloudRecord[]
+  ) => {
+    const localById = new Map(localRecords.map((record) => [record.id, record.updatedAt ?? '']));
+
+    return cloudRecords.reduce((count, record) => {
+      const localUpdatedAt = localById.get(record.id);
+      if (localUpdatedAt === undefined) return count;
+      return localUpdatedAt !== (record.updated_at ?? '') ? count + 1 : count;
+    }, 0);
+  };
+
+  const buildRestoreReview = (code: string, accountId: string, deviceSecret: string, pulledData: SyncPullPayload): PendingRestoreReview => {
+    const mergedData = mergePulledData(
+      {
+        trips,
+        expenses,
+        dailyLogs,
+        settings,
+      },
+      pulledData
+    );
+
+    const cloudDailyLogs = pulledData.shifts?.length ? pulledData.shifts : pulledData.workLogs ?? [];
+    const localSettingsUpdatedAt = settings.updatedAt ?? '';
+    const cloudSettingsUpdatedAt = pulledData.settings?.updatedAt ?? '';
+
+    return {
+      code,
+      accountId,
+      deviceSecret,
+      pulledData,
+      summary: {
+        local: {
+          trips: trips.length,
+          expenses: expenses.length,
+          dailyLogs: dailyLogs.length,
+          settings: 1,
+        },
+        cloud: {
+          trips: pulledData.mileageLogs?.length ?? 0,
+          expenses: pulledData.expenses?.length ?? 0,
+          dailyLogs: cloudDailyLogs.length,
+          settings: pulledData.settings ? 1 : 0,
+        },
+        conflicts: {
+          trips: countOverlappingChanges(trips, pulledData.mileageLogs ?? []),
+          expenses: countOverlappingChanges(expenses, pulledData.expenses ?? []),
+          dailyLogs: countOverlappingChanges(dailyLogs, cloudDailyLogs),
+          settings: pulledData.settings && localSettingsUpdatedAt !== cloudSettingsUpdatedAt ? 1 : 0,
+        },
+        merged: {
+          trips: mergedData.trips.length,
+          expenses: mergedData.expenses.length,
+          dailyLogs: mergedData.dailyLogs.length,
+          settings: 1,
+        },
+        mode: 'keep-newest',
+      },
+    };
+  };
+
   const backup = () =>
     {
       const content = JSON.stringify(
@@ -142,7 +232,7 @@ export function useBackupRestore({
     queueDownload(trips.length + expenses.length + dailyLogs.length, () => {
       void backupBlob.text().then((content) => {
         triggerTextDownload(
-          `DriverTaxPro_Backup_${todayUK()}.json`,
+          `DriverBuddy_Backup_${todayUK()}.json`,
           content,
           backupBlob.type
         );
@@ -209,16 +299,19 @@ export function useBackupRestore({
 
   const handleRestoreFromBackupCode = async (code: string) => {
     const trimmedCode = code.trim();
+    const recovery = parseRecoveryCode(trimmedCode);
 
-    if (!BACKUP_CODE_REGEX.test(trimmedCode)) {
+    if (!recovery) {
       showToast('Enter a valid backup code.', 'warning');
       return;
     }
 
-    localStorage.setItem('pending_identity', trimmedCode);
+    localStorage.setItem('pending_identity', recovery.accountId);
+    setIsPreparingRestore(true);
 
     try {
-      const syncedData = await pull(trimmedCode);
+      clearSessionCache();
+      const syncedData = await pull(recovery.accountId, recovery.deviceSecret);
       if (!syncedData) {
         throw new Error(
           isSyncConfigured()
@@ -231,21 +324,87 @@ export function useBackupRestore({
         throw new Error('Backup data appears corrupted');
       }
 
-      const { restoredLogs, restoredExpenses } = await writeRestoredData(syncedData);
-
-      localStorage.setItem(DEVICE_ID_STORAGE_KEY, trimmedCode);
-      localStorage.setItem(LEGACY_BACKUP_CODE_KEY, trimmedCode);
-      localStorage.removeItem('pending_identity');
-      setBackupCode(getBackupCode());
-
-      const message = `${restoredLogs} work logs and ${restoredExpenses} expenses restored successfully`;
-      setRestoreStatusMessage(message);
-      showToast(message);
+      setPendingRestoreReview(buildRestoreReview(trimmedCode, recovery.accountId, recovery.deviceSecret, syncedData));
+      setRestoreStatusMessage('Review the cloud restore before applying it.');
+      showToast('Cloud backup ready to review.', 'info');
     } catch (error) {
       localStorage.removeItem('pending_identity');
       const message = error instanceof Error ? error.message : 'Restore failed';
       setRestoreStatusMessage(message);
       showToast(message, 'error');
+    } finally {
+      setIsPreparingRestore(false);
+    }
+  };
+
+  const cancelPendingRestore = () => {
+    setPendingRestoreReview(null);
+    localStorage.removeItem('pending_identity');
+    setRestoreStatusMessage(null);
+  };
+
+  const confirmPendingRestore = async () => {
+    if (!pendingRestoreReview) return;
+
+    const storageSnapshot = {
+      trips: localStorage.getItem('driver_trips'),
+      dailyLogs: localStorage.getItem('driver_daily_logs'),
+      expenses: localStorage.getItem('driver_expenses'),
+      settings: localStorage.getItem('driver_settings'),
+      backupCode: localStorage.getItem(LEGACY_BACKUP_CODE_KEY),
+      accountId: localStorage.getItem(ACCOUNT_ID_KEY),
+      deviceSecret: localStorage.getItem(DEVICE_SECRET_KEY),
+      pendingIdentity: localStorage.getItem('pending_identity'),
+    };
+    const stateSnapshot = { trips, expenses, dailyLogs, settings };
+
+    setIsApplyingRestore(true);
+
+    try {
+      const { restoredLogs, restoredExpenses } = await writeRestoredData(pendingRestoreReview.pulledData);
+
+      if (!commitRecoveryCode(pendingRestoreReview.code)) {
+        throw new Error('Backup code could not be applied');
+      }
+
+      localStorage.setItem(LEGACY_BACKUP_CODE_KEY, pendingRestoreReview.code);
+      clearRegistrationCache(pendingRestoreReview.accountId);
+      clearSessionCache();
+      localStorage.removeItem('pending_identity');
+      setBackupCode(getBackupCode());
+      setPendingRestoreReview(null);
+
+      const message = `${restoredLogs} work logs and ${restoredExpenses} expenses restored successfully`;
+      setRestoreStatusMessage(message);
+      showToast(message);
+      const deviceCount = getLastDeviceCount();
+      if (deviceCount && deviceCount > 1) {
+        showToast(`Device added - ${deviceCount} total devices linked to this account`, 'success');
+      }
+    } catch (error) {
+      const restoreStorageValue = (key: string, value: string | null) => {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      };
+
+      restoreStorageValue('driver_trips', storageSnapshot.trips);
+      restoreStorageValue('driver_daily_logs', storageSnapshot.dailyLogs);
+      restoreStorageValue('driver_expenses', storageSnapshot.expenses);
+      restoreStorageValue('driver_settings', storageSnapshot.settings);
+      restoreStorageValue(LEGACY_BACKUP_CODE_KEY, storageSnapshot.backupCode);
+      restoreStorageValue(ACCOUNT_ID_KEY, storageSnapshot.accountId);
+      restoreStorageValue(DEVICE_SECRET_KEY, storageSnapshot.deviceSecret);
+      restoreStorageValue('pending_identity', storageSnapshot.pendingIdentity);
+      setTrips(stateSnapshot.trips);
+      setExpenses(stateSnapshot.expenses);
+      setDailyLogs(stateSnapshot.dailyLogs);
+      setSettings(stateSnapshot.settings);
+
+      const message = error instanceof Error ? error.message : 'Restore failed';
+      setRestoreStatusMessage(message);
+      showToast(message, 'error');
+    } finally {
+      setIsApplyingRestore(false);
     }
   };
 
@@ -259,5 +418,10 @@ export function useBackupRestore({
     handleRestore,
     handleCopyBackupCode,
     handleRestoreFromBackupCode,
+    pendingRestoreReview,
+    isPreparingRestore,
+    isApplyingRestore,
+    confirmPendingRestore,
+    cancelPendingRestore,
   };
 }

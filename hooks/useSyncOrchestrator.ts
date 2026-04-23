@@ -44,7 +44,7 @@ export function useSyncOrchestrator({
   useEffect(() => {
     if (!hasHydrated) return;
     schedulePush(buildSyncPayload(trips, expenses, dailyLogs, settings, deletedIds));
-  }, [dailyLogs, expenses, hasHydrated, settings, trips]);
+  }, [dailyLogs, deletedIds, expenses, hasHydrated, settings, trips]);
 
   return { isOnline, connectivityBanner, syncStatus };
 }

@@ -6,6 +6,7 @@ export interface Env {
   DB: D1Database;
   RECEIPT_SECRET: string;
   RECEIPTS?: R2Bucket;
+  EXTRA_ALLOWED_ORIGINS?: string;
 }
 
 type ReceiptBucket = R2Bucket & {
@@ -54,15 +55,44 @@ const asRequiredId = (value: unknown): string => {
 
 const asFlag = (value: unknown, fallback = false) => (value ? 1 : fallback ? 1 : 0);
 
+const asUpdatedAt = (value: unknown, fallback: number): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+};
+
+const getRowUpdatedAt = (row: Record<string, unknown>, fallback: number): number =>
+  asUpdatedAt(row.updatedAt ?? row.updated_at, fallback);
+
+function getSettingsUpdatedAt(settings: unknown, fallback: number): number {
+  if (!settings || typeof settings !== 'object') return fallback;
+  return asUpdatedAt((settings as { updatedAt?: unknown; updated_at?: unknown }).updatedAt ?? (settings as { updated_at?: unknown }).updated_at, fallback);
+}
+
+async function isStaleShift(env: Env, accountId: string, shiftId: string, incomingUpdatedAt: number): Promise<boolean> {
+  const existing = await env.DB.prepare('SELECT updated_at FROM shifts WHERE id = ? AND account_id = ?')
+    .bind(shiftId, accountId)
+    .first();
+  const existingUpdatedAt = asUpdatedAt((existing as { updated_at?: unknown } | null)?.updated_at, 0);
+  return existingUpdatedAt > incomingUpdatedAt;
+}
+
 export async function handleSyncPush(request: Request, env: Env): Promise<Response> {
   const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
-  if (limited) return jsonErr(request, 'too many requests', 429);
+  if (limited) return jsonErr(request, 'too many requests', 429, env);
 
   const body = await readJson<SyncPayload>(request);
-  if (!body) return jsonErr(request, 'invalid json');
+  if (!body) return jsonErr(request, 'invalid json', 400, env);
 
   const accountId = await getAuthenticatedAccountId(request, env);
-  if (!accountId) return jsonErr(request, 'unauthorized', 401);
+  if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
 
   const now = Date.now();
   await env.DB.prepare(
@@ -70,20 +100,23 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
   ).bind(accountId, now, now, now).run();
 
   for (const row of body.workLogs ?? []) {
+    const updatedAt = getRowUpdatedAt(row, now);
     await env.DB.prepare(
-      'INSERT INTO work_logs (id, device_id, date, platform, hours, earnings, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, platform=excluded.platform, hours=excluded.hours, earnings=excluded.earnings, notes=excluded.notes, updated_at=excluded.updated_at'
-    ).bind(row.id, accountId, row.date, row.platform ?? null, row.hours ?? null, row.earnings ?? null, row.notes ?? null, now).run();
+      'INSERT INTO work_logs (id, device_id, date, platform, hours, earnings, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, platform=excluded.platform, hours=excluded.hours, earnings=excluded.earnings, notes=excluded.notes, updated_at=excluded.updated_at WHERE work_logs.updated_at IS NULL OR excluded.updated_at >= work_logs.updated_at'
+    ).bind(row.id, accountId, row.date, row.platform ?? null, row.hours ?? null, row.earnings ?? null, row.notes ?? null, updatedAt).run();
   }
 
   for (const row of body.mileageLogs ?? []) {
+    const updatedAt = getRowUpdatedAt(row, now);
     await env.DB.prepare(
-      'INSERT INTO mileage_logs (id, device_id, date, description, miles, trip_type, linked_work_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, description=excluded.description, miles=excluded.miles, trip_type=excluded.trip_type, linked_work_id=excluded.linked_work_id, updated_at=excluded.updated_at'
-    ).bind(row.id, accountId, row.date, row.description ?? null, row.miles ?? null, row.tripType ?? null, row.linkedWorkId ?? null, now).run();
+      'INSERT INTO mileage_logs (id, device_id, date, description, miles, trip_type, linked_work_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, description=excluded.description, miles=excluded.miles, trip_type=excluded.trip_type, linked_work_id=excluded.linked_work_id, updated_at=excluded.updated_at WHERE mileage_logs.updated_at IS NULL OR excluded.updated_at >= mileage_logs.updated_at'
+    ).bind(row.id, accountId, row.date, row.description ?? null, row.miles ?? null, row.tripType ?? null, row.linkedWorkId ?? null, updatedAt).run();
   }
 
   for (const row of body.expenses ?? []) {
+    const updatedAt = getRowUpdatedAt(row, now);
     await env.DB.prepare(
-      'INSERT INTO expenses (id, device_id, date, category, description, amount, tax_deductible, has_image, scope, business_use_percent, deductible_amount, non_deductible_amount, vehicle_expense_type, tax_treatment, linked_shift_id, source_type, review_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, category=excluded.category, description=excluded.description, amount=excluded.amount, tax_deductible=excluded.tax_deductible, has_image=excluded.has_image, scope=excluded.scope, business_use_percent=excluded.business_use_percent, deductible_amount=excluded.deductible_amount, non_deductible_amount=excluded.non_deductible_amount, vehicle_expense_type=excluded.vehicle_expense_type, tax_treatment=excluded.tax_treatment, linked_shift_id=excluded.linked_shift_id, source_type=excluded.source_type, review_status=excluded.review_status, updated_at=excluded.updated_at'
+      'INSERT INTO expenses (id, device_id, date, category, description, amount, tax_deductible, has_image, scope, business_use_percent, deductible_amount, non_deductible_amount, vehicle_expense_type, tax_treatment, linked_shift_id, source_type, review_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, category=excluded.category, description=excluded.description, amount=excluded.amount, tax_deductible=excluded.tax_deductible, has_image=excluded.has_image, scope=excluded.scope, business_use_percent=excluded.business_use_percent, deductible_amount=excluded.deductible_amount, non_deductible_amount=excluded.non_deductible_amount, vehicle_expense_type=excluded.vehicle_expense_type, tax_treatment=excluded.tax_treatment, linked_shift_id=excluded.linked_shift_id, source_type=excluded.source_type, review_status=excluded.review_status, updated_at=excluded.updated_at WHERE expenses.updated_at IS NULL OR excluded.updated_at >= expenses.updated_at'
     ).bind(
       row.id,
       accountId,
@@ -102,7 +135,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
       asStringOrNull(row.linkedShiftId),
       asStringOrNull(row.sourceType) ?? 'manual',
       asStringOrNull(row.reviewStatus) ?? 'confirmed',
-      now
+      updatedAt
     ).run();
   }
 
@@ -111,6 +144,9 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
   for (const row of body.shifts ?? []) {
     const shiftId = asRequiredId(row.id);
     if (!shiftId) continue;
+
+    const updatedAt = getRowUpdatedAt(row, now);
+    if (await isStaleShift(env, accountId, shiftId, updatedAt)) continue;
 
     shiftIds.add(shiftId);
 
@@ -141,7 +177,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
       asStringOrNull(row.notes),
       shiftId,
       accountId,
-      now
+      updatedAt
     ).run();
   }
 
@@ -174,9 +210,10 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
   }
 
   if (body.settings !== undefined) {
+    const updatedAt = getSettingsUpdatedAt(body.settings, now);
     await env.DB.prepare(
-      'INSERT INTO settings (device_id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at'
-    ).bind(accountId, JSON.stringify(body.settings), now).run();
+      'INSERT INTO settings (device_id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at WHERE settings.updated_at IS NULL OR excluded.updated_at >= settings.updated_at'
+    ).bind(accountId, JSON.stringify(body.settings), updatedAt).run();
   }
 
   const { deletedIds } = body;
@@ -204,20 +241,20 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
     }
   }
 
-  return jsonOk(request, { ok: true, serverTime: now, synced_at: now });
+  return jsonOk(request, { ok: true, serverTime: now, synced_at: now }, 200, env);
 }
 
 export async function handleSyncPull(request: Request, env: Env): Promise<Response> {
   const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
-  if (limited) return jsonErr(request, 'too many requests', 429);
+  if (limited) return jsonErr(request, 'too many requests', 429, env);
 
   if (request.method === 'POST') {
     const body = await readJson<Record<string, unknown>>(request);
-    if (!body) return jsonErr(request, 'invalid json');
+    if (!body) return jsonErr(request, 'invalid json', 400, env);
   }
 
   const accountId = await getAuthenticatedAccountId(request, env);
-  if (!accountId) return jsonErr(request, 'unauthorized', 401);
+  if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
 
   const [workLogs, mileageLogs, expenses, shifts, shiftEarnings, settings, tombstonesResult] = await Promise.all([
     env.DB.prepare('SELECT * FROM work_logs WHERE device_id = ?').bind(accountId).all(),
@@ -248,26 +285,27 @@ export async function handleSyncPull(request: Request, env: Env): Promise<Respon
     deletedIds,
     settings: settings?.data ? JSON.parse(String(settings.data)) : null,
     serverTime: Date.now(),
-  });
+  }, 200, env);
 }
 
 export async function handleSyncDeleteAccount(request: Request, env: Env): Promise<Response> {
   const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
-  if (limited) return jsonErr(request, 'too many requests', 429);
+  if (limited) return jsonErr(request, 'too many requests', 429, env);
 
   if (request.headers.get('Content-Type')?.includes('application/json')) {
     const body = await readJson<Record<string, unknown>>(request);
-    if (!body) return jsonErr(request, 'invalid json');
+    if (!body) return jsonErr(request, 'invalid json', 400, env);
   }
 
   const accountId = await getAuthenticatedAccountId(request, env);
-  if (!accountId) return jsonErr(request, 'unauthorized', 401);
+  if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
 
   await Promise.all([
     env.DB.prepare('DELETE FROM work_logs WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM mileage_logs WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM expenses WHERE device_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM device_secrets WHERE account_id = ?').bind(accountId).run(),
+    env.DB.prepare('DELETE FROM account_devices WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM plaid_connections WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM plaid_transactions WHERE account_id = ?').bind(accountId).run(),
     env.DB.prepare('DELETE FROM tombstones WHERE account_id = ?').bind(accountId).run(),
@@ -291,5 +329,5 @@ export async function handleSyncDeleteAccount(request: Request, env: Env): Promi
     } while (cursor);
   }
 
-  return jsonOk(request, { ok: true, deleted: true });
+  return jsonOk(request, { ok: true, deleted: true }, 200, env);
 }

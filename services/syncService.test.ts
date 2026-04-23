@@ -9,6 +9,10 @@ vi.mock('./deviceId', () => ({
   getDeviceId: vi.fn(() => 'device-123'),
 }));
 
+vi.mock('./analyticsService', () => ({
+  trackEvent: vi.fn(),
+}));
+
 describe('syncService', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -38,14 +42,7 @@ describe('syncService', () => {
 
     service.schedulePush({ expenses: ['queued'] });
 
-    await vi.advanceTimersByTimeAsync(3_000);
-    await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(5_000);
-    await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(10_000);
-    await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(20_000);
-    await Promise.resolve();
+    await vi.runAllTimersAsync();
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(statuses.at(-1)).toBe('error');
@@ -193,5 +190,71 @@ describe('syncService', () => {
     expect(merged?.dailyLogs.find((log) => log.id === 'log-1')?.notes).toBe('Local newer log');
     expect(merged?.expenses.find((expense) => expense.id === 'expense-1')?.amount).toBe(25);
     expect(merged?.settings.claimMethod).toBe('ACTUAL');
+  });
+
+  it('pull keeps newer local settings when remote settings are stale', async () => {
+    const staleRemoteSettings = {
+      claimMethod: 'ACTUAL' as const,
+      updatedAt: '2026-04-01T10:00:00.000Z',
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn(async () => ({ settings: staleRemoteSettings } satisfies SyncPullPayload)),
+      })
+    );
+
+    const service = await import('./syncService');
+    const merged = await service.pullAndMerge(
+      {
+        trips: [],
+        dailyLogs: [],
+        expenses: [],
+        settings: {
+          ...DEFAULT_SETTINGS,
+          claimMethod: 'SIMPLIFIED',
+          updatedAt: '2026-04-02T10:00:00.000Z',
+        },
+      },
+      'device-123'
+    );
+
+    expect(merged?.settings.claimMethod).toBe('SIMPLIFIED');
+    expect(merged?.settings.updatedAt).toBe('2026-04-02T10:00:00.000Z');
+  });
+
+  it('pull applies newer remote settings when updated_at is newer', async () => {
+    const newerRemoteSettings = {
+      claimMethod: 'ACTUAL' as const,
+      updatedAt: '2026-04-03T10:00:00.000Z',
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn(async () => ({ settings: newerRemoteSettings } satisfies SyncPullPayload)),
+      })
+    );
+
+    const service = await import('./syncService');
+    const merged = await service.pullAndMerge(
+      {
+        trips: [],
+        dailyLogs: [],
+        expenses: [],
+        settings: {
+          ...DEFAULT_SETTINGS,
+          claimMethod: 'SIMPLIFIED',
+          updatedAt: '2026-04-02T10:00:00.000Z',
+        },
+      },
+      'device-123'
+    );
+
+    expect(merged?.settings.claimMethod).toBe('ACTUAL');
+    expect(merged?.settings.updatedAt).toBe('2026-04-03T10:00:00.000Z');
   });
 });

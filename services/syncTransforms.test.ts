@@ -15,18 +15,22 @@ describe('syncTransforms', () => {
         totalMiles: 20,
         purpose: 'Business',
         notes: 'Airport run',
+        updatedAt: '2026-04-03T20:00:00.000Z',
       },
     ];
     const expenses: Expense[] = [
       {
         id: 'expense-1',
         date: '2026-04-03',
-        category: ExpenseCategory.FUEL,
+        category: ExpenseCategory.PUBLIC_CHARGING,
         amount: 40,
-        description: 'Fuel fill',
+        description: 'Rapid charge',
         receiptId: 'receipt-1',
         hasReceiptImage: true,
         isVatClaimable: false,
+        energyQuantity: 18.5,
+        energyUnit: 'kWh',
+        updatedAt: '2026-04-03T20:05:00.000Z',
       },
     ];
     const dailyLogs: DailyWorkLog[] = [
@@ -38,6 +42,7 @@ describe('syncTransforms', () => {
         revenue: 180,
         notes: 'Evening shift',
         linkedTripId: 'trip-1',
+        updatedAt: '2026-04-03T20:10:00.000Z',
         providerSplits: [
           { provider: 'Uber', revenue: 120, jobCount: 8 },
           { provider: 'Deliveroo', revenue: 60, jobCount: 4 },
@@ -60,6 +65,7 @@ describe('syncTransforms', () => {
         start_odometer: 1000,
         end_odometer: 1020,
         business_miles: 20,
+        updatedAt: '2026-04-03T20:10:00.000Z',
       })
     );
     expect(payload.shiftEarnings[0]).toEqual(
@@ -71,6 +77,16 @@ describe('syncTransforms', () => {
       expect.objectContaining({
         id: 'expense-1',
         hasImage: true,
+        updatedAt: '2026-04-03T20:05:00.000Z',
+      })
+    );
+    const syncedExpense = payload.expenses[0];
+    expect(syncedExpense).toBeDefined();
+    expect(JSON.parse(syncedExpense!.description)).toEqual(
+      expect.objectContaining({
+        description: 'Rapid charge',
+        energyQuantity: 18.5,
+        energyUnit: 'kWh',
       })
     );
   });
@@ -99,6 +115,7 @@ describe('syncTransforms', () => {
         amount: 21,
         description: 'Local newer parking',
         hasReceiptImage: false,
+        updatedAt: '2026-04-05T12:00:00.000Z',
       },
     ];
 
@@ -111,6 +128,7 @@ describe('syncTransforms', () => {
           amount: 10,
           description: JSON.stringify({ description: 'Remote older parking' }),
           has_image: 0,
+          updated_at: '2026-04-03T12:00:00.000Z',
         },
         {
           id: 'expense-2',
@@ -132,6 +150,65 @@ describe('syncTransforms', () => {
         receiptId: 'receipt-2',
       })
     );
+  });
+
+  it('applyPulledExpenses uses updated_at instead of date when resolving conflicts', () => {
+    const merged = applyPulledExpenses(
+      [
+        {
+          id: 'expense-1',
+          date: '2026-04-10',
+          category: ExpenseCategory.PARKING,
+          amount: 10,
+          description: JSON.stringify({ description: 'Remote stale edit on later date' }),
+          has_image: 0,
+          updated_at: '2026-04-03T12:00:00.000Z',
+        },
+      ],
+      [
+        {
+          id: 'expense-1',
+          date: '2026-04-05',
+          category: ExpenseCategory.PARKING,
+          amount: 21,
+          description: 'Local newer edit',
+          hasReceiptImage: false,
+          updatedAt: '2026-04-05T12:00:00.000Z',
+        },
+      ]
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.amount).toBe(21);
+    expect(merged[0]?.description).toBe('Local newer edit');
+  });
+
+  it('applyPulledExpenses restores synced energy quantity metadata', () => {
+    const merged = applyPulledExpenses([
+      {
+        id: 'expense-charge',
+        date: '2026-04-08',
+        category: ExpenseCategory.PUBLIC_CHARGING,
+        amount: 16.75,
+        description: JSON.stringify({
+          description: 'Rapid charger',
+          energyQuantity: 24.8,
+          energyUnit: 'kWh',
+        }),
+        has_image: 0,
+        updated_at: '2026-04-08T12:00:00.000Z',
+      },
+    ]);
+
+    expect(merged).toEqual([
+      expect.objectContaining({
+        id: 'expense-charge',
+        category: ExpenseCategory.PUBLIC_CHARGING,
+        description: 'Rapid charger',
+        energyQuantity: 24.8,
+        energyUnit: 'kWh',
+      }),
+    ]);
   });
 
   it('applyPulledShiftWorkLogs recreates local work logs from shift rows', () => {

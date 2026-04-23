@@ -1,5 +1,5 @@
 /**
- * OPFS (Origin Private File System) storage for DriverTax Pro.
+ * OPFS (Origin Private File System) storage for Driver Buddy.
  * Provides structured /drivertax/receipts/, /drivertax/exports/, /drivertax/backups/ directories.
  * Falls back gracefully if OPFS is unavailable.
  */

@@ -40,12 +40,12 @@ CREATE TABLE IF NOT EXISTS shift_earnings (
   FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE
 );
 
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'business';
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS business_use_percent REAL NOT NULL DEFAULT 100;
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deductible_amount REAL NOT NULL DEFAULT 0;
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS non_deductible_amount REAL NOT NULL DEFAULT 0;
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vehicle_expense_type TEXT NOT NULL DEFAULT 'non_vehicle';
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS tax_treatment TEXT NOT NULL DEFAULT 'deductible';
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS linked_shift_id TEXT;
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'manual';
-ALTER TABLE expenses ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'confirmed';
+ALTER TABLE expenses ADD COLUMN scope TEXT NOT NULL DEFAULT 'business';
+ALTER TABLE expenses ADD COLUMN business_use_percent REAL NOT NULL DEFAULT 100;
+ALTER TABLE expenses ADD COLUMN deductible_amount REAL NOT NULL DEFAULT 0;
+ALTER TABLE expenses ADD COLUMN non_deductible_amount REAL NOT NULL DEFAULT 0;
+ALTER TABLE expenses ADD COLUMN vehicle_expense_type TEXT NOT NULL DEFAULT 'non_vehicle';
+ALTER TABLE expenses ADD COLUMN tax_treatment TEXT NOT NULL DEFAULT 'deductible';
+ALTER TABLE expenses ADD COLUMN linked_shift_id TEXT;
+ALTER TABLE expenses ADD COLUMN source_type TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE expenses ADD COLUMN review_status TEXT NOT NULL DEFAULT 'confirmed';

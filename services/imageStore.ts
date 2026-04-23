@@ -1,5 +1,6 @@
 import { buildAuthHeaders } from './sessionManager';
 import { deleteReceiptOPFS, getReceiptOPFS, saveReceiptOPFS } from './opfsStore';
+import { setStatus } from './uploadStatusStore';
 
 const DB_NAME = 'drivertax-images';
 const DB_VERSION = 1;
@@ -133,39 +134,67 @@ export async function requestReceiptUpload(
   blob: Blob,
   expenseId: string,
   filename: string
-): Promise<{ receiptId: string } | null> {
+): Promise<{ receiptId?: string; status: 'synced' | 'local-only' | 'failed'; errorReason?: string } | null> {
   const workerUrl = import.meta.env.VITE_SYNC_WORKER_URL;
   if (!workerUrl) return null;
-
-  void expenseId;
 
   const headers = await buildAuthHeaders();
   if (!headers['X-Session-Token']) return null;
 
-  const res = await fetch(`${workerUrl}/api/receipts/request-upload`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename,
-      contentType: blob.type || 'image/jpeg',
-    }),
-  });
+  await setStatus(expenseId, { status: 'uploading', lastAttemptAt: Date.now(), errorReason: undefined });
 
-  if (!res.ok) return null;
+  try {
+    const res = await fetch(`${workerUrl}/api/receipts/request-upload`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        contentType: blob.type || 'image/jpeg',
+      }),
+    });
 
-  const { uploadUrl, key } = (await res.json()) as { uploadUrl?: string; key?: string };
-  if (!uploadUrl || !key) return null;
+    if (res.status === 503) {
+      await setStatus(expenseId, {
+        status: 'local-only',
+        lastAttemptAt: Date.now(),
+        errorReason: 'presigned_urls_unavailable',
+        suppressRetryUntil: Date.now() + 86_400_000,
+      });
+      return { status: 'local-only', errorReason: 'presigned_urls_unavailable' };
+    }
 
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': blob.type || 'image/jpeg',
-    },
-    body: blob,
-  });
+    if (!res.ok) {
+      const errorReason = `http_${res.status}`;
+      await setStatus(expenseId, { status: 'failed', lastAttemptAt: Date.now(), errorReason });
+      return { status: 'failed', errorReason };
+    }
 
-  if (!uploadRes.ok) return null;
-  return { receiptId: key };
+    const { uploadUrl, key } = (await res.json()) as { uploadUrl?: string; key?: string };
+    if (!uploadUrl || !key) {
+      await setStatus(expenseId, { status: 'failed', lastAttemptAt: Date.now(), errorReason: 'missing_upload_url' });
+      return { status: 'failed', errorReason: 'missing_upload_url' };
+    }
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': blob.type || 'image/jpeg',
+      },
+      body: blob,
+    });
+
+    if (!uploadRes.ok) {
+      const errorReason = `upload_http_${uploadRes.status}`;
+      await setStatus(expenseId, { status: 'failed', lastAttemptAt: Date.now(), errorReason });
+      return { status: 'failed', errorReason };
+    }
+
+    await setStatus(expenseId, { status: 'synced', lastAttemptAt: Date.now(), errorReason: undefined, suppressRetryUntil: undefined });
+    return { receiptId: key, status: 'synced' };
+  } catch {
+    await setStatus(expenseId, { status: 'failed', lastAttemptAt: Date.now(), errorReason: 'network' });
+    return { status: 'failed', errorReason: 'network' };
+  }
 }
 
 export async function readRemoteReceipt(receiptId: string): Promise<Blob | null> {

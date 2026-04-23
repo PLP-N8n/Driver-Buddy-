@@ -3,11 +3,12 @@ import { checkRateLimit } from '../lib/rateLimit';
 
 export interface Env {
   DB: D1Database;
+  EXTRA_ALLOWED_ORIGINS?: string;
 }
 
 export async function handleFeedback(request: Request, env: Env): Promise<Response> {
   const { limited } = await checkRateLimit(request, 'feedback', env.DB);
-  if (limited) return jsonErr(request, 'too many requests', 429);
+  if (limited) return jsonErr(request, 'too many requests', 429, env);
 
   const deviceId = request.headers.get('X-Device-ID');
 
@@ -15,15 +16,15 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
   try {
     body = (await request.json()) as { type?: string; message?: string; page?: string };
   } catch {
-    return jsonErr(request, 'invalid json');
+    return jsonErr(request, 'invalid json', 400, env);
   }
 
-  if (!body.message || !body.type) return jsonErr(request, 'type and message required');
+  if (!body.message || !body.type) return jsonErr(request, 'type and message required', 400, env);
 
   const id = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   await env.DB.prepare(
     'INSERT INTO feedback (id, device_id, type, message, app_page, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).bind(id, deviceId ?? null, body.type, body.message, body.page ?? null, Date.now()).run();
 
-  return jsonOk(request, { ok: true });
+  return jsonOk(request, { ok: true }, 200, env);
 }

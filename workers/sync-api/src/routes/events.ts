@@ -2,18 +2,19 @@ import { jsonErr, jsonOk } from '../lib/json';
 
 export interface Env {
   ANALYTICS: AnalyticsEngineDataset;
+  EXTRA_ALLOWED_ORIGINS?: string;
 }
 
 export async function handleEvents(request: Request, env: Env): Promise<Response> {
   const deviceId = request.headers.get('X-Device-ID');
-  if (!deviceId) return jsonErr(request, 'Missing X-Device-ID header');
-  if (!env.ANALYTICS) return jsonErr(request, 'Analytics engine is not configured', 503);
+  if (!deviceId) return jsonErr(request, 'Missing X-Device-ID header', 400, env);
+  if (!env.ANALYTICS) return jsonErr(request, 'Analytics engine is not configured', 503, env);
 
   let body: { event?: string; properties?: Record<string, unknown> };
   try {
     body = (await request.json()) as { event?: string; properties?: Record<string, unknown> };
   } catch {
-    return jsonErr(request, 'invalid json');
+    return jsonErr(request, 'invalid json', 400, env);
   }
 
   const event = typeof body.event === 'string' ? body.event : '';
@@ -22,7 +23,7 @@ export async function handleEvents(request: Request, env: Env): Promise<Response
       ? body.properties
       : {};
 
-  if (!event) return jsonErr(request, 'event is required');
+  if (!event) return jsonErr(request, 'event is required', 400, env);
 
   env.ANALYTICS.writeDataPoint({
     blobs: [event, JSON.stringify(properties)],
@@ -30,5 +31,5 @@ export async function handleEvents(request: Request, env: Env): Promise<Response
     indexes: [deviceId],
   });
 
-  return jsonOk(request, { ok: true }, 202);
+  return jsonOk(request, { ok: true }, 202, env);
 }
