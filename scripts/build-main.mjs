@@ -28,10 +28,8 @@ if (!envVars.VITE_APP_VERSION) {
 }
 
 // These are build-time secrets — never embed in frontend bundle
-const BUILD_ONLY_KEYS = new Set(['SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT']);
-
 const frontendEnv = Object.fromEntries(
-  Object.entries(envVars).filter(([k]) => !BUILD_ONLY_KEYS.has(k))
+  Object.entries(envVars).filter(([k]) => k === 'MODE' || k === 'PROD' || k === 'DEV' || k === 'SSR' || k.startsWith('VITE_'))
 );
 
 const envJson = JSON.stringify(frontendEnv);

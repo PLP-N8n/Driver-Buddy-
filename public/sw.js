@@ -1,5 +1,5 @@
-const CACHE_NAME = 'drivertax-pro-v4';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192.png', '/pwa-512.png'];
+const CACHE_NAME = 'drivertax-pro-v5';
+const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192.png', '/pwa-512.png', '/pwa-maskable-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

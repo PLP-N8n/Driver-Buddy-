@@ -19,17 +19,84 @@ if (process.env.DISABLE_PWA !== 'true') {
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
       manifest: {
-        name: 'DriverTax Pro',
-        short_name: 'DriverTax',
-        description: 'HMRC-compliant mileage and expense tracker for UK self-employed drivers',
+        name: 'Driver Buddy',
+        short_name: 'Driver Buddy',
+        id: '/',
+        description: 'Free tax tracker for UK gig-economy drivers. Track shifts, mileage, expenses and your HMRC tax estimate - offline, no account needed.',
+        lang: 'en-GB',
+        dir: 'ltr',
         theme_color: '#1e40af',
-        background_color: '#020617',
+        background_color: '#0f172a',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
         orientation: 'portrait',
         start_url: '/',
+        scope: '/',
+        categories: ['finance', 'business', 'productivity', 'utilities'],
         icons: [
-          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        screenshots: [
+          {
+            src: '/screenshots/dashboard-wide.png',
+            sizes: '1365x768',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'Driver Buddy dashboard on desktop',
+          },
+          {
+            src: '/screenshots/tax-pack-section.png',
+            sizes: '375x812',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Tax estimate and HMRC-ready summary',
+          },
+          {
+            src: '/screenshots/prediction-card.png',
+            sizes: '375x812',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Driver earnings forecast',
+          },
+          {
+            src: '/screenshots/settings-your-data.png',
+            sizes: '375x812',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Privacy and data controls',
+          },
+        ],
+        shortcuts: [
+          {
+            name: 'Start shift',
+            short_name: 'Start',
+            description: 'Open the shift timer.',
+            url: '/?action=start-shift',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Add expense',
+            short_name: 'Expense',
+            description: 'Open the expense form.',
+            url: '/?action=add-expense',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Add trip',
+            short_name: 'Trip',
+            description: 'Open the mileage form.',
+            url: '/?action=add-trip',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Tax estimate',
+            short_name: 'Tax',
+            description: 'Open your tax estimate.',
+            url: '/?action=tax',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192', type: 'image/png' }],
+          },
         ],
       },
       workbox: {
@@ -69,7 +136,7 @@ if (process.env.SENTRY_AUTH_TOKEN) {
 export default defineConfig({
   server: {
     port: 3000,
-    host: '0.0.0.0',
+    host: 'localhost',
   },
   build: {
     target: 'esnext',
@@ -78,17 +145,18 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
+          const norm = id.replace(/\\/g, '/');
           if (
-            id.includes('node_modules/react/') ||
-            id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/scheduler/')
+            norm.includes('node_modules/react/') ||
+            norm.includes('node_modules/react-dom/') ||
+            norm.includes('node_modules/scheduler/')
           ) {
             return 'vendor';
           }
-          if (id.includes('node_modules/lucide-react/')) {
+          if (norm.includes('node_modules/lucide-react/')) {
             return 'icons';
           }
-          if (id.includes('node_modules/@sentry/')) {
+          if (norm.includes('node_modules/@sentry/')) {
             return 'sentry';
           }
         },

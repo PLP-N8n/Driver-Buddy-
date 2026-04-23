@@ -3,5 +3,5 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), camera=(), microphone=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://browser.sentry-cdn.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; connect-src 'self' https://*.ingest.sentry.io https://drivertax-sync-api.cvchaudhary.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://browser.sentry-cdn.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; connect-src 'self' https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://drivertax-sync-api.cvchaudhary.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self' blob:
   Strict-Transport-Security: max-age=31536000; includeSubDomains
