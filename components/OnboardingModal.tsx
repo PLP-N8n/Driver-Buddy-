@@ -135,6 +135,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
         {step === 3 && (
           <>
             <h2 className="text-2xl font-semibold text-white">Do you want to track mileage?</h2>
+            <p className="mt-3 text-sm text-slate-400">Manual mileage logging is available now. Automatic tracking is still in development.</p>
             <div className="mt-5 space-y-3">
               <button
                 type="button"
@@ -143,7 +144,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
                   mileageTrackingEnabled ? 'border-brand bg-brand/10 text-white' : 'border-surface-border bg-surface-raised text-slate-300'
                 }`}
               >
-                Yes, I&apos;ll log miles
+                Yes, I&apos;ll log miles manually
               </button>
               <button
                 type="button"

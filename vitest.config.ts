@@ -13,7 +13,7 @@ export default defineConfig({
       'shared/**/*.test.ts',
       'utils/**/*.test.ts',
     ],
-    exclude: ['e2e/**', '.tmp-unit/**', '.tmp-unit-run/**', '.tmp-unit-run2/**', '.tmp-unit-run3/**'],
+    exclude: ['e2e/**', '.tmp-unit/**', '.tmp-unit-run/**', '.tmp-unit-run2/**', '.tmp-unit-run3/**', '.tmp-vitest/**'],
     pool: 'threads',
     fileParallelism: false,
     setupFiles: ['./vitest.setup.ts'],

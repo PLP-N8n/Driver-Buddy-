@@ -22,11 +22,11 @@ test('mobile dashboard shows dock and bottom navigation actions', async ({ page 
   await visitApp(page);
 
   await expect(page.getByRole('button', { name: 'Quick add shift' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Quick add trip' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Quick add expense' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Quick add trip' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Quick add expense' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Mileage' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Expenses' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Mileage' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expenses' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Work Log' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tax' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'More' })).toBeVisible();

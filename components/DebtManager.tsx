@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, CreditCard, Target, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, CreditCard, Repeat, Target, Trash2 } from 'lucide-react';
 import { DailyWorkLog, Debt, Settings } from '../types';
 import {
   fieldErrorClasses,
@@ -28,6 +28,8 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
   const [aprInput, setAprInput] = useState('');
   const [minPaymentInput, setMinPaymentInput] = useState('');
   const [formError, setFormError] = useState('');
+  const [newDD, setNewDD] = useState<{ name: string; amount: string; dueDay: string }>({ name: '', amount: '', dueDay: '1' });
+  const [ddError, setDdError] = useState('');
 
   const analysis = useMemo(() => {
     const totalRevenue = dailyLogs.reduce((sum, log) => sum + log.revenue, 0);
@@ -35,22 +37,25 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
     const avgDailyRevenue = totalRevenue / uniqueDays;
     const projectedMonthlyAllocation = avgDailyRevenue * 22 * (settings.debtSetAsidePercent / 100);
     const totalDebt = settings.debts.reduce((sum, debt) => sum + debt.balance, 0);
+    const totalMonthlyDDs = (settings.directDebits ?? []).reduce((sum, dd) => sum + dd.amount, 0);
     const totalMinPayments = settings.debts.reduce((sum, debt) => sum + debt.minPayment, 0);
     const effectivePayment = Math.max(projectedMonthlyAllocation, totalMinPayments);
     const monthsToFreedom = effectivePayment > 0 ? totalDebt / effectivePayment : 0;
 
     return {
       totalDebt,
+      totalMonthlyDDs,
       projectedMonthlyAllocation,
       totalMinPayments,
       monthsToFreedom,
       isAllocationSufficient: projectedMonthlyAllocation >= totalMinPayments,
     };
-  }, [dailyLogs, settings.debtSetAsidePercent, settings.debts]);
+  }, [dailyLogs, settings.debtSetAsidePercent, settings.debts, settings.directDebits]);
 
   const sortedDebts = [...settings.debts].sort((left, right) =>
     settings.debtStrategy === 'AVALANCHE' ? right.apr - left.apr : left.balance - right.balance
   );
+  const directDebits = settings.directDebits ?? [];
 
   const addDebt = () => {
     const nameValidation = validateRequired(newDebt.name ?? '');
@@ -85,6 +90,41 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
     setFormError('');
   };
 
+  const addDirectDebit = () => {
+    const nameValidation = validateRequired(newDD.name);
+    if (!nameValidation.isValid) {
+      setDdError(nameValidation.error ?? 'Enter a direct debit name.');
+      return;
+    }
+
+    const amountValidation = validatePositiveNumber(newDD.amount);
+    if (!amountValidation.isValid) {
+      setDdError(amountValidation.error ?? 'Enter a positive monthly amount.');
+      return;
+    }
+
+    const dueDay = parseInt(newDD.dueDay, 10);
+    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 28) {
+      setDdError('Due day must be between 1 and 28.');
+      return;
+    }
+
+    onUpdateSettings({
+      ...settings,
+      directDebits: [
+        ...(settings.directDebits ?? []),
+        {
+          id: Date.now().toString(),
+          name: newDD.name.trim(),
+          amount: parseFloat(newDD.amount),
+          dueDay,
+        },
+      ],
+    });
+    setNewDD({ name: '', amount: '', dueDay: '1' });
+    setDdError('');
+  };
+
   return (
     <div className="space-y-4">
       <section className={`${panelClasses} p-5`}>
@@ -93,7 +133,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
             <p className="text-lg font-semibold text-white">Debt manager</p>
             <p className="mt-1 text-sm text-slate-400">Keep debt strategy tied to your actual driving income and allocation rate.</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className={`${subtlePanelClasses} p-4`}>
               <p className="text-sm text-slate-400">Total debt</p>
               <p className="mt-2 font-mono text-2xl text-red-400">{formatCurrency(analysis.totalDebt)}</p>
@@ -103,6 +143,10 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
               <p className="mt-2 font-mono text-2xl text-white">
                 {analysis.totalDebt === 0 ? 'Debt free' : `${formatNumber(analysis.monthsToFreedom, 1)} mo`}
               </p>
+            </div>
+            <div className={`${subtlePanelClasses} p-4`}>
+              <p className="text-sm text-slate-400">Monthly DDs</p>
+              <p className="mt-2 font-mono text-2xl text-white">{formatCurrency(analysis.totalMonthlyDDs)}</p>
             </div>
           </div>
         </div>
@@ -308,6 +352,106 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
             </div>
           )}
         </section>
+      </section>
+
+      <section className={`${panelClasses} p-5`}>
+        <div className="mb-4">
+          <h3 className="text-base font-semibold text-white">Direct debits</h3>
+          <p className="text-sm text-slate-400">Fixed monthly outgoings that come out regardless of earnings.</p>
+        </div>
+
+        {directDebits.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Repeat className="mb-3 h-10 w-10 text-slate-500" />
+            <p className="font-medium text-slate-300">No direct debits added yet.</p>
+          </div>
+        ) : (
+          <div className="mb-4 space-y-3">
+            {directDebits.map((dd) => (
+              <article key={dd.id} className={`${subtlePanelClasses} p-4 transition-transform duration-150 active:scale-[0.98]`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-medium text-white">{dd.name}</p>
+                    <p className="mt-2 font-mono text-xl text-white">{formatCurrency(dd.amount)}/mo</p>
+                    <p className="mt-1 text-xs text-slate-500">Due day {dd.dueDay}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateSettings({
+                        ...settings,
+                        directDebits: (settings.directDebits ?? []).filter((item) => item.id !== dd.id),
+                      })
+                    }
+                    className={secondaryButtonClasses}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="block">
+            <label htmlFor="dd-name" className={fieldLabelClasses}>
+              Name
+            </label>
+            <input
+              id="dd-name"
+              type="text"
+              value={newDD.name}
+              onChange={(event) => {
+                setNewDD({ ...newDD, name: event.target.value });
+                if (ddError) setDdError('');
+              }}
+              className={`${inputClasses} ${ddError ? 'border-red-400' : ''}`}
+              placeholder="Van insurance"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="block">
+              <label htmlFor="dd-amount" className={fieldLabelClasses}>
+                Amount
+              </label>
+              <input
+                id="dd-amount"
+                {...getNumericInputProps('decimal')}
+                value={newDD.amount}
+                onChange={(event) => {
+                  setNewDD({ ...newDD, amount: event.target.value });
+                  if (ddError) setDdError('');
+                }}
+                className={`${inputClasses} font-mono ${ddError ? 'border-red-400' : ''}`}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="block">
+              <label htmlFor="dd-due-day" className={fieldLabelClasses}>
+                Due day
+              </label>
+              <input
+                id="dd-due-day"
+                type="number"
+                min="1"
+                max="28"
+                value={newDD.dueDay}
+                onChange={(event) => {
+                  setNewDD({ ...newDD, dueDay: event.target.value });
+                  if (ddError) setDdError('');
+                }}
+                className={`${inputClasses} font-mono ${ddError ? 'border-red-400' : ''}`}
+                placeholder="1"
+              />
+            </div>
+          </div>
+          {ddError && <p className={fieldErrorClasses} role="alert">{ddError}</p>}
+          <button type="button" onClick={addDirectDebit} className={primaryButtonClasses}>
+            Add direct debit
+          </button>
+        </div>
       </section>
     </div>
   );

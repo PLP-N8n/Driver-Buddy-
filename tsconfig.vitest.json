@@ -41,7 +41,7 @@
     "services/**/*.test.ts",
     "shared/**/*.test.ts",
     "utils/**/*.test.ts",
-    "google-genai-shim.d.ts",
+    "cloudflare-workers.d.ts",
     "react-shim.d.ts",
     "vite-env.d.ts"
   ],

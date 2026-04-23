@@ -212,7 +212,7 @@ test('backup and restore round-trips an expense', async ({ page }) => {
     window.localStorage.setItem('drivertax_onboarded', 'true');
   });
   await page.reload();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   await page.getByRole('button', { name: 'Open settings' }).click();
   await page.locator('#restore-backup').setInputFiles({
@@ -259,9 +259,12 @@ test('receipt thumbnails persist after reload', async ({ page }) => {
 
   await expect(page.getByAltText('Receipt thumbnail for Receipt parking')).toBeVisible();
 
-  await page.waitForTimeout(600);
+  await page.waitForFunction(() => {
+    const raw = window.localStorage.getItem('driver_expenses');
+    return Boolean(raw && raw.includes('Receipt parking'));
+  });
   await page.reload();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   await page.getByRole('button', { name: 'Expenses' }).click();
   await expect(page.getByAltText('Receipt thumbnail for Receipt parking')).toBeVisible();

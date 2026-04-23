@@ -31,28 +31,28 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ dailyLogs, t
 
   const reviewWindow = useMemo(() => {
     const today = todayUK();
-    const currentMonday = ukWeekStart(today);
-    const previousMonday = new Date(`${currentMonday}T12:00:00Z`);
-    previousMonday.setUTCDate(previousMonday.getUTCDate() - 7);
-    const previousSunday = new Date(previousMonday);
-    previousSunday.setUTCDate(previousSunday.getUTCDate() + 6);
+    const currentWeekStart = ukWeekStart(today, settings.workWeekStartDay);
+    const previousWeekStart = new Date(`${currentWeekStart}T12:00:00Z`);
+    previousWeekStart.setUTCDate(previousWeekStart.getUTCDate() - 7);
+    const previousWeekEnd = new Date(previousWeekStart);
+    previousWeekEnd.setUTCDate(previousWeekEnd.getUTCDate() + 6);
 
     return {
-      reviewKey: previousMonday.toISOString().slice(0, 10),
-      start: previousMonday.toISOString().slice(0, 10),
-      end: previousSunday.toISOString().slice(0, 10),
-      startLabel: previousMonday.toLocaleDateString('en-GB', {
+      reviewKey: previousWeekStart.toISOString().slice(0, 10),
+      start: previousWeekStart.toISOString().slice(0, 10),
+      end: previousWeekEnd.toISOString().slice(0, 10),
+      startLabel: previousWeekStart.toLocaleDateString('en-GB', {
         timeZone: 'Europe/London',
         day: 'numeric',
         month: 'short',
       }),
-      endLabel: previousSunday.toLocaleDateString('en-GB', {
+      endLabel: previousWeekEnd.toLocaleDateString('en-GB', {
         timeZone: 'Europe/London',
         day: 'numeric',
         month: 'short',
       }),
     };
-  }, []);
+  }, [settings.workWeekStartDay]);
 
   const reviewLogs = useMemo(
     () => dailyLogs.filter((log) => log.date >= reviewWindow.start && log.date <= reviewWindow.end),

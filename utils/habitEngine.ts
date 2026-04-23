@@ -33,8 +33,8 @@ const getYesterday = () => {
   return value;
 };
 
-const getCurrentWeekRange = () => {
-  const start = ukWeekStart(todayUK());
+const getCurrentWeekRange = (startDay: Settings['workWeekStartDay']) => {
+  const start = ukWeekStart(todayUK(), startDay);
   const end = new Date(`${start}T12:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 6);
   return { start, end: toDateKey(end) };
@@ -137,7 +137,7 @@ const getMilestone = (logs: DailyWorkLog[], currentStreak: number, totalRevenue:
 export function getHabitState(logs: DailyWorkLog[], settings: Settings): HabitState {
   const totalRevenue = logs.reduce((sum, log) => sum + log.revenue, 0);
   const { currentStreak, longestStreak } = buildStreaks(logs.map((log) => log.date));
-  const { start, end } = getCurrentWeekRange();
+  const { start, end } = getCurrentWeekRange(settings.workWeekStartDay);
   const weeklyRevenue = logs
     .filter((log) => log.date >= start && log.date <= end)
     .reduce((sum, log) => sum + log.revenue, 0);

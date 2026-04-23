@@ -54,8 +54,8 @@ const getBucket = (hours: number): ShiftBucket => {
   return '8plus';
 };
 
-const getWeekRange = (baseDate: string) => {
-  const start = ukWeekStart(baseDate);
+const getWeekRange = (baseDate: string, startDay: Settings['workWeekStartDay']) => {
+  const start = ukWeekStart(baseDate, startDay);
   const end = new Date(`${start}T12:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 6);
 
@@ -177,7 +177,7 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
   const todayKey = todayUK();
   const todayDay = parseDate(todayKey).getUTCDay();
   if (todayDay === 3 || todayDay === 4) {
-    const { start, end } = getWeekRange(todayKey);
+    const { start, end } = getWeekRange(todayKey, settings.workWeekStartDay);
     const weeklyLogs = eligibleLogs.filter((log) => log.date >= start && log.date <= end);
     const weeklyRevenue = weeklyLogs.reduce((sum, log) => sum + log.revenue, 0);
     const target = settings.weeklyRevenueTarget;

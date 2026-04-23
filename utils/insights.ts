@@ -19,8 +19,8 @@ const parseDate = (value: string) => new Date(`${value}T12:00:00Z`);
 
 const formatDateKey = (date: Date) => toUKDateString(date);
 
-const getWeekRange = (dateValue: string) => {
-  const start = parseDate(ukWeekStart(dateValue));
+const getWeekRange = (dateValue: string, startDay: Settings['workWeekStartDay']) => {
+  const start = parseDate(ukWeekStart(dateValue, startDay));
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 6);
 
@@ -73,8 +73,8 @@ const getProviderPerformance = (logs: DailyWorkLog[]) => {
     .sort((left, right) => right.revenuePerHour - left.revenuePerHour);
 };
 
-const getWeekLogs = (logs: DailyWorkLog[], dateValue: string) => {
-  const { start, end } = getWeekRange(dateValue);
+const getWeekLogs = (logs: DailyWorkLog[], dateValue: string, startDay: Settings['workWeekStartDay']) => {
+  const { start, end } = getWeekRange(dateValue, startDay);
   return logs.filter((log) => log.date >= start && log.date <= end);
 };
 
@@ -197,10 +197,10 @@ export function generateInsights(
     }
   }
 
-  const currentWeekLogs = getWeekLogs(history, today.date);
+  const currentWeekLogs = getWeekLogs(history, today.date, settings.workWeekStartDay);
   const previousWeekDate = parseDate(today.date);
   previousWeekDate.setUTCDate(previousWeekDate.getUTCDate() - 7);
-  const previousWeekLogs = getWeekLogs(history, formatDateKey(previousWeekDate));
+  const previousWeekLogs = getWeekLogs(history, formatDateKey(previousWeekDate), settings.workWeekStartDay);
   const currentFuelTrend = getFuelCostPerMile(currentWeekLogs);
   const previousFuelTrend = getFuelCostPerMile(previousWeekLogs);
 

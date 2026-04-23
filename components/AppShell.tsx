@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import {
   Calculator,
   Car,
@@ -18,14 +18,9 @@ import {
 import {
   ActiveWorkSession,
   AppTab,
-  CompletedShiftSummary,
-  Coordinate,
   DailyWorkLog,
-  Expense,
-  ExpenseCategory,
   PlayerStats,
   Settings,
-  Trip,
   getCurrentTaxYearLabel,
 } from '../types';
 import { Dashboard, DashboardManualEntryRequest, ManualShiftPayload } from './Dashboard';
@@ -33,25 +28,27 @@ import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { SyncIndicator } from './SyncIndicator';
 import { FeedbackSheet } from './FeedbackSheet';
 import { OnboardingModal } from './OnboardingModal';
+import { RestoreReviewDialog } from './RestoreReviewDialog';
 import { SetupReminderBanner } from './SetupReminderBanner';
 import { UpdateBanner } from './UpdateBanner';
+import { InstallBanner } from './InstallBanner';
 import { Skeleton } from './Skeleton';
 import { Spinner } from './Spinner';
 import { Toast } from './Toast';
-import * as Sentry from '../src/sentry';
 import { getAnimationClass, useReducedMotion } from '../utils/animations';
 import { escapeCsvCell } from '../utils/csv';
-import { generateInsights } from '../utils/insights';
-import { todayUK, ukWeekStart } from '../utils/ukDate';
+import { todayUK } from '../utils/ukDate';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { useAppState, type ToastState } from '../hooks/useAppState';
+import { useDriverLedger } from '../hooks/useDriverLedger';
 import { useExport } from '../hooks/useExport';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useHydration } from '../hooks/useHydration';
 import { usePersistence } from '../hooks/usePersistence';
 import { useReceiptMigration } from '../hooks/useReceiptMigration';
 import { useSyncOrchestrator } from '../hooks/useSyncOrchestrator';
-import { trackEvent } from '../services/analyticsService';
+import { setAnalyticsConsent, trackEvent } from '../services/analyticsService';
+import { stampSettings } from '../services/settingsService';
 import {
   dialogBackdropClasses,
   dialogPanelClasses,
@@ -73,38 +70,7 @@ const SettingsPanel = lazy(() => import('./Settings').then((m) => ({ default: m.
 const BackfillSheet = lazy(() => import('./BackfillSheet').then((m) => ({ default: m.BackfillSheet })));
 const FaqSheet = lazy(() => import('./FaqSheet').then((m) => ({ default: m.FaqSheet })));
 
-const getTodayKey = todayUK;
-const nowIso = () => new Date(Date.now()).toISOString();
 const TAX_REMINDER_KEY_PREFIX = 'dbt_tax_reminder_shown_';
-const DELETED_IDS_KEY = 'driver_deleted_ids';
-
-type DeletedIdsState = {
-  workLogs: string[];
-  mileageLogs: string[];
-  expenses: string[];
-  shifts: string[];
-};
-
-const createEmptyDeletedIds = (): DeletedIdsState => ({
-  workLogs: [],
-  mileageLogs: [],
-  expenses: [],
-  shifts: [],
-});
-
-const loadDeletedIds = (): DeletedIdsState => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(DELETED_IDS_KEY) ?? '{}') as Partial<DeletedIdsState>;
-    return {
-      workLogs: Array.isArray(parsed.workLogs) ? parsed.workLogs : [],
-      mileageLogs: Array.isArray(parsed.mileageLogs) ? parsed.mileageLogs : [],
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-      shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
-    };
-  } catch {
-    return createEmptyDeletedIds();
-  }
-};
 
 const pageMeta: Record<AppTab, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Revenue, mileage, and tax readiness at a glance.' },
@@ -172,7 +138,6 @@ export function AppShell() {
   const prefersReducedMotion = useReducedMotion();
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const exportModalRef = useRef<HTMLDivElement | null>(null);
-  const [deletedIds, setDeletedIds] = useState<DeletedIdsState>(() => loadDeletedIds());
   const {
     activeTab,
     setActiveTab,
@@ -215,48 +180,38 @@ export function AppShell() {
     showTaxReminder,
     setShowTaxReminder,
   } = useAppState();
-  const persistDeletedIds = (next: DeletedIdsState) => {
-    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(next));
+  const updateSettings: React.Dispatch<React.SetStateAction<Settings>> = (nextSettings) => {
+    setSettings((current) => stampSettings(typeof nextSettings === 'function' ? nextSettings(current) : nextSettings));
   };
-  const appendDeletedId = (key: keyof DeletedIdsState, id: string) => {
-    setDeletedIds((current) => {
-      if (current[key].includes(id)) {
-        return current;
-      }
-
-      const next = { ...current, [key]: [...current[key], id] };
-      persistDeletedIds(next);
-      return next;
-    });
-  };
-  const appendDeletedDailyLogId = (id: string) => {
-    setDeletedIds((current) => {
-      const workLogs = current.workLogs.includes(id) ? current.workLogs : [...current.workLogs, id];
-      const shifts = current.shifts.includes(id) ? current.shifts : [...current.shifts, id];
-      if (workLogs === current.workLogs && shifts === current.shifts) {
-        return current;
-      }
-
-      const next = {
-        ...current,
-        workLogs,
-        shifts,
-      };
-      persistDeletedIds(next);
-      return next;
-    });
-  };
-  const clearDeletedIds = () => {
-    setDeletedIds((current) => {
-      if (!current.workLogs.length && !current.mileageLogs.length && !current.expenses.length && !current.shifts.length) {
-        return current;
-      }
-
-      const next = createEmptyDeletedIds();
-      persistDeletedIds(next);
-      return next;
-    });
-  };
+  const ledger = useDriverLedger({
+    trips,
+    setTrips,
+    expenses,
+    setExpenses,
+    dailyLogs,
+    setDailyLogs,
+    activeSession,
+    setActiveSession,
+    setCompletedShiftSummary,
+    settings,
+  });
+  const {
+    deletedIds,
+    clearDeletedIds,
+    addTrip,
+    deleteTrip,
+    updateTrip,
+    addExpense,
+    deleteExpense,
+    updateExpense,
+    addDailyLog,
+    deleteDailyLog,
+    updateDailyLog,
+    startActiveSession: startLedgerActiveSession,
+    updateActiveSession,
+    finalizeActiveSession,
+    saveManualShift,
+  } = ledger;
   useFocusTrap(moreMenuRef, showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(exportModalRef, showExportModal, () => setShowExportModal(false));
   const { isOnline, connectivityBanner } = useSyncOrchestrator({
@@ -278,14 +233,19 @@ export function AppShell() {
     }
     setActiveTab(tab);
   };
-  const hasEverBeenAdvanced = playerStats.totalLogs >= 3 || localStorage.getItem('dbt_advanced') === '1';
-  const isAdvancedUser = hasHydrated ? hasEverBeenAdvanced : true;
   useEffect(() => {
+    setAnalyticsConsent(Boolean(settings.analyticsConsent));
+  }, [settings.analyticsConsent]);
+  useEffect(() => {
+    if (!settings.analyticsConsent) return;
     trackEvent('app_open');
-  }, []);
+  }, [settings.analyticsConsent]);
   useEffect(() => {
-    if (playerStats.totalLogs >= 3) localStorage.setItem('dbt_advanced', '1');
-  }, [playerStats.totalLogs]);
+    try {
+      localStorage.removeItem('dbt_advanced');
+      localStorage.removeItem('dbt_featuresUnlocked');
+    } catch {}
+  }, []);
   useEffect(() => {
     const today = todayUK();
     const currentYear = Number(today.slice(0, 4));
@@ -311,13 +271,6 @@ export function AppShell() {
     );
   }, [dailyLogs.length]);
   useEffect(() => {
-    if (!hasHydrated) return;
-    if (isAdvancedUser) return;
-    if (activeTab === 'debt') {
-      navigateToTab('dashboard');
-    }
-  }, [activeTab, isAdvancedUser, hasHydrated]);
-  useEffect(() => {
     if (!quickLogRequest) return;
     if (quickLogRequest.tab !== activeTab) {
       setQuickLogRequest(null);
@@ -328,48 +281,6 @@ export function AppShell() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   }, [settings.colorTheme]);
-  const addTrip = (trip: Trip) => {
-    setTrips((current) => [...current, { ...trip, updatedAt: nowIso() }]);
-    trackEvent('trip_logged');
-  };
-  const deleteTrip = (id: string) => {
-    setTrips((current) => current.filter((trip) => trip.id !== id));
-    appendDeletedId('mileageLogs', id);
-    trackEvent('trip_deleted');
-  };
-  const updateTrip = (id: string, updates: Partial<Trip>) =>
-    setTrips((current) => current.map((trip) => (trip.id === id ? { ...trip, ...updates, updatedAt: nowIso() } : trip)));
-  const addExpense = (expense: Expense) => {
-    setExpenses((current) => [...current, { ...expense, updatedAt: nowIso() }]);
-    trackEvent('expense_added', { category: expense.category });
-  };
-  const deleteExpense = (id: string) => {
-    setExpenses((current) => current.filter((expense) => expense.id !== id));
-    appendDeletedId('expenses', id);
-    trackEvent('expense_deleted');
-  };
-  const updateExpense = (expense: Expense) =>
-    setExpenses((current) => current.map((item) => (item.id === expense.id ? { ...expense, updatedAt: nowIso() } : item)));
-  const addDailyLog = (log: DailyWorkLog) => {
-    setDailyLogs((current) => [...current, { ...log, updatedAt: nowIso() }]);
-    trackEvent('shift_logged', { platform: log.provider });
-  };
-  const deleteDailyLog = (id: string) => {
-    setDailyLogs((current) => current.filter((log) => log.id !== id));
-    appendDeletedDailyLogId(id);
-    trackEvent('shift_deleted');
-  };
-  const updateDailyLog = (log: DailyWorkLog) =>
-    setDailyLogs((current) => current.map((item) => (item.id === log.id ? { ...log, updatedAt: nowIso() } : item)));
-
-  const calculateMileageClaim = (miles: number) => {
-    const totalBusinessMiles = trips.filter((trip) => trip.purpose === 'Business').reduce((sum, trip) => sum + trip.totalMiles, 0);
-    const remainingAtPrimaryRate = Math.max(0, 10000 - totalBusinessMiles);
-    const milesAtPrimaryRate = Math.min(miles, remainingAtPrimaryRate);
-    const milesAtSecondaryRate = Math.max(0, miles - milesAtPrimaryRate);
-    return milesAtPrimaryRate * settings.businessRateFirst10k + milesAtSecondaryRate * settings.businessRateAfter10k;
-  };
-
   const announceDownload = (recordCount: number) => {
     showToast(`Downloading ${recordCount} records...`, 'info', 1000);
   };
@@ -398,6 +309,11 @@ export function AppShell() {
     handleRestore,
     handleCopyBackupCode,
     handleRestoreFromBackupCode,
+    pendingRestoreReview,
+    isPreparingRestore,
+    isApplyingRestore,
+    confirmPendingRestore,
+    cancelPendingRestore,
   } = useBackupRestore({
     trips,
     expenses,
@@ -408,7 +324,7 @@ export function AppShell() {
     setTrips,
     setExpenses,
     setDailyLogs,
-    setSettings,
+    setSettings: updateSettings,
     setPlayerStats,
     triggerTextDownload,
     queueDownload,
@@ -433,8 +349,6 @@ export function AppShell() {
     settings,
     playerStats,
     activeTab,
-    isAdvancedUser,
-    showToast,
   });
   useReceiptMigration({
     expenses,
@@ -453,240 +367,9 @@ export function AppShell() {
     setShowExportModal,
   });
 
-  const startActiveSession = ({ provider, startOdometer }: { provider: string; startOdometer?: number }) => {
-    Sentry.addBreadcrumb({ category: 'shift', message: 'shift_started' });
-    trackEvent('shift_started', { date: getTodayKey() });
-    setCompletedShiftSummary(null);
-    setActiveSession({
-      id: `${Date.now()}_session`,
-      date: todayUK(),
-      startedAt: nowIso(),
-      provider,
-      startOdometer,
-      expenses: [],
-    });
+  const startActiveSession = (payload: { provider: string; startOdometer?: number }) => {
+    startLedgerActiveSession(payload);
     navigateToTab('dashboard');
-  };
-
-  const updateActiveSession = (updates: Partial<ActiveWorkSession>) =>
-    setActiveSession((current) => (current ? { ...current, ...updates } : current));
-
-  const finalizeActiveSession = (session: ActiveWorkSession): CompletedShiftSummary => {
-    Sentry.addBreadcrumb({ category: 'shift', message: 'shift_completed' });
-    trackEvent('shift_completed', { date: session.date });
-    const endedAt = nowIso();
-    const updatedAt = nowIso();
-    const revenue = Number(session.revenue ?? 0);
-    const miles = Number(session.miles ?? 0);
-    const sessionExpenses = session.expenses ?? [];
-    const expensesTotal = sessionExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const fuelLiters = sessionExpenses
-      .filter((expense) => expense.category === ExpenseCategory.FUEL)
-      .reduce((sum, expense) => sum + (expense.liters ?? 0), 0);
-    const taxToSetAside = revenue * (settings.taxSetAsidePercent / 100);
-    const mileageClaim = calculateMileageClaim(miles);
-    const realProfit = revenue - taxToSetAside - expensesTotal;
-    const startedAtDate = new Date(session.startedAt);
-    const endedAtDate = new Date(endedAt);
-    const durationMs = Math.max(endedAtDate.getTime() - startedAtDate.getTime(), 0);
-    const hoursWorked = Math.max(0.1, durationMs / (1000 * 60 * 60));
-    const logId = `${Date.now()}_log`;
-
-    let linkedTripId: string | undefined;
-    let linkedTripForInsights: Trip | null = null;
-    if (miles > 0) {
-      const derivedStartOdometer =
-        session.startOdometer ??
-        (settings.financialYearStartOdometer
-          ? settings.financialYearStartOdometer + trips.reduce((sum, trip) => sum + trip.totalMiles, 0)
-          : 0);
-
-      linkedTripId = `${Date.now()}_trip`;
-      linkedTripForInsights = {
-        id: linkedTripId,
-        date: session.date,
-        startLocation: 'Work Day Start',
-        endLocation: 'Work Day End',
-        startOdometer: Number(derivedStartOdometer.toFixed(1)),
-        endOdometer: Number((derivedStartOdometer + miles).toFixed(1)),
-        totalMiles: miles,
-        purpose: 'Business',
-        notes: 'Auto-created from Work Day',
-        updatedAt,
-      };
-      addTrip(linkedTripForInsights);
-    }
-
-    sessionExpenses.forEach((expense) => {
-      addExpense({
-        id: expense.id,
-        date: session.date,
-        category: expense.category,
-        amount: expense.amount,
-        description: expense.description,
-        liters: expense.liters,
-        updatedAt,
-      });
-    });
-
-    const completedLog: DailyWorkLog = {
-      id: logId,
-      date: session.date,
-      provider: session.provider || 'Work Day',
-      hoursWorked: Number(hoursWorked.toFixed(2)),
-      revenue,
-      fuelLiters: fuelLiters > 0 ? Number(fuelLiters.toFixed(2)) : undefined,
-      expensesTotal: expensesTotal > 0 ? Number(expensesTotal.toFixed(2)) : 0,
-      notes: 'Captured from the Driver Buddy shift flow',
-      milesDriven: miles > 0 ? Number(miles.toFixed(1)) : 0,
-      linkedTripId,
-      startedAt: session.startedAt,
-      endedAt,
-      providerSplits: session.providerSplits,
-      updatedAt,
-    };
-
-    addDailyLog(completedLog);
-
-    const allLogs = [...dailyLogs, completedLog];
-    const weekStart = ukWeekStart(session.date, settings.workWeekStartDay);
-    const weekLogs = allLogs.filter((log) => ukWeekStart(log.date, settings.workWeekStartDay) === weekStart);
-    const weekRevenue = weekLogs.reduce((sum, log) => sum + log.revenue, 0);
-    const weekTaxToSetAside = weekRevenue * (settings.taxSetAsidePercent / 100);
-    const weekExpenses = weekLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
-    const weekKept = weekRevenue - weekTaxToSetAside - weekExpenses;
-
-    setActiveSession(null);
-
-    return {
-      id: `${Date.now()}_summary`,
-      date: session.date,
-      startedAt: session.startedAt,
-      endedAt,
-      hoursWorked: Number(hoursWorked.toFixed(2)),
-      revenue,
-      taxToSetAside,
-      mileageClaim,
-      expensesTotal,
-      realProfit,
-      miles,
-      fuelLiters,
-        insights: generateInsights(
-          completedLog,
-          allLogs,
-          settings,
-          linkedTripForInsights ? [...trips, linkedTripForInsights] : trips
-        ),
-      weekRevenue,
-      weekTaxToSetAside,
-      weekKept,
-      workDayCount: allLogs.length,
-    };
-  };
-
-  const saveManualShift = (payload: ManualShiftPayload): CompletedShiftSummary => {
-    trackEvent('shift_completed', { date: payload.date, mode: 'manual' });
-    if (payload.date < getTodayKey()) {
-      trackEvent('log_backfilled', { date: payload.date });
-    }
-
-    const startedAt = new Date(`${payload.date}T09:00:00`).toISOString();
-    const endedAt = new Date(new Date(startedAt).getTime() + payload.hoursWorked * 60 * 60 * 1000).toISOString();
-    const updatedAt = nowIso();
-    const expensesTotal = payload.expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const fuelLiters = payload.expenses
-      .filter((expense) => expense.category === ExpenseCategory.FUEL)
-      .reduce((sum, expense) => sum + (expense.liters ?? 0), 0);
-    const miles =
-      payload.startOdometer != null && payload.endOdometer != null
-        ? Math.max(0, payload.endOdometer - payload.startOdometer)
-        : 0;
-    const taxToSetAside = payload.revenue * (settings.taxSetAsidePercent / 100);
-    const mileageClaim = calculateMileageClaim(miles);
-    const realProfit = payload.revenue - taxToSetAside - expensesTotal;
-
-    let linkedTripId: string | undefined;
-    let linkedTripForInsights: Trip | null = null;
-    if (miles > 0) {
-      linkedTripId = `${Date.now()}_trip`;
-      linkedTripForInsights = {
-        id: linkedTripId,
-        date: payload.date,
-        startLocation: 'Manual shift start',
-        endLocation: 'Manual shift end',
-        startOdometer: payload.startOdometer ?? 0,
-        endOdometer: payload.endOdometer ?? (payload.startOdometer ?? 0) + miles,
-        totalMiles: miles,
-        purpose: 'Business',
-        notes: 'Auto-created from quick add shift',
-        updatedAt,
-      };
-      addTrip(linkedTripForInsights);
-    }
-
-    payload.expenses.forEach((expense) => {
-      addExpense({
-        id: expense.id,
-        date: payload.date,
-        category: expense.category,
-        amount: expense.amount,
-        description: expense.description,
-        liters: expense.liters,
-        updatedAt,
-      });
-    });
-
-    const completedLog: DailyWorkLog = {
-      id: `${Date.now()}_manual_log`,
-      date: payload.date,
-      provider: payload.provider,
-      hoursWorked: payload.hoursWorked,
-      revenue: payload.revenue,
-      fuelLiters: fuelLiters > 0 ? Number(fuelLiters.toFixed(2)) : undefined,
-      expensesTotal: expensesTotal > 0 ? Number(expensesTotal.toFixed(2)) : 0,
-      notes: payload.notes,
-      milesDriven: miles > 0 ? Number(miles.toFixed(1)) : 0,
-      linkedTripId,
-      startedAt,
-      endedAt,
-      providerSplits: payload.providerSplits,
-      updatedAt,
-    };
-
-    addDailyLog(completedLog);
-
-    const allLogs = [...dailyLogs, completedLog];
-    const weekStart = ukWeekStart(payload.date, settings.workWeekStartDay);
-    const weekLogs = allLogs.filter((log) => ukWeekStart(log.date, settings.workWeekStartDay) === weekStart);
-    const weekRevenue = weekLogs.reduce((sum, log) => sum + log.revenue, 0);
-    const weekTaxToSetAside = weekRevenue * (settings.taxSetAsidePercent / 100);
-    const weekExpenses = weekLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
-    const weekKept = weekRevenue - weekTaxToSetAside - weekExpenses;
-
-    return {
-      id: `${Date.now()}_manual_summary`,
-      date: payload.date,
-      startedAt,
-      endedAt,
-      hoursWorked: Number(payload.hoursWorked.toFixed(2)),
-      revenue: payload.revenue,
-      taxToSetAside,
-      mileageClaim,
-      expensesTotal,
-      realProfit,
-      miles,
-      fuelLiters,
-        insights: generateInsights(
-          completedLog,
-          allLogs,
-          settings,
-          linkedTripForInsights ? [...trips, linkedTripForInsights] : trips
-        ),
-      weekRevenue,
-      weekTaxToSetAside,
-      weekKept,
-      workDayCount: allLogs.length,
-    };
   };
 
   const handleAddDailyLog = (log: DailyWorkLog) => {
@@ -713,48 +396,13 @@ export function AppShell() {
 
   const dismissCompletedShiftSummary = () => setCompletedShiftSummary(null);
 
-  const handleLiveShiftSave = (data: { miles: number; durationHours: number; revenue: number; provider: string; path?: Coordinate[] }) => {
-    const today = todayUK();
-    const updatedAt = nowIso();
-    if (data.miles > 0) {
-      const startOdo = settings.financialYearStartOdometer
-        ? settings.financialYearStartOdometer + trips.reduce((sum, trip) => sum + trip.totalMiles, 0)
-        : 0;
-
-      addTrip({
-        id: `${Date.now()}_trip`,
-        date: today,
-        startLocation: 'Live Shift Start',
-        endLocation: 'Live Shift End',
-        startOdometer: parseFloat(startOdo.toFixed(1)),
-        endOdometer: parseFloat((startOdo + data.miles).toFixed(1)),
-        totalMiles: data.miles,
-        purpose: 'Business',
-        notes: `Live tracked shift (${data.durationHours.toFixed(2)}h)`,
-        path: data.path,
-        updatedAt,
-      });
-    }
-
-    addDailyLog({
-      id: `${Date.now()}_log`,
-      date: today,
-      provider: data.provider || 'Live Shift',
-      revenue: data.revenue,
-      hoursWorked: data.durationHours,
-      fuelLiters: 0,
-      updatedAt,
-    });
-    showToast('Saved', 'success', 1500);
-  };
-
   const handleBackfillSettingsUpdate = (nextSettings: Settings) => {
     const addedDayOff = nextSettings.dayOffDates.find((date) => !settings.dayOffDates.includes(date));
     if (addedDayOff) {
       trackEvent('day_off_marked', { date: addedDayOff });
     }
 
-    setSettings(nextSettings);
+    updateSettings(nextSettings);
   };
 
   const currentMeta = pageMeta[activeTab];
@@ -769,16 +417,58 @@ export function AppShell() {
     navigateToTab('dashboard');
     setManualEntryRequest({ token: Date.now(), date });
   };
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const url = new URL(window.location.href);
+    const requestedTab = url.searchParams.get('tab') as AppTab | null;
+    const requestedAction = url.searchParams.get('action');
+    const validTabs = new Set<AppTab>(['dashboard', 'mileage', 'expenses', 'worklog', 'tax', 'debt', 'settings']);
+    let handled = false;
+
+    if (requestedTab && validTabs.has(requestedTab)) {
+      navigateToTab(requestedTab);
+      handled = true;
+    }
+
+    switch (requestedAction) {
+      case 'add-trip':
+        openQuickLog('mileage');
+        handled = true;
+        break;
+      case 'add-expense':
+        openQuickLog('expenses');
+        handled = true;
+        break;
+      case 'add-shift':
+        openQuickLog('worklog');
+        handled = true;
+        break;
+      case 'start-shift':
+        navigateToTab('dashboard');
+        setStartWorkDayRequest(Date.now());
+        handled = true;
+        break;
+      case 'tax':
+        navigateToTab('tax');
+        handled = true;
+        break;
+    }
+
+    if (handled) {
+      url.searchParams.delete('tab');
+      url.searchParams.delete('action');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [hasHydrated]);
   const moreMenuItems = useMemo(
     () => [
-      ...(isAdvancedUser
-        ? [{ label: 'Debt Manager', description: 'Track balances and repayment priority.', icon: CreditCard, action: () => navigateToTab('debt') }]
-        : []),
+      { label: 'Debt Manager', description: 'Track balances and repayment priority.', icon: CreditCard, action: () => navigateToTab('debt') },
       { label: 'Settings', description: 'Claim method, allocations, and backups.', icon: SettingsIcon, action: () => navigateToTab('settings') },
       { label: 'Download Tax Summary CSV', description: 'Formatted for HMRC self-assessment.', icon: Download, action: () => setShowExportModal(true) },
       { label: 'Send Feedback', description: 'Report a bug or suggest an improvement.', icon: MessageSquare, action: () => { setShowMoreMenu(false); setShowFeedback(true); } },
     ],
-    [isAdvancedUser]
+    []
   );
 
   return (
@@ -790,7 +480,7 @@ export function AppShell() {
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand/80">DriverTax Pro</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand/80">Driver Buddy</p>
               <p className="truncate text-sm font-semibold text-white sm:text-base">{currentMeta.title}</p>
               <p className="hidden max-w-xl truncate text-xs text-slate-400 sm:block">{currentMeta.description}</p>
             </div>
@@ -931,6 +621,7 @@ export function AppShell() {
                     onAddExpense={addExpense}
                     onUpdateExpense={updateExpense}
                     onDeleteExpense={deleteExpense}
+                    showToast={showToast}
                     openFormSignal={quickLogRequest?.tab === 'expenses' ? quickLogRequest.token : undefined}
                     onOpenFormHandled={() => setQuickLogRequest(null)}
                   />
@@ -957,18 +648,17 @@ export function AppShell() {
                       expenses={expenses}
                       dailyLogs={dailyLogs}
                       settings={settings}
-                      onUpdateSettings={setSettings}
-                      isAdvancedUser={isAdvancedUser}
+                      onUpdateSettings={updateSettings}
                       onDownloadRecords={queueDownload}
                     />
-                    {isAdvancedUser && <TaxAssistant />}
+                    <TaxAssistant />
                   </div>
                 )}
-                {activeTab === 'debt' && isAdvancedUser && <DebtManager settings={settings} dailyLogs={dailyLogs} onUpdateSettings={setSettings} />}
+                {activeTab === 'debt' && <DebtManager settings={settings} dailyLogs={dailyLogs} onUpdateSettings={updateSettings} />}
                 {activeTab === 'settings' && (
                   <SettingsPanel
                     settings={settings}
-                    onUpdateSettings={setSettings}
+                    onUpdateSettings={updateSettings}
                     onBackup={handleBackup}
                     onExportCSV={() => setShowExportModal(true)}
                     onExportHmrcSummary={handleHmrcSummaryExport}
@@ -976,6 +666,7 @@ export function AppShell() {
                     backupCode={backupCode}
                     onCopyBackupCode={handleCopyBackupCode}
                     onRestoreFromBackupCode={handleRestoreFromBackupCode}
+                    isPreparingRestore={isPreparingRestore}
                     dataCounts={{ logs: dailyLogs.length, expenses: expenses.length, trips: trips.length }}
                     restoreStatusMessage={restoreStatusMessage}
                   />
@@ -1003,19 +694,17 @@ export function AppShell() {
       {!showMoreMenu && !showFeedback && !showFaq && !showExportModal && !isBackfillOpen && (
       <div className="bottom-dock fixed left-0 right-0 z-50 px-4 pb-1">
         <div className="app-dock mx-auto flex max-w-sm gap-2 rounded-[24px] p-1.5 dock-shadow">
-          {isAdvancedUser && (
-            <button
-              type="button"
-              aria-label="Quick add trip"
-              onClick={() => openQuickLog('mileage')}
-              className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-indigo-500/15 active:scale-95"
-            >
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/15">
-                <Car className="h-4 w-4 text-indigo-400" />
-              </div>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400">Trip</span>
-            </button>
-          )}
+          <button
+            type="button"
+            aria-label="Quick add trip"
+            onClick={() => openQuickLog('mileage')}
+            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-indigo-500/15 active:scale-95"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/15">
+              <Car className="h-4 w-4 text-indigo-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400">Trip</span>
+          </button>
           <button
             type="button"
             aria-label="Quick add shift"
@@ -1027,19 +716,17 @@ export function AppShell() {
             </div>
             <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">Shift</span>
           </button>
-          {isAdvancedUser && (
-            <button
-              type="button"
-              aria-label="Quick add expense"
-              onClick={() => openQuickLog('expenses')}
-              className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-amber-500/15 active:scale-95"
-            >
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
-                <Receipt className="h-4 w-4 text-amber-400" />
-              </div>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">Expense</span>
-            </button>
-          )}
+          <button
+            type="button"
+            aria-label="Quick add expense"
+            onClick={() => openQuickLog('expenses')}
+            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-amber-500/15 active:scale-95"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
+              <Receipt className="h-4 w-4 text-amber-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">Expense</span>
+          </button>
         </div>
       </div>
       )}
@@ -1173,18 +860,25 @@ export function AppShell() {
       )}
 
       <FeedbackSheet isOpen={showFeedback} onClose={() => setShowFeedback(false)} currentPage={activeTab} />
+      <RestoreReviewDialog
+        review={pendingRestoreReview}
+        isApplying={isApplyingRestore}
+        onConfirm={confirmPendingRestore}
+        onCancel={cancelPendingRestore}
+      />
       {showFaq && (
         <Suspense fallback={<div className="flex h-64 items-center justify-center"><Spinner /></div>}>
           <FaqSheet isOpen={showFaq} onClose={() => setShowFaq(false)} />
         </Suspense>
       )}
       <UpdateBanner />
+      <InstallBanner />
       {showOnboarding && (
         <OnboardingModal
           settings={settings}
           onSkip={() => setShowOnboarding(false)}
           onComplete={(updates, options) => {
-            setSettings((s) => ({ ...s, ...updates }));
+            updateSettings((s) => ({ ...s, ...updates }));
             setShowOnboarding(false);
             showToast('Onboarding completed.');
             if (options?.startWorkDay) {

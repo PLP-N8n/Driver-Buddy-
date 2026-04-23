@@ -48,12 +48,14 @@ export function ukTaxYearEnd(year?: number): string {
   return `${y + 1}-04-05`;
 }
 
-/** Returns the Monday of the ISO week containing dateStr (YYYY-MM-DD) */
-export function ukWeekStart(dateStr: string): string {
+/** Returns the configured week start containing dateStr (YYYY-MM-DD) */
+export function ukWeekStart(dateStr: string, startDay: 'MON' | 'SUN' = 'MON'): string {
   // Parse as noon UTC to avoid DST edge cases
   const d = new Date(`${dateStr}T12:00:00Z`);
   const day = d.getUTCDay(); // 0 = Sunday
-  const diff = day === 0 ? -6 : 1 - day;
+  const diff = startDay === 'SUN'
+    ? (day === 0 ? 0 : -day)
+    : (day === 0 ? -6 : 1 - day);
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().slice(0, 10);
 }
@@ -75,4 +77,9 @@ export function isInCurrentTaxYear(dateStr: string): boolean {
   const start = ukTaxYearStart();
   const end = ukTaxYearEnd();
   return dateStr >= start && dateStr <= end;
+}
+
+/** Filters records with a YYYY-MM-DD date to the current UK tax year. */
+export function filterToCurrentTaxYear<T extends { date: string }>(items: T[]): T[] {
+  return items.filter((item) => isInCurrentTaxYear(item.date));
 }

@@ -72,7 +72,7 @@ describe('useExport', () => {
     });
 
     expect(triggerTextDownload).toHaveBeenCalledWith(
-      'DriverTax_Export.csv',
+      'DriverBuddy_Export.csv',
       expect.stringContaining('"Date","Purpose","Start","End","Start Odo","End Odo","Total Miles","Notes"')
     );
 

@@ -100,12 +100,14 @@ export const getNumericInputProps = (mode: 'decimal' | 'numeric' = 'decimal') =>
   type: 'text' as const,
 });
 
-export const getMondayForDate = (dateValue: string) => {
-  return new Date(`${ukWeekStart(dateValue)}T12:00:00Z`);
+export const toWeekStartDate = (dateValue: string, startDay: 'MON' | 'SUN' = 'MON') => {
+  return new Date(`${ukWeekStart(dateValue, startDay)}T12:00:00Z`);
 };
 
-export const formatWeekLabel = (dateValue: string) =>
-  getMondayForDate(dateValue).toLocaleDateString('en-GB', {
+export const getMondayForDate = (dateValue: string) => toWeekStartDate(dateValue, 'MON');
+
+export const formatWeekLabel = (dateValue: string, startDay: 'MON' | 'SUN' = 'MON') =>
+  toWeekStartDate(dateValue, startDay).toLocaleDateString('en-GB', {
     timeZone: 'Europe/London',
     day: 'numeric',
     month: 'short',

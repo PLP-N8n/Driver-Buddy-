@@ -23,6 +23,7 @@ dist-split-test
 # Build outputs / tooling
 output/
 dist-split-test/
+/screenshots/
 
 # Design / external tooling
 .superdesign/

@@ -21,11 +21,10 @@ test('shows the empty dashboard state for a new user', async ({ page }) => {
   await expect(page.getByText('Track your mileage')).toBeVisible();
   await expect(page.getByText('See your real take-home')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Quick add shift' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Quick add trip' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Quick add expense' })).toHaveCount(0);
-  await expect(page.getByText(/This tax year/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Mileage' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Expenses' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Quick add trip' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Quick add expense' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mileage' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expenses' })).toBeVisible();
 });
 
 test('downloads the accountant export CSV from settings', async ({ page }) => {
@@ -53,7 +52,7 @@ test('downloads the accountant export CSV from settings', async ({ page }) => {
   await exportDialog.getByRole('button', { name: 'Download Tax Summary CSV' }).click();
   const download = await downloadPromise;
 
-  expect(download.suggestedFilename()).toBe('DriverTax_Export.csv');
+  expect(download.suggestedFilename()).toBe('DriverBuddy_Export.csv');
 
   const path = await download.path();
   expect(path).not.toBeNull();

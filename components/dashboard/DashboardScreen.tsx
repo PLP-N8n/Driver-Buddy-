@@ -34,7 +34,14 @@ import { getMissedDays } from '../../utils/missedDays';
 import { DriverPrediction, generatePredictions } from '../../utils/predictions';
 import { predictNextShift } from '../../utils/shiftPredictor';
 import { calcMileageAllowance } from '../../shared/calculations/mileage';
-import { todayUK, toUKDateString, ukWeekStart } from '../../utils/ukDate';
+import { filterToCurrentTaxYear, todayUK, toUKDateString, ukWeekStart } from '../../utils/ukDate';
+import {
+  getEnergyQuantityUnitForCategory,
+  getVehicleEnergyExpenseCategory,
+  getVehicleEnergyExpenseDescription,
+  getVehicleEnergyQuantityUnit,
+  isVehicleEnergyExpenseCategory,
+} from '../../utils/vehicleFuel';
 import {
   formatCurrency,
   formatNumber,
@@ -188,7 +195,7 @@ const getDurationHours = (startedAt: string, endedAt = new Date(Date.now()).toIS
 
 const getLastFuelExpense = (expenses: Expense[], targetDate: string) =>
   [...expenses]
-    .filter((expense) => expense.category === ExpenseCategory.FUEL)
+    .filter((expense) => isVehicleEnergyExpenseCategory(expense.category))
     .sort((left, right) => right.date.localeCompare(left.date))
     .find((expense) => {
       const target = new Date(`${targetDate}T12:00:00Z`);
@@ -345,9 +352,11 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   }, [dailyLogs]);
 
   const taxYearTotals = useMemo(() => {
-    const totalRevenue = dailyLogs.reduce((sum, log) => sum + log.revenue, 0);
-    const totalExpenses = dailyLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
-    const totalBusinessMiles = trips
+    const currentYearLogs = filterToCurrentTaxYear(dailyLogs);
+    const currentYearTrips = filterToCurrentTaxYear(trips);
+    const totalRevenue = currentYearLogs.reduce((sum, log) => sum + log.revenue, 0);
+    const totalExpenses = currentYearLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
+    const totalBusinessMiles = currentYearTrips
       .filter((trip) => trip.purpose === 'Business')
       .reduce((sum, trip) => sum + trip.totalMiles, 0);
     const mileageClaim = calcMileageAllowance(
@@ -362,7 +371,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       totalBusinessMiles,
       mileageClaim,
       taxSetAside: totalRevenue * (settings.taxSetAsidePercent / 100),
-      workDays: dailyLogs.length,
+      workDays: currentYearLogs.length,
     };
   }, [dailyLogs, settings, trips]);
 
@@ -526,6 +535,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         ? String(Number((defaultStartOdometer + mostRecentShift.milesDriven).toFixed(1)))
         : '';
     const recentFuelExpense = getLastFuelExpense(expenses, dateValue);
+    const recentEnergyQuantity = recentFuelExpense?.energyQuantity ?? recentFuelExpense?.liters;
 
     const defaultProvider = prediction.provider || mostRecentShift?.provider || 'Work Day';
     setManualShiftDate(dateValue);
@@ -538,7 +548,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       endOdometerValue: defaultEndOdometer,
       fuelChoice: recentFuelExpense ? 'yes' : 'no',
       fuelAmountValue: recentFuelExpense ? String(recentFuelExpense.amount) : '',
-      fuelLitersValue: recentFuelExpense?.liters ? String(recentFuelExpense.liters) : '',
+      fuelLitersValue: recentEnergyQuantity ? String(recentEnergyQuantity) : '',
     };
     applyDraftForContext('manual', dateValue, manualDefaultDraft);
     setShowEndSheet(true);
@@ -565,6 +575,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         ? String(Number((activeSession.startOdometer + (activeSession.miles ?? trackedMilesForSession ?? 0)).toFixed(1)))
         : '';
     const recentFuelExpense = getLastFuelExpense(expenses, activeSession.date);
+    const recentEnergyQuantity = recentFuelExpense?.energyQuantity ?? recentFuelExpense?.liters;
 
     setEndSheetMode('active');
     const activeDefaultDraft: EndShiftDraft = {
@@ -578,7 +589,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       endOdometerValue: estimatedEndOdometer,
       fuelChoice: recentFuelExpense ? 'yes' : 'no',
       fuelAmountValue: recentFuelExpense ? String(recentFuelExpense.amount) : '',
-      fuelLitersValue: recentFuelExpense?.liters ? String(recentFuelExpense.liters) : '',
+      fuelLitersValue: recentEnergyQuantity ? String(recentEnergyQuantity) : '',
       notesValue: '',
     };
     applyDraftForContext('active', activeSession.date, activeDefaultDraft);
@@ -627,17 +638,22 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
 
     const endOdometer = Number.parseFloat(endShiftDraft.endOdometerValue);
     const fuelAmount = Number.parseFloat(endShiftDraft.fuelAmountValue);
-    const fuelLiters = Number.parseFloat(endShiftDraft.fuelLitersValue);
+    const energyQuantity = Number.parseFloat(endShiftDraft.fuelLitersValue);
     const extraExpenseAmount = Number.parseFloat(endShiftDraft.extraExpenseAmountValue);
     const expenseItems: ActiveWorkSessionExpenseDraft[] = [];
 
     if (endShiftDraft.fuelChoice === 'yes' && Number.isFinite(fuelAmount) && fuelAmount > 0) {
+      const category = getVehicleEnergyExpenseCategory(settings);
+      const unit = getEnergyQuantityUnitForCategory(category) ?? getVehicleEnergyQuantityUnit(settings);
+      const quantity = Number.isFinite(energyQuantity) && energyQuantity > 0 ? energyQuantity : undefined;
       expenseItems.push({
         id: `${Date.now()}_fuel`,
-        category: ExpenseCategory.FUEL,
+        category,
         amount: fuelAmount,
-        liters: Number.isFinite(fuelLiters) && fuelLiters > 0 ? fuelLiters : undefined,
-        description: 'Fuel',
+        energyQuantity: quantity,
+        energyUnit: quantity ? unit : undefined,
+        liters: unit === 'litre' ? quantity : undefined,
+        description: getVehicleEnergyExpenseDescription(settings),
       });
     }
 

@@ -70,9 +70,6 @@ const getJobLabel = (roles: DriverRole[]): string => {
   return 'Jobs';
 };
 
-const weekKey = (dateStr: string): string => ukWeekStart(dateStr);
-const currentWeekKey = (): string => weekKey(todayUK());
-
 interface WorkLogProps {
   logs: DailyWorkLog[];
   settings: Settings;
@@ -154,8 +151,15 @@ const logToForm = (log: DailyWorkLog): FormState => ({
   notes: log.notes ?? '',
 });
 
-function WeeklySummaryBar({ logs }: { logs: DailyWorkLog[] }) {
-  const thisWeek = currentWeekKey();
+function WeeklySummaryBar({
+  logs,
+  startDay,
+}: {
+  logs: DailyWorkLog[];
+  startDay: Settings['workWeekStartDay'];
+}) {
+  const weekKey = (dateStr: string): string => ukWeekStart(dateStr, startDay);
+  const thisWeek = weekKey(todayUK());
   const weekLogs = logs.filter((log) => weekKey(log.date) === thisWeek);
   if (weekLogs.length === 0) return null;
 
@@ -779,7 +783,7 @@ export const WorkLog: React.FC<WorkLogProps> = ({
         </div>
       </section>
 
-      <WeeklySummaryBar logs={logs} />
+      <WeeklySummaryBar logs={logs} startDay={settings.workWeekStartDay} />
 
       <section className="space-y-2">
         {sortedLogs.length === 0 ? (

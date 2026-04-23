@@ -11,7 +11,6 @@ import type {
   Trip,
 } from '../types';
 import { sanitizeExpenseForStorage } from '../services/syncTransforms';
-import type { ToastState } from './useAppState';
 
 type UsePersistenceParams = {
   trips: Trip[];
@@ -22,8 +21,6 @@ type UsePersistenceParams = {
   settings: Settings;
   playerStats: PlayerStats;
   activeTab: AppTab;
-  isAdvancedUser: boolean;
-  showToast: (message: string, type?: ToastState['type'], duration?: number) => void;
 };
 
 export function usePersistence({
@@ -35,8 +32,6 @@ export function usePersistence({
   settings,
   playerStats,
   activeTab,
-  isAdvancedUser,
-  showToast,
 }: UsePersistenceParams) {
   const persistTrips = useMemo(
     () => debounce((nextTrips: Trip[]) => localStorage.setItem('driver_trips', JSON.stringify(nextTrips)), 500),
@@ -121,14 +116,6 @@ export function usePersistence({
     },
     [persistDailyLogs, persistExpenses, persistPlayerStats, persistSettings, persistTrips]
   );
-
-
-  useEffect(() => {
-    if (!isAdvancedUser) return;
-    if (localStorage.getItem('dbt_featuresUnlocked') === 'true') return;
-    localStorage.setItem('dbt_featuresUnlocked', 'true');
-    showToast("You've unlocked all features", 'info');
-  }, [isAdvancedUser, showToast]);
 
   useEffect(() => {
     if (activeTab === 'settings') {

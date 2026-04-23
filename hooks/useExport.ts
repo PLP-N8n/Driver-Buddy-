@@ -62,7 +62,7 @@ export function useExport({
       (exportConfig.includeExpenses ? expenses.length : 0) +
       (exportConfig.includeWorkLogs ? dailyLogs.length : 0);
     queueDownload(exportCount, () => {
-      triggerTextDownload('DriverTax_Export.csv', rows.join('\n'));
+      triggerTextDownload('DriverBuddy_Export.csv', rows.join('\n'));
     });
     setShowExportModal(false);
     trackEvent('export_downloaded', {
