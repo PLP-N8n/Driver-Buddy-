@@ -22,6 +22,21 @@ npm test
 npm --prefix workers/sync-api run type-check
 ```
 
+## Deploy
+
+Frontend (Cloudflare Pages project `drivertax` → drivertax.rudradigital.uk):
+
+```powershell
+npm run build
+npx wrangler pages deploy dist --project-name drivertax
+```
+
+Worker (sync API):
+
+```powershell
+npx wrangler deploy --config workers/sync-api/wrangler.toml
+```
+
 Notes:
 
 - `npm run dev` starts Vite.
