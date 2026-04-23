@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildTaxAnalysis,
   buildProjection,
   calculateClass2NI,
   calculateEnglishIncomeTax,
@@ -9,6 +10,7 @@ import {
   paymentsOnAccountAmount,
   requiresPaymentsOnAccount,
 } from './tax';
+import { DEFAULT_SETTINGS, ExpenseCategory } from '../types';
 
 const assertCloseTo = (actual: number, expected: number, precision = 2) => {
   const tolerance = 10 ** -precision;
@@ -127,5 +129,67 @@ describe('buildProjection', () => {
     expect(result.estimatedClass2NI).toBe(0);
     expect(result.estimatedClass4NI).toBeGreaterThan(0);
     expect(result.estimatedNI).toBe(result.estimatedClass2NI + result.estimatedClass4NI);
+  });
+});
+
+describe('buildTaxAnalysis vehicle energy costs', () => {
+  const baseSettings = {
+    ...DEFAULT_SETTINGS,
+    claimMethod: 'SIMPLIFIED' as const,
+  };
+  const baseExpense = {
+    id: 'charge-1',
+    date: '2026-04-10',
+    category: ExpenseCategory.PUBLIC_CHARGING,
+    amount: 120,
+    description: 'Public charging',
+  };
+
+  it('blocks charging from simplified deductions because mileage covers running costs', () => {
+    const analysis = buildTaxAnalysis({
+      trips: [{ id: 'trip-1', date: '2026-04-10', startLocation: 'A', endLocation: 'B', startOdometer: 0, endOdometer: 100, totalMiles: 100, purpose: 'Business', notes: '' }],
+      expenses: [baseExpense],
+      dailyLogs: [],
+      settings: baseSettings,
+    });
+
+    expect(analysis.simplifiedDeduction).toBe(45);
+  });
+
+  it('includes charging in actual-cost vehicle running costs', () => {
+    const analysis = buildTaxAnalysis({
+      trips: [{ id: 'trip-1', date: '2026-04-10', startLocation: 'A', endLocation: 'B', startOdometer: 0, endOdometer: 100, totalMiles: 100, purpose: 'Business', notes: '' }],
+      expenses: [baseExpense],
+      dailyLogs: [],
+      settings: { ...baseSettings, claimMethod: 'ACTUAL' },
+    });
+
+    expect(analysis.vehicleRunningCosts).toBe(120);
+    expect(analysis.actualDeduction).toBe(120);
+  });
+
+  it('treats home charging as a vehicle running cost', () => {
+    const analysis = buildTaxAnalysis({
+      trips: [{ id: 'trip-1', date: '2026-04-10', startLocation: 'A', endLocation: 'B', startOdometer: 0, endOdometer: 100, totalMiles: 100, purpose: 'Business', notes: '' }],
+      expenses: [{ ...baseExpense, id: 'charge-2', category: ExpenseCategory.HOME_CHARGING, amount: 80 }],
+      dailyLogs: [],
+      settings: { ...baseSettings, claimMethod: 'ACTUAL' },
+    });
+
+    expect(analysis.vehicleRunningCosts).toBe(80);
+    expect(analysis.actualDeduction).toBe(80);
+  });
+
+  it('keeps parking separately allowable under simplified mileage', () => {
+    const analysis = buildTaxAnalysis({
+      trips: [{ id: 'trip-1', date: '2026-04-10', startLocation: 'A', endLocation: 'B', startOdometer: 0, endOdometer: 100, totalMiles: 100, purpose: 'Business', notes: '' }],
+      expenses: [{ ...baseExpense, id: 'parking-1', category: ExpenseCategory.PARKING, amount: 12 }],
+      dailyLogs: [],
+      settings: baseSettings,
+    });
+
+    expect(analysis.otherBusinessExpenses).toBe(12);
+    expect(analysis.vehicleRunningCosts).toBe(0);
+    expect(analysis.simplifiedDeduction).toBe(57);
   });
 });

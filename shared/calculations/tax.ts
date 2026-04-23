@@ -1,6 +1,10 @@
 import type { Expense } from '../types/expense';
 import { calcMileageAllowance } from './mileage';
-import { sumDeductibleExpenses } from './expenses';
+import {
+  isTaxAllowableExpenseCategory,
+  isVehicleRunningCostCategory,
+  sumDeductibleExpenses,
+} from './expenses';
 
 export interface TaxSettings {
   claimMethod: 'SIMPLIFIED' | 'ACTUAL';
@@ -9,6 +13,15 @@ export interface TaxSettings {
   taxSetAsidePercent: number;
   isScottishTaxpayer?: boolean;
   personalAllowance?: number;
+}
+
+type TaxAnalysisExpense = Pick<Expense, 'category' | 'amount' | 'isVatClaimable'>;
+
+export interface VehicleTaxDeductions {
+  otherBusinessExpenses: number;
+  vehicleRunningCosts: number;
+  simplifiedDeduction: number;
+  actualDeduction: number;
 }
 
 /**
@@ -27,6 +40,38 @@ export function calcSimplifiedDeduction(
  */
 export function calcActualDeduction(expenses: Expense[]): number {
   return sumDeductibleExpenses(expenses);
+}
+
+export function calcExpenseAmountNetOfVat(expense: TaxAnalysisExpense): number {
+  return expense.isVatClaimable ? expense.amount / 1.2 : expense.amount;
+}
+
+export function calcVehicleTaxDeductions({
+  expenses,
+  totalMileageAllowance,
+  businessUsePercent,
+  manualAllowances = 0,
+}: {
+  expenses: TaxAnalysisExpense[];
+  totalMileageAllowance: number;
+  businessUsePercent: number;
+  manualAllowances?: number;
+}): VehicleTaxDeductions {
+  const otherBusinessExpenses = expenses
+    .filter((expense) => isTaxAllowableExpenseCategory(expense.category))
+    .filter((expense) => !isVehicleRunningCostCategory(expense.category))
+    .reduce((sum, expense) => sum + calcExpenseAmountNetOfVat(expense), 0);
+
+  const vehicleRunningCosts = expenses
+    .filter((expense) => isVehicleRunningCostCategory(expense.category))
+    .reduce((sum, expense) => sum + calcExpenseAmountNetOfVat(expense), 0);
+
+  return {
+    otherBusinessExpenses,
+    vehicleRunningCosts,
+    simplifiedDeduction: totalMileageAllowance + otherBusinessExpenses + manualAllowances,
+    actualDeduction: vehicleRunningCosts * businessUsePercent + otherBusinessExpenses + manualAllowances,
+  };
 }
 
 /**

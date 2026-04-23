@@ -1,4 +1,8 @@
-import { DailyWorkLog, Expense, ExpenseCategory, Settings, Trip } from '../types.js';
+import { DailyWorkLog, Expense, Settings, Trip } from '../types.js';
+import {
+  calcSimplifiedDeduction,
+  calcVehicleTaxDeductions,
+} from '../shared/calculations/tax';
 
 const BASE_PERSONAL_ALLOWANCE = 12_570;
 const TAPER_THRESHOLD = 100_000;
@@ -6,24 +10,6 @@ const BASIC_RATE_LIMIT = 50_270;
 const HIGHER_RATE_LIMIT = 125_140;
 const CLASS_4_MAIN_RATE = 0.06;
 const CLASS_4_UPPER_RATE = 0.02;
-const OTHER_ALLOWABLE_EXPENSE_CATEGORIES = new Set<ExpenseCategory>([
-  ExpenseCategory.PARKING,
-  ExpenseCategory.PHONE,
-  ExpenseCategory.ACCOUNTANCY,
-  ExpenseCategory.SUBSCRIPTIONS,
-  ExpenseCategory.PROTECTIVE_CLOTHING,
-  ExpenseCategory.TRAINING,
-  ExpenseCategory.BANK_CHARGES,
-  ExpenseCategory.OTHER,
-]);
-const VEHICLE_RUNNING_EXPENSE_CATEGORIES = new Set<ExpenseCategory>([
-  ExpenseCategory.FUEL,
-  ExpenseCategory.REPAIRS,
-  ExpenseCategory.INSURANCE,
-  ExpenseCategory.TAX,
-  ExpenseCategory.MOT,
-  ExpenseCategory.CLEANING,
-]);
 
 type ProjectionOptions = {
   isScottishTaxpayer?: boolean;
@@ -39,8 +25,7 @@ export function calculateMileageClaim(
   rateFirst10k: number,
   rateAfter10k: number
 ): number {
-  if (totalBusinessMiles <= 10_000) return totalBusinessMiles * rateFirst10k;
-  return 10_000 * rateFirst10k + (totalBusinessMiles - 10_000) * rateAfter10k;
+  return calcSimplifiedDeduction(totalBusinessMiles, rateFirst10k, rateAfter10k);
 }
 
 export function getPersonalAllowance(adjustedNetIncome: number): number {
@@ -194,19 +179,18 @@ export const buildTaxAnalysis = ({
     settings.businessRateAfter10k
   );
 
-  const deductibleAmount = (expense: Expense) => (expense.isVatClaimable ? expense.amount / 1.2 : expense.amount);
-
-  const otherBusinessExpenses = expenses
-    .filter((expense) => OTHER_ALLOWABLE_EXPENSE_CATEGORIES.has(expense.category))
-    .reduce((sum, expense) => sum + deductibleAmount(expense), 0);
-
-  const vehicleRunningCosts = expenses
-    .filter((expense) => VEHICLE_RUNNING_EXPENSE_CATEGORIES.has(expense.category))
-    .reduce((sum, expense) => sum + deductibleAmount(expense), 0);
-
   const totalManualAllowances = settings.manualAllowances.reduce((sum, allowance) => sum + allowance.amount, 0);
-  const simplifiedDeduction = totalMileageAllowance + otherBusinessExpenses + totalManualAllowances;
-  const actualDeduction = vehicleRunningCosts * businessUsePercent + otherBusinessExpenses + totalManualAllowances;
+  const {
+    otherBusinessExpenses,
+    vehicleRunningCosts,
+    simplifiedDeduction,
+    actualDeduction,
+  } = calcVehicleTaxDeductions({
+    expenses,
+    totalMileageAllowance,
+    businessUsePercent,
+    manualAllowances: totalManualAllowances,
+  });
   const projectionOptions = {
     isScottishTaxpayer: settings.isScottishTaxpayer,
   };

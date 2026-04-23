@@ -37,9 +37,13 @@ export interface Expense {
   receiptUrl?: string; // receiptUrl is kept as legacy migration field; do not remove yet
   hasReceiptImage?: boolean;
   isVatClaimable?: boolean;
+  energyQuantity?: number;
+  energyUnit?: EnergyQuantityUnit;
   liters?: number;
   updatedAt?: string;
 }
+
+export type EnergyQuantityUnit = 'litre' | 'kWh';
 
 export interface ProviderSplit {
   provider: string;
@@ -91,6 +95,8 @@ export interface DailyWorkLog {
 
 export enum ExpenseCategory {
   FUEL = 'Fuel',
+  PUBLIC_CHARGING = 'Public Charging',
+  HOME_CHARGING = 'Home Charging',
   REPAIRS = 'Repairs & Maintenance',
   INSURANCE = 'Insurance',
   TAX = 'Vehicle Tax',
@@ -108,6 +114,8 @@ export enum ExpenseCategory {
 
 export const EXPENSE_CATEGORY_OPTIONS: ExpenseCategory[] = [
   ExpenseCategory.FUEL,
+  ExpenseCategory.PUBLIC_CHARGING,
+  ExpenseCategory.HOME_CHARGING,
   ExpenseCategory.REPAIRS,
   ExpenseCategory.INSURANCE,
   ExpenseCategory.TAX,
@@ -145,9 +153,11 @@ export interface DirectDebit {
 }
 
 export type DriverRole = 'COURIER' | 'FOOD_DELIVERY' | 'TAXI' | 'LOGISTICS' | 'OTHER';
+export type VehicleFuelType = 'PETROL' | 'DIESEL' | 'HYBRID' | 'EV';
 
 export interface Settings {
   vehicleReg: string;
+  vehicleFuelType: VehicleFuelType;
   driverRoles: DriverRole[]; // Changed from single role to array
   colorTheme: 'DARK' | 'LIGHT';
   workWeekStartDay: 'MON' | 'SUN';
@@ -176,6 +186,7 @@ export interface Settings {
   // Manual Adjustments
   manualAllowances: ManualAllowance[];
   dayOffDates: string[];
+  updatedAt?: string;
 }
 
 export interface PlayerStats {
@@ -251,6 +262,8 @@ export interface ActiveWorkSessionExpenseDraft {
   id: string;
   category: ExpenseCategory;
   amount: number;
+  energyQuantity?: number;
+  energyUnit?: EnergyQuantityUnit;
   liters?: number;
   description: string;
 }
@@ -298,6 +311,7 @@ export function getCurrentTaxYearLabel(): string {
 
 export const DEFAULT_SETTINGS: Settings = {
   vehicleReg: '',
+  vehicleFuelType: 'PETROL',
   driverRoles: ['COURIER'],
   colorTheme: 'DARK',
   workWeekStartDay: 'MON',

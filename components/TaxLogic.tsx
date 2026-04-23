@@ -25,7 +25,7 @@ import {
 } from '../utils/ui';
 import { generateHmrcSummaryHtml, generateTaxPackCSVs } from '../utils/taxPack';
 import { buildTaxAnalysis } from '../utils/tax';
-import { todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
+import { filterToCurrentTaxYear, todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
 
 interface TaxLogicProps {
   trips: Trip[];
@@ -33,11 +33,9 @@ interface TaxLogicProps {
   dailyLogs: DailyWorkLog[];
   settings: Settings;
   onUpdateSettings: (settings: Settings) => void;
-  isAdvancedUser: boolean;
   onDownloadRecords: (recordCount: number, callback: () => void) => void;
 }
 
-const TAX_YEAR_LABEL = getCurrentTaxYearLabel();
 type MethodView = 'SIMPLIFIED' | 'ACTUAL' | 'COMPARE';
 
 function getTaxYearEndDate(): Date {
@@ -82,7 +80,6 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   dailyLogs,
   settings,
   onUpdateSettings,
-  isAdvancedUser,
   onDownloadRecords,
 }) => {
   const [methodView, setMethodView] = useState<MethodView>('COMPARE');
@@ -90,7 +87,26 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   const [allowanceError, setAllowanceError] = useState('');
   const [showCalcExplainer, setShowCalcExplainer] = useState(false);
 
-  const analysis = useMemo(() => buildTaxAnalysis({ trips, expenses, dailyLogs, settings }), [dailyLogs, expenses, settings, trips]);
+  const taxYearEnd = getTaxYearEndDate();
+  const taxYearStart = ukTaxYearStart();
+  const taxYearEndKey = ukTaxYearEnd();
+  const taxYearLabel = getCurrentTaxYearLabel();
+  const filteredLogs = useMemo(() => filterToCurrentTaxYear(dailyLogs), [dailyLogs]);
+  const filteredTrips = useMemo(
+    () => filterToCurrentTaxYear(trips).filter((trip) => trip.purpose === 'Business'),
+    [trips]
+  );
+  const filteredExpenses = useMemo(() => filterToCurrentTaxYear(expenses), [expenses]);
+  const analysis = useMemo(
+    () =>
+      buildTaxAnalysis({
+        trips: filteredTrips,
+        expenses: filteredExpenses,
+        dailyLogs: filteredLogs,
+        settings,
+      }),
+    [filteredLogs, filteredExpenses, filteredTrips, settings]
+  );
 
   const effectiveMethod = methodView === 'COMPARE' ? settings.claimMethod : methodView;
   const projection = effectiveMethod === 'SIMPLIFIED' ? analysis.simplifiedProjection : analysis.actualProjection;
@@ -107,15 +123,9 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   const potPct = Math.min(1, taxSetAside / Math.max(1, projection.estimatedLiability));
   const potBarColour = potPct >= 1 ? 'bg-green-500' : potPct >= 0.5 ? 'bg-amber-400' : 'bg-red-500';
   const potGapAmount = Math.max(0, projection.estimatedLiability - taxSetAside);
-  const taxYearEnd = getTaxYearEndDate();
-  const taxYearStart = ukTaxYearStart();
-  const taxYearEndKey = ukTaxYearEnd();
   const weeksLeft = weeksUntil(taxYearEnd);
   const weeklyTarget = potGapAmount > 0 ? potGapAmount / weeksLeft : 0;
   const taxBand = getTaxBand(projection.taxableProfit, settings.isScottishTaxpayer);
-  const filteredLogs = dailyLogs.filter((log) => log.date >= taxYearStart);
-  const filteredTrips = trips.filter((trip) => trip.date >= taxYearStart && trip.purpose === 'Business');
-  const filteredExpenses = expenses.filter((expense) => expense.date >= taxYearStart);
   const taxPack = useMemo(
     () =>
       generateTaxPackCSVs({
@@ -206,19 +216,19 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
     });
 
     onDownloadRecords(filteredLogs.length + filteredTrips.length + filteredExpenses.length, () => {
-      downloadText(`driver-buddy-hmrc-summary-${TAX_YEAR_LABEL.replace('/', '-')}.html`, html, 'text/html;charset=utf-8');
+      downloadText(`driver-buddy-hmrc-summary-${taxYearLabel.replace('/', '-')}.html`, html, 'text/html;charset=utf-8');
     });
   };
 
   const handleTaxPackDownload = () => {
     const recordCount = filteredLogs.length + filteredTrips.length + filteredExpenses.length;
     onDownloadRecords(recordCount, () => {
-      downloadText(`driver-buddy-tax-pack-summary-${TAX_YEAR_LABEL.replace('/', '-')}.csv`, taxPack.summaryCSV);
+      downloadText(`driver-buddy-tax-pack-summary-${taxYearLabel.replace('/', '-')}.csv`, taxPack.summaryCSV);
       window.setTimeout(() => {
-        downloadText(`driver-buddy-tax-pack-detail-${TAX_YEAR_LABEL.replace('/', '-')}.csv`, taxPack.detailCSV);
+        downloadText(`driver-buddy-tax-pack-detail-${taxYearLabel.replace('/', '-')}.csv`, taxPack.detailCSV);
       }, 200);
       window.setTimeout(() => {
-        downloadText(`driver-buddy-tax-pack-mileage-${TAX_YEAR_LABEL.replace('/', '-')}.csv`, taxPack.mileageCSV);
+        downloadText(`driver-buddy-tax-pack-mileage-${taxYearLabel.replace('/', '-')}.csv`, taxPack.mileageCSV);
       }, 400);
     });
   };
@@ -253,7 +263,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
           <div>
             <p className="text-lg font-semibold text-white">Tax Pack - everything your accountant needs</p>
             <p className="mt-2 text-sm text-slate-300">
-              Tax year {TAX_YEAR_LABEL} · {filteredLogs.length} work logs · {formatCurrency(filteredLogs.reduce((sum, log) => sum + log.revenue, 0))}
+              Tax year {taxYearLabel} · {filteredLogs.length} work logs · {formatCurrency(filteredLogs.reduce((sum, log) => sum + log.revenue, 0))}
             </p>
             <p className="mt-2 text-sm text-slate-400">Includes: HMRC summary · Accountant CSV · Mileage log</p>
           </div>
@@ -267,7 +277,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
       <section className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-900/40 to-emerald-900/40 p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-lg font-semibold text-white">Tax Year {TAX_YEAR_LABEL}</p>
+            <p className="text-lg font-semibold text-white">Tax Year {taxYearLabel}</p>
             <span className="mt-2 inline-flex rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-300">
               Based on HMRC rates
             </span>
@@ -526,8 +536,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
         );
       })()}
 
-      {isAdvancedUser && (
-        <section className={`${panelClasses} p-5`}>
+      <section className={`${panelClasses} p-5`}>
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-white">Manual allowances</h3>
             <p className="text-sm text-slate-400">Add fixed adjustments such as home office use or specialist clothing.</p>
@@ -604,8 +613,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
               ))
             )}
           </div>
-        </section>
-      )}
+      </section>
     </div>
   );
 };

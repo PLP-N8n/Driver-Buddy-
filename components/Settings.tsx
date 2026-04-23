@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Bell,
+  BatteryCharging,
+  CalendarDays,
   Car,
   Check,
   Copy,
@@ -19,8 +21,10 @@ import {
   UserRound,
   UtensilsCrossed,
 } from 'lucide-react';
-import { DriverRole, Settings } from '../types';
+import { DriverRole, Settings, VehicleFuelType } from '../types';
+import { LinkedDevicesPanel } from './LinkedDevicesPanel';
 import { PlaidSyncToggle } from './PlaidSyncToggle';
+import { ReceiptSyncPanel } from './ReceiptSyncPanel';
 import {
   fieldLabelClasses,
   getNumericInputProps,
@@ -40,6 +44,7 @@ interface SettingsProps {
   backupCode: string;
   onCopyBackupCode: () => void | Promise<void>;
   onRestoreFromBackupCode: (code: string) => void | Promise<void>;
+  isPreparingRestore?: boolean;
   dataCounts: {
     logs: number;
     expenses: number;
@@ -56,6 +61,13 @@ const roleOptions: Array<{ role: DriverRole; label: string; description: string;
   { role: 'OTHER', label: 'Other', description: 'General self-employed driving', icon: HelpCircle },
 ];
 
+const fuelTypeOptions: Array<{ type: VehicleFuelType; label: string; description: string; icon: LucideIcon }> = [
+  { type: 'PETROL', label: 'Petrol', description: 'Fuel receipts and running costs.', icon: Car },
+  { type: 'DIESEL', label: 'Diesel', description: 'Fuel receipts and running costs.', icon: Truck },
+  { type: 'HYBRID', label: 'Hybrid', description: 'Supports fuel and charging costs.', icon: BatteryCharging },
+  { type: 'EV', label: 'Electric', description: 'Track public and home charging.', icon: BatteryCharging },
+];
+
 export const SettingsPanel: React.FC<SettingsProps> = ({
   settings,
   onUpdateSettings,
@@ -66,6 +78,7 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
   backupCode,
   onCopyBackupCode,
   onRestoreFromBackupCode,
+  isPreparingRestore = false,
   dataCounts,
   restoreStatusMessage,
 }) => {
@@ -171,6 +184,52 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
       </section>
 
       <section className={`${panelClasses} p-5`}>
+        <div className="mb-4 flex items-start gap-3">
+          <div className="rounded-xl bg-surface-raised p-3 text-slate-200">
+            <CalendarDays className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-white">Work week</h2>
+            <p className="text-sm text-slate-400">Choose when your work week starts. Affects weekly summaries and targets.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            {
+              id: 'MON' as const,
+              title: 'Monday',
+              description: 'Default, UK standard.',
+            },
+            {
+              id: 'SUN' as const,
+              title: 'Sunday',
+              description: 'US and personal preference.',
+            },
+          ].map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => update({ workWeekStartDay: option.id })}
+              className={`rounded-2xl border p-4 text-left transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
+                settings.workWeekStartDay === option.id
+                  ? 'border-brand bg-brand/10 text-white'
+                  : 'border-surface-border bg-surface-raised text-slate-300 hover:border-slate-600'
+              }`}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <div className={`rounded-full p-2 ${settings.workWeekStartDay === option.id ? 'bg-brand text-white' : 'bg-surface text-slate-300'}`}>
+                  <CalendarDays className="h-4 w-4" />
+                </div>
+                {settings.workWeekStartDay === option.id && <Check className="h-4 w-4 text-brand" />}
+              </div>
+              <p className="font-medium">{option.title}</p>
+              <p className="mt-1 text-xs text-slate-400">{option.description}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className={`${panelClasses} p-5`}>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className={`${subtlePanelClasses} p-4`}>
             <div className="mb-4">
@@ -248,6 +307,34 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
                   className={`${inputClasses} uppercase tracking-[0.2em]`}
                   placeholder="AB12 CDE"
                 />
+              </div>
+              <div className="block sm:col-span-2">
+                <p className={fieldLabelClasses}>Fuel type</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {fuelTypeOptions.map((option) => {
+                    const isSelected = settings.vehicleFuelType === option.type;
+
+                    return (
+                      <button
+                        key={option.type}
+                        type="button"
+                        onClick={() => update({ vehicleFuelType: option.type })}
+                        className={`rounded-2xl border p-3 text-left transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
+                          isSelected
+                            ? 'border-brand bg-brand/10 text-white'
+                            : 'border-surface-border bg-surface text-slate-300 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <option.icon className="h-4 w-4" />
+                          {isSelected && <Check className="h-4 w-4 text-brand" />}
+                        </div>
+                        <p className="text-sm font-medium">{option.label}</p>
+                        <p className="mt-1 text-xs text-slate-400">{option.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="block">
                 <label htmlFor="financial-year-start" className={fieldLabelClasses}>
@@ -406,8 +493,13 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
         <div className="mb-4 flex items-center gap-3">
           <Bell className="h-4 w-4 text-slate-400" />
           <div>
-            <h2 className="text-base font-semibold text-white">Daily reminder</h2>
-            <p className="text-sm text-slate-400">Nudge to log at end of shift.</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-white">Daily reminder</h2>
+              <span className="rounded-full bg-slate-700/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+                Coming soon
+              </span>
+            </div>
+            <p className="text-sm text-slate-400">End-of-shift reminder controls are still in development.</p>
           </div>
         </div>
         <div className="flex items-center justify-between gap-4">
@@ -415,33 +507,16 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
           <button
             type="button"
             role="switch"
-            aria-checked={settings.reminderEnabled}
-            onClick={() => update({ reminderEnabled: !settings.reminderEnabled })}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
-              settings.reminderEnabled ? 'bg-brand' : 'bg-surface-raised'
-            }`}
+            aria-checked={false}
+            aria-label="Daily reminders coming soon"
+            disabled
+            title="Daily reminders are coming soon"
+            className="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent bg-surface-raised transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
-                settings.reminderEnabled ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
+            <span className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 translate-x-0" />
           </button>
         </div>
-        {settings.reminderEnabled && (
-          <div className="mt-4">
-            <label htmlFor="reminder-time" className={fieldLabelClasses}>
-              Reminder time
-            </label>
-            <input
-              id="reminder-time"
-              type="time"
-              value={settings.reminderTime}
-              onChange={(event) => update({ reminderTime: event.target.value })}
-              className={inputClasses}
-            />
-          </div>
-        )}
+        <p className="mt-3 text-xs italic text-slate-500">Reminder notifications are not live yet.</p>
       </section>
 
       <section className={`${panelClasses} p-5`}>
@@ -500,14 +575,19 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
           <button
             type="button"
             onClick={() => void onRestoreFromBackupCode(restoreCode)}
+            disabled={isPreparingRestore}
             className={secondaryButtonClasses}
           >
             <RotateCcw className="h-4 w-4" />
-            <span>Restore data</span>
+            <span>{isPreparingRestore ? 'Preparing...' : 'Restore data'}</span>
           </button>
         </div>
         {restoreStatusMessage && <p className="mt-3 text-sm text-emerald-300">{restoreStatusMessage}</p>}
       </section>
+
+      <LinkedDevicesPanel />
+
+      <ReceiptSyncPanel />
 
       <section className={`${panelClasses} p-5`}>
         <div className="mb-4">
@@ -590,8 +670,13 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
 
       <section className={`${panelClasses} p-5`}>
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-white">Bank Account Sync (Beta)</h2>
-          <p className="text-sm text-slate-400">Optional open banking import for transactions only. Off by default until you explicitly connect it.</p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-white">Bank account sync</h2>
+            <span className="rounded-full bg-slate-700/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+              New connections coming soon
+            </span>
+          </div>
+          <p className="text-sm text-slate-400">Plaid-powered bank sync is still in development. Existing connections can still be reviewed or disconnected here.</p>
         </div>
         <PlaidSyncToggle />
       </section>

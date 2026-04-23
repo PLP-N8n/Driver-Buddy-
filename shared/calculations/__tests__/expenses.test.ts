@@ -1,16 +1,52 @@
 import { describe, it, expect } from 'vitest';
 import {
+  EXPENSE_CATEGORY_TAX_METADATA,
+  SEPARATELY_ALLOWABLE_EXPENSE_CATEGORIES,
+  VEHICLE_RUNNING_COST_CATEGORIES,
   getVehicleExpenseType,
   getTaxTreatment,
   classifyExpense,
   calcDeductibleAmount,
+  isSeparatelyAllowableExpenseCategory,
+  isTaxAllowableExpenseCategory,
+  isVehicleRunningCostCategory,
   sumDeductibleExpenses,
 } from '../expenses';
 import type { Expense } from '../../types/expense';
 
+describe('expense category tax metadata', () => {
+  it('has one metadata entry for each category', () => {
+    const categories = EXPENSE_CATEGORY_TAX_METADATA.map((metadata) => metadata.category);
+    expect(new Set(categories).size).toBe(categories.length);
+  });
+
+  it('exposes vehicle running cost categories from the shared metadata', () => {
+    expect(VEHICLE_RUNNING_COST_CATEGORIES).toContain('Fuel');
+    expect(VEHICLE_RUNNING_COST_CATEGORIES).toContain('Public Charging');
+    expect(VEHICLE_RUNNING_COST_CATEGORIES).toContain('Home Charging');
+    expect(VEHICLE_RUNNING_COST_CATEGORIES).not.toContain('Parking/Tolls');
+  });
+
+  it('exposes separately allowable categories from the shared metadata', () => {
+    expect(SEPARATELY_ALLOWABLE_EXPENSE_CATEGORIES).toEqual(['Parking/Tolls']);
+    expect(isSeparatelyAllowableExpenseCategory('Parking/Tolls')).toBe(true);
+  });
+
+  it('distinguishes known allowable categories from unknown categories', () => {
+    expect(isTaxAllowableExpenseCategory('Phone')).toBe(true);
+    expect(isTaxAllowableExpenseCategory('Stationery')).toBe(false);
+  });
+});
+
 describe('getVehicleExpenseType', () => {
   it('classifies fuel as running_cost', () => {
     expect(getVehicleExpenseType('Fuel')).toBe('running_cost');
+  });
+  it('classifies EV charging as running_cost', () => {
+    expect(getVehicleExpenseType('Public Charging')).toBe('running_cost');
+    expect(getVehicleExpenseType('Home Charging')).toBe('running_cost');
+    expect(isVehicleRunningCostCategory('Public Charging')).toBe(true);
+    expect(isVehicleRunningCostCategory('Home Charging')).toBe(true);
   });
   it('classifies parking as separately_allowable', () => {
     expect(getVehicleExpenseType('Parking/Tolls')).toBe('separately_allowable');

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Eye,
   Fuel,
+  PlugZap,
   Pencil,
   Plus,
   Receipt,
@@ -13,12 +14,22 @@ import {
   X,
 } from 'lucide-react';
 import { Expense, ExpenseCategory, EXPENSE_CATEGORY_OPTIONS, Settings } from '../types';
-import { deleteImage, getImageWithRemoteFallback, saveImage } from '../services/imageStore';
+import { deleteImage, deleteRemoteReceipt, getImageWithRemoteFallback, saveImage } from '../services/imageStore';
 import { calcDeductibleAmount, classifyExpense } from '../shared/calculations/expenses';
 import type { Expense as EnhancedExpense } from '../shared/types/expense';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
+import { ReceiptStatusBadge } from './ReceiptStatusBadge';
+import { useReceiptUpload } from '../hooks/useReceiptUpload';
 import { todayUK, ukTaxYearStart } from '../utils/ukDate';
+import {
+  formatEnergyQuantity,
+  getEnergyQuantityLabel,
+  getEnergyQuantityUnitForCategory,
+  getVehicleEnergyExpenseCategory,
+  getVehicleEnergyExpenseDescription,
+  getVehicleEnergyExpenseLabel,
+} from '../utils/vehicleFuel';
 import {
   dangerButtonClasses,
   dialogBackdropClasses,
@@ -43,6 +54,7 @@ interface ExpenseLogProps {
   onAddExpense: (expense: ExpenseRecord) => void;
   onUpdateExpense: (expense: ExpenseRecord) => void;
   onDeleteExpense: (id: string) => void;
+  showToast?: (message: string, type?: 'success' | 'error' | 'warning' | 'info', duration?: number) => void;
   openFormSignal?: number;
   onOpenFormHandled?: () => void;
 }
@@ -87,6 +99,8 @@ const getReceiptBlobKey = async (expenseId: string, blob: Blob) => {
 
 const categoryMeta: Record<ExpenseCategory, { icon: typeof Fuel; circle: string }> = {
   [ExpenseCategory.FUEL]: { icon: Fuel, circle: 'bg-amber-500/20 text-amber-400' },
+  [ExpenseCategory.PUBLIC_CHARGING]: { icon: PlugZap, circle: 'bg-emerald-500/20 text-emerald-300' },
+  [ExpenseCategory.HOME_CHARGING]: { icon: PlugZap, circle: 'bg-cyan-500/20 text-cyan-300' },
   [ExpenseCategory.REPAIRS]: { icon: Wrench, circle: 'bg-indigo-500/20 text-indigo-400' },
   [ExpenseCategory.INSURANCE]: { icon: ShieldCheck, circle: 'bg-green-500/20 text-green-400' },
   [ExpenseCategory.TAX]: { icon: Receipt, circle: 'bg-red-500/20 text-red-400' },
@@ -184,6 +198,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
+  showToast,
   openFormSignal,
   onOpenFormHandled,
 }) => {
@@ -207,6 +222,12 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({});
   const receiptUrlsRef = useRef<Record<string, ReceiptUrlCacheEntry>>({});
+  const receiptUpload = useReceiptUpload();
+  const energyExpenseCategory = getVehicleEnergyExpenseCategory(settings);
+  const energyExpenseLabel = getVehicleEnergyExpenseLabel(settings);
+  const energyExpenseDescription = getVehicleEnergyExpenseDescription(settings);
+  const selectedEnergyUnit = getEnergyQuantityUnitForCategory((newExpense.category as ExpenseCategory) || ExpenseCategory.FUEL);
+  const selectedEnergyQuantityLabel = selectedEnergyUnit ? getEnergyQuantityLabel(selectedEnergyUnit) : '';
   const previousExpensesRef = useRef<Map<string, ExpenseRecord>>(new Map());
   const handledOpenFormSignalRef = useRef<number | undefined>(undefined);
   const receiptPreviewState = useMemo(() => {
@@ -414,7 +435,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
       hasReceiptImage: expense.hasReceiptImage,
     });
     setAmountInput(expense.amount ? expense.amount.toString() : '');
-    setLitersInput(expense.liters ? expense.liters.toString() : '');
+    setLitersInput((expense.energyQuantity ?? expense.liters) ? String(expense.energyQuantity ?? expense.liters) : '');
     setScopeInput(expense.scope ?? 'business');
     setBusinessUsePercentInput(expense.businessUsePercent ?? 100);
     setIsFormOpen(true);
@@ -426,10 +447,16 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
 
     const id = editingExpense?.id ?? Date.now().toString();
 
+    let uploadResult: Awaited<ReturnType<typeof receiptUpload.upload>> | null = null;
+
     if (selectedReceiptBlob) {
       await saveImage(id, selectedReceiptBlob);
+      uploadResult = await receiptUpload.upload(id, selectedReceiptBlob);
     } else if (isReceiptRemoved) {
       await deleteImage(id);
+      if (editingExpense?.receiptId) {
+        void deleteRemoteReceipt(editingExpense.receiptId);
+      }
     }
 
     const hasReceiptImage = selectedReceiptBlob
@@ -442,6 +469,8 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
 
     const category = (newExpense.category as ExpenseCategory) || ExpenseCategory.FUEL;
     const amount = parseFloat(amountInput) || 0;
+    const energyUnit = getEnergyQuantityUnitForCategory(category);
+    const energyQuantity = energyUnit && litersInput ? parseFloat(litersInput) : undefined;
     const scope = scopeInput;
     const businessUsePercent = scopeInput === 'personal' ? 0 : businessUsePercentInput;
     const { vehicleExpenseType, taxTreatment } = classifyExpense(category, scope, settings.claimMethod);
@@ -459,7 +488,9 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
       description: newExpense.description || '',
       hasReceiptImage,
       isVatClaimable: newExpense.isVatClaimable || false,
-      liters: litersInput ? parseFloat(litersInput) : undefined,
+      energyQuantity: Number.isFinite(energyQuantity) && energyQuantity && energyQuantity > 0 ? energyQuantity : undefined,
+      energyUnit: Number.isFinite(energyQuantity) && energyQuantity && energyQuantity > 0 ? energyUnit : undefined,
+      liters: energyUnit === 'litre' && Number.isFinite(energyQuantity) && energyQuantity && energyQuantity > 0 ? energyQuantity : undefined,
       scope,
       businessUsePercent,
       deductibleAmount,
@@ -473,12 +504,19 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
         receiptId: editingExpense.receiptId,
         receiptUrl: editingExpense.receiptUrl,
       }),
+      ...(uploadResult?.receiptId && {
+        receiptId: uploadResult.receiptId,
+      }),
     };
 
     if (editingExpense) {
       onUpdateExpense(expenseData);
     } else {
       onAddExpense(expenseData);
+    }
+
+    if (uploadResult?.status === 'local-only') {
+      showToast?.('Receipt saved locally - will sync when cloud upload is available', 'info');
     }
 
     closeForm();
@@ -491,7 +529,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
           <div>
             <h2 className="text-lg font-semibold text-white">Expense log</h2>
             <p className="text-sm text-slate-400">
-              Every expense logged reduces your tax bill. Fuel, insurance, repairs - it all counts.
+              Track fuel, charging, receipts, and running costs without double-claiming under simplified mileage.
             </p>
           </div>
           <div className="flex gap-2">
@@ -503,20 +541,21 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                 setIsReceiptRemoved(false);
                 setNewExpense({
                   date: todayUK(),
-                  category: ExpenseCategory.FUEL,
+                  category: energyExpenseCategory,
                   amount: 0,
-                  description: 'Fuel',
+                  description: energyExpenseDescription,
                   receiptUrl: '',
                   hasReceiptImage: false,
                   isVatClaimable: false,
+                  energyUnit: getEnergyQuantityUnitForCategory(energyExpenseCategory),
                   liters: 0,
                 });
                 setIsFormOpen(true);
               }}
               className={secondaryButtonClasses}
             >
-              <Fuel className="h-4 w-4" />
-              <span>Quick fuel</span>
+              {energyExpenseCategory === ExpenseCategory.FUEL ? <Fuel className="h-4 w-4" /> : <PlugZap className="h-4 w-4" />}
+              <span>Quick {energyExpenseLabel.toLowerCase()}</span>
             </button>
             <button
               type="button"
@@ -581,7 +620,14 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
           filteredExpenses.map((expense) => {
             const meta = categoryMeta[expense.category];
             const Icon = meta.icon;
+            const energyQuantityText = formatEnergyQuantity(
+              expense.energyQuantity ?? expense.liters,
+              expense.energyUnit ?? getEnergyQuantityUnitForCategory(expense.category)
+            );
             const receiptUrl = receiptUrls[expense.id];
+            const uploadStatus =
+              receiptUpload.getStatus(expense.id) ??
+              (expense.receiptId ? 'synced' : expense.hasReceiptImage ? 'local-only' : null);
 
             return (
               <article
@@ -603,8 +649,22 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
                       {expense.category} - {expense.date}
-                      {expense.liters ? ` - ${expense.liters}L` : ''}
+                      {energyQuantityText ? ` - ${energyQuantityText}` : ''}
                     </p>
+                    {uploadStatus && uploadStatus !== 'pending' && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <ReceiptStatusBadge status={uploadStatus} />
+                        {uploadStatus === 'failed' && (
+                          <button
+                            type="button"
+                            onClick={() => void receiptUpload.retry(expense.id)}
+                            className="text-xs font-medium text-brand hover:text-brand/80"
+                          >
+                            Retry upload
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">
@@ -720,7 +780,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                     value={amountInput}
                     onChange={(event) => {
                       setAmountInput(event.target.value);
-                      if (pricePerLitreInput && event.target.value) {
+                      if (selectedEnergyUnit === 'litre' && pricePerLitreInput && event.target.value) {
                         const litres = parseFloat(event.target.value) / (parseFloat(pricePerLitreInput) / 100);
                         if (Number.isFinite(litres) && litres > 0) setLitersInput(litres.toFixed(2));
                       }
@@ -790,11 +850,11 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                 )}
               </div>
 
-              {newExpense.category === ExpenseCategory.FUEL && (
+              {selectedEnergyUnit && (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="block">
                     <label htmlFor="expense-liters" className={fieldLabelClasses}>
-                      Fuel volume in litres
+                      {selectedEnergyQuantityLabel}
                     </label>
                     <input
                       id="expense-liters"
@@ -808,26 +868,28 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                       placeholder="0.00"
                     />
                   </div>
-                  <div className="block">
-                    <label htmlFor="expense-ppl" className={fieldLabelClasses}>
-                      Price per litre (p) - auto-calc litres
-                    </label>
-                    <input
-                      id="expense-ppl"
-                      {...getNumericInputProps('decimal')}
-                      value={pricePerLitreInput}
-                      onChange={(event) => {
-                        const ppl = event.target.value;
-                        setPricePerLitreInput(ppl);
-                        if (ppl && amountInput) {
-                          const litres = parseFloat(amountInput) / (parseFloat(ppl) / 100);
-                          if (Number.isFinite(litres) && litres > 0) setLitersInput(litres.toFixed(2));
-                        }
-                      }}
-                      className={`${inputClasses} font-mono`}
-                      placeholder="e.g. 142.9"
-                    />
-                  </div>
+                  {selectedEnergyUnit === 'litre' && (
+                    <div className="block">
+                      <label htmlFor="expense-ppl" className={fieldLabelClasses}>
+                        Price per litre (p) - auto-calc litres
+                      </label>
+                      <input
+                        id="expense-ppl"
+                        {...getNumericInputProps('decimal')}
+                        value={pricePerLitreInput}
+                        onChange={(event) => {
+                          const ppl = event.target.value;
+                          setPricePerLitreInput(ppl);
+                          if (ppl && amountInput) {
+                            const litres = parseFloat(amountInput) / (parseFloat(ppl) / 100);
+                            if (Number.isFinite(litres) && litres > 0) setLitersInput(litres.toFixed(2));
+                          }
+                        }}
+                        className={`${inputClasses} font-mono`}
+                        placeholder="e.g. 142.9"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -918,7 +980,11 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const expense = expenses.find((item) => item.id === expenseToDelete);
                   void deleteImage(expenseToDelete);
+                  if (expense?.receiptId) {
+                    void deleteRemoteReceipt(expense.receiptId);
+                  }
                   onDeleteExpense(expenseToDelete);
                   setExpenseToDelete(null);
                 }}

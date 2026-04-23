@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calcSimplifiedDeduction,
   calcActualDeduction,
+  calcVehicleTaxDeductions,
   compareTaxMethods,
   calcTaxableProfit,
   calcTaxBuffer,
@@ -41,6 +42,55 @@ describe('calcActualDeduction', () => {
   });
   it('returns 0 for empty array', () => {
     expect(calcActualDeduction([])).toBe(0);
+  });
+});
+
+describe('calcVehicleTaxDeductions', () => {
+  it('excludes EV charging from simplified mileage and includes parking separately', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Public Charging', amount: 100 },
+        { category: 'Home Charging', amount: 50 },
+        { category: 'Parking/Tolls', amount: 20 },
+      ],
+      totalMileageAllowance: 45,
+      businessUsePercent: 1,
+    });
+
+    expect(result.vehicleRunningCosts).toBe(150);
+    expect(result.otherBusinessExpenses).toBe(20);
+    expect(result.simplifiedDeduction).toBe(65);
+  });
+
+  it('apportions vehicle running costs by business use for actual costs', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Fuel', amount: 100 },
+        { category: 'Public Charging', amount: 80 },
+        { category: 'Phone', amount: 30 },
+      ],
+      totalMileageAllowance: 0,
+      businessUsePercent: 0.5,
+    });
+
+    expect(result.vehicleRunningCosts).toBe(180);
+    expect(result.otherBusinessExpenses).toBe(30);
+    expect(result.actualDeduction).toBe(120);
+  });
+
+  it('uses VAT-exclusive amounts when expenses are VAT claimable', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Fuel', amount: 120, isVatClaimable: true },
+        { category: 'Parking/Tolls', amount: 12, isVatClaimable: true },
+      ],
+      totalMileageAllowance: 0,
+      businessUsePercent: 1,
+    });
+
+    expect(result.vehicleRunningCosts).toBe(100);
+    expect(result.otherBusinessExpenses).toBe(10);
+    expect(result.actualDeduction).toBe(110);
   });
 });
 

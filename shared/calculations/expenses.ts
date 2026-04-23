@@ -5,26 +5,69 @@ import type {
   TaxTreatment,
 } from '../types/expense';
 
-// Categories that are vehicle running costs (blocked under simplified mileage)
-const RUNNING_COST_CATEGORIES = new Set([
-  'Fuel',
-  'Repairs & Maintenance',
-  'Insurance',
-  'Vehicle Tax',
-  'MOT',
-  'Cleaning',
-]);
+export type ExpenseCategoryTaxGroup =
+  | 'vehicle_running'
+  | 'separately_allowable'
+  | 'other_allowable';
 
-// Categories that are separately allowable even under simplified mileage
-const SEPARATELY_ALLOWABLE_CATEGORIES = new Set(['Parking/Tolls']);
+export type ExpenseCategoryTaxMetadata = {
+  category: string;
+  vehicleExpenseType: VehicleExpenseType;
+  taxGroup: ExpenseCategoryTaxGroup;
+};
+
+export const EXPENSE_CATEGORY_TAX_METADATA = [
+  { category: 'Fuel', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Public Charging', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Home Charging', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Repairs & Maintenance', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Insurance', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Vehicle Tax', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'MOT', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Cleaning', vehicleExpenseType: 'running_cost', taxGroup: 'vehicle_running' },
+  { category: 'Parking/Tolls', vehicleExpenseType: 'separately_allowable', taxGroup: 'separately_allowable' },
+  { category: 'Phone', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+  { category: 'Accountancy', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+  { category: 'Subscriptions', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+  { category: 'Protective Clothing', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+  { category: 'Training', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+  { category: 'Bank Charges', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+  { category: 'Other', vehicleExpenseType: 'non_vehicle', taxGroup: 'other_allowable' },
+] as const satisfies readonly ExpenseCategoryTaxMetadata[];
+
+const CATEGORY_TAX_METADATA = new Map<string, ExpenseCategoryTaxMetadata>(
+  EXPENSE_CATEGORY_TAX_METADATA.map((metadata) => [metadata.category, metadata])
+);
+
+export const VEHICLE_RUNNING_COST_CATEGORIES = EXPENSE_CATEGORY_TAX_METADATA
+  .filter((metadata) => metadata.taxGroup === 'vehicle_running')
+  .map((metadata) => metadata.category);
+
+export const SEPARATELY_ALLOWABLE_EXPENSE_CATEGORIES = EXPENSE_CATEGORY_TAX_METADATA
+  .filter((metadata) => metadata.taxGroup === 'separately_allowable')
+  .map((metadata) => metadata.category);
+
+export function getExpenseCategoryTaxMetadata(category: string): ExpenseCategoryTaxMetadata | undefined {
+  return CATEGORY_TAX_METADATA.get(category);
+}
+
+export function isVehicleRunningCostCategory(category: string): boolean {
+  return getExpenseCategoryTaxMetadata(category)?.taxGroup === 'vehicle_running';
+}
+
+export function isSeparatelyAllowableExpenseCategory(category: string): boolean {
+  return getExpenseCategoryTaxMetadata(category)?.taxGroup === 'separately_allowable';
+}
+
+export function isTaxAllowableExpenseCategory(category: string): boolean {
+  return getExpenseCategoryTaxMetadata(category) !== undefined;
+}
 
 /**
  * Derive HMRC vehicle expense type from category string.
  */
 export function getVehicleExpenseType(category: string): VehicleExpenseType {
-  if (RUNNING_COST_CATEGORIES.has(category)) return 'running_cost';
-  if (SEPARATELY_ALLOWABLE_CATEGORIES.has(category)) return 'separately_allowable';
-  return 'non_vehicle';
+  return getExpenseCategoryTaxMetadata(category)?.vehicleExpenseType ?? 'non_vehicle';
 }
 
 /**

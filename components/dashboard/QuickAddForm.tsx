@@ -3,6 +3,7 @@ import { ChevronDown, LoaderCircle } from 'lucide-react';
 import type { Settings } from '../../types';
 import type { ShiftPrediction } from '../../utils/shiftPredictor';
 import { formatNumber } from '../../utils/ui';
+import { getEnergyQuantityLabel, getVehicleEnergyExpenseLabel, getVehicleEnergyQuantityUnit } from '../../utils/vehicleFuel';
 import {
   formatCurrency,
   getNumericInputProps,
@@ -71,6 +72,16 @@ const pillButtonClass = (active: boolean) =>
     active ? 'bg-brand text-white' : 'border border-surface-border bg-surface-raised text-slate-300'
   }`;
 
+const getProviderRevenueTotal = (providers: ProviderDraftRow[]) =>
+  providers.reduce((sum, row) => {
+    if (!row.revenue.trim()) {
+      return sum;
+    }
+
+    const value = Number.parseFloat(row.revenue);
+    return Number.isFinite(value) ? sum + value : sum;
+  }, 0);
+
 export const QuickAddForm: React.FC<QuickAddFormProps> = ({
   showStartSheet,
   showEndSheet,
@@ -99,95 +110,115 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
   onUpdateEndShiftDraft,
   onSaveShift,
   activeSessionEstimatedRevenue,
-}) => (
-  <>
-    {showStartSheet && (
-      <div className={sheetBackdropClasses} onClick={onCloseStartSheet}>
-        <div className={sheetPanelClasses} onClick={(event) => event.stopPropagation()}>
-          <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-700" />
-          <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Start shift</p>
-            <p className="mt-2 text-lg font-semibold text-white">Add the odometer if you want mileage to auto-carry through the end sheet.</p>
-            {activePrediction.estimatedHours > 0 && (
-              <p className="mt-2 text-sm text-emerald-100/80">Avg for today: ~{formatNumber(activePrediction.estimatedHours, 1)} hrs</p>
-            )}
-          </div>
+  settings,
+}) => {
+  const [showZeroEarningsWarning, setShowZeroEarningsWarning] = React.useState(false);
 
-          <div className="mt-5">
-            <label htmlFor="start-provider" className="block text-sm font-medium text-slate-300">
-              Provider
-            </label>
-            <select
-              id="start-provider"
-              value={startProvider}
-              onChange={(event) => onStartProviderChange(event.target.value)}
-              className={`${inputClasses} mt-2`}
-            >
-              {providerOptions.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
-                </option>
-              ))}
-            </select>
-          </div>
+  const totalEarnings = getProviderRevenueTotal(endShiftDraft.providers);
+  const energyExpenseLabel = getVehicleEnergyExpenseLabel(settings);
+  const energyQuantityUnit = getVehicleEnergyQuantityUnit(settings);
+  const energyQuantityLabel = getEnergyQuantityLabel(energyQuantityUnit);
 
-          <div className="mt-5">
-            <label htmlFor="start-odometer" className="block text-sm font-medium text-slate-300">
-              Start odometer <span className="text-slate-500">(optional)</span>
-            </label>
-            <input
-              id="start-odometer"
-              {...getNumericInputProps()}
-              autoFocus
-              value={startOdometer}
-              onChange={(event) => onStartOdometerChange(event.target.value)}
-              placeholder="Enter miles on the dash"
-              className={`${inputClasses} mt-2`}
-            />
-            {storedLastEndOdometer != null && (
-              <p className="mt-2 text-xs text-slate-400">Picked up from your last end odometer.</p>
-            )}
-          </div>
+  React.useEffect(() => {
+    if (!showEndSheet) {
+      setShowZeroEarningsWarning(false);
+    }
+  }, [showEndSheet]);
 
-          <div className="mt-5 flex gap-3">
-            <button type="button" onClick={onCloseStartSheet} className={`${secondaryButtonClasses} flex-1 justify-center`}>
-              Cancel
-            </button>
-            <button type="button" onClick={onStartSession} className={`${primaryButtonClasses} flex-1 justify-center`}>
-              Start shift
-            </button>
+  const handleSaveShift = () => {
+    setShowZeroEarningsWarning(totalEarnings === 0);
+    onSaveShift();
+  };
+
+  return (
+    <>
+      {showStartSheet && (
+        <div className={sheetBackdropClasses} onClick={onCloseStartSheet}>
+          <div className={sheetPanelClasses} onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-700" />
+            <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Start shift</p>
+              <p className="mt-2 text-lg font-semibold text-white">Add the odometer if you want mileage to auto-carry through the end sheet.</p>
+              {activePrediction.estimatedHours > 0 && (
+                <p className="mt-2 text-sm text-emerald-100/80">Avg for today: ~{formatNumber(activePrediction.estimatedHours, 1)} hrs</p>
+              )}
+            </div>
+
+            <div className="mt-5">
+              <label htmlFor="start-provider" className="block text-sm font-medium text-slate-300">
+                Provider
+              </label>
+              <select
+                id="start-provider"
+                value={startProvider}
+                onChange={(event) => onStartProviderChange(event.target.value)}
+                className={`${inputClasses} mt-2`}
+              >
+                {providerOptions.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-5">
+              <label htmlFor="start-odometer" className="block text-sm font-medium text-slate-300">
+                Start odometer <span className="text-slate-500">(optional)</span>
+              </label>
+              <input
+                id="start-odometer"
+                {...getNumericInputProps()}
+                autoFocus
+                value={startOdometer}
+                onChange={(event) => onStartOdometerChange(event.target.value)}
+                placeholder="Enter miles on the dash"
+                className={`${inputClasses} mt-2`}
+              />
+              {storedLastEndOdometer != null && (
+                <p className="mt-2 text-xs text-slate-400">Picked up from your last end odometer.</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button type="button" onClick={onCloseStartSheet} className={`${secondaryButtonClasses} flex-1 justify-center`}>
+                Cancel
+              </button>
+              <button type="button" onClick={onStartSession} className={`${primaryButtonClasses} flex-1 justify-center`}>
+                Start shift
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
-    {showEndSheet && (
-      <div className={sheetBackdropClasses} onClick={onCloseEndSheet}>
-        <div className={sheetPanelClasses} data-testid="end-shift-sheet" onClick={(event) => event.stopPropagation()}>
-          <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-700" />
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            {endSheetMode === 'active' ? 'End your shift' : 'Quick add shift'}
-          </p>
-          <h2 className="mt-3 text-2xl font-semibold text-white">
-            {endSheetMode === 'active'
-              ? `${formatNumber(activeDurationHours, 2)}h logged so far`
-              : new Date(`${manualShiftDate}T12:00:00Z`).toLocaleDateString('en-GB', {
-                  timeZone: 'Europe/London',
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'short',
-                })}
-          </h2>
-          {endSheetMode === 'manual' && (
-            <p className="mt-2 text-sm text-slate-400">
-              Smart pre-fill is using your usual pattern for this day. Adjust anything before you save.
+      {showEndSheet && (
+        <div className={sheetBackdropClasses} onClick={onCloseEndSheet}>
+          <div className={sheetPanelClasses} data-testid="end-shift-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-700" />
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              {endSheetMode === 'active' ? 'End your shift' : 'Quick add shift'}
             </p>
-          )}
-          {(endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).confidence === 'high' && (
-            <p className="mt-2 text-sm text-cyan-200">
-              Your recent average for this day: {formatCurrency((endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).estimatedRevenueMin)}-{formatCurrency((endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).estimatedRevenueMax)}
-            </p>
-          )}
+            <h2 className="mt-3 text-2xl font-semibold text-white">
+              {endSheetMode === 'active'
+                ? `${formatNumber(activeDurationHours, 2)}h logged so far`
+                : new Date(`${manualShiftDate}T12:00:00Z`).toLocaleDateString('en-GB', {
+                    timeZone: 'Europe/London',
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+            </h2>
+            {endSheetMode === 'manual' && (
+              <p className="mt-2 text-sm text-slate-400">
+                Smart pre-fill is using your usual pattern for this day. Adjust anything before you save.
+              </p>
+            )}
+            {(endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).confidence === 'high' && (
+              <p className="mt-2 text-sm text-cyan-200">
+                Your recent average for this day: {formatCurrency((endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).estimatedRevenueMin)}-{formatCurrency((endSheetMode === 'active' ? activeSessionEstimatedRevenue : manualPrediction).estimatedRevenueMax)}
+              </p>
+            )}
 
           <div className="mt-5 space-y-4">
             {endSheetMode === 'manual' && (
@@ -304,7 +335,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
             </div>
 
             <div>
-              <p className="block text-sm font-medium text-slate-300">Fuel today?</p>
+              <p className="block text-sm font-medium text-slate-300">{energyExpenseLabel} today?</p>
               <div className="mt-2 flex gap-2">
                 <button type="button" onClick={() => onUpdateEndShiftDraft({ fuelChoice: 'yes' })} className={pillButtonClass(endShiftDraft.fuelChoice === 'yes')}>
                   Yes
@@ -317,7 +348,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
                     <label htmlFor="fuel-amount" className="block text-sm font-medium text-slate-300">
-                      Fuel amount
+                      {energyExpenseLabel} amount
                     </label>
                     <input
                       id="fuel-amount"
@@ -330,7 +361,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
                   </div>
                   <div>
                     <label htmlFor="fuel-litres" className="block text-sm font-medium text-slate-300">
-                      Litres <span className="text-slate-500">(optional)</span>
+                      {energyQuantityLabel}
                     </label>
                     <input
                       id="fuel-litres"
@@ -402,16 +433,25 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
             )}
           </div>
 
-          <div className="mt-5 flex gap-3">
-            <button type="button" onClick={onCloseEndSheet} className={`${secondaryButtonClasses} flex-1 justify-center`}>
-              Cancel
-            </button>
-            <button type="button" onClick={onSaveShift} className={`${primaryButtonClasses} flex-1 justify-center`}>
-              Save shift
-            </button>
+            <div className="mt-5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Total earnings</span>
+                <span className="font-medium text-white">{formatCurrency(totalEarnings)}</span>
+              </div>
+              {showZeroEarningsWarning && totalEarnings === 0 && (
+                <p className="mt-2 text-sm text-brand">No earnings entered - are you sure?</p>
+              )}
+              <div className="mt-3 flex gap-3">
+                <button type="button" onClick={onCloseEndSheet} className={`${secondaryButtonClasses} flex-1 justify-center`}>
+                  Cancel
+                </button>
+                <button type="button" onClick={handleSaveShift} className={`${primaryButtonClasses} flex-1 justify-center`}>
+                  Save shift
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
     )}
 
     {endingShift && (
@@ -423,5 +463,6 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
         </div>
       </div>
     )}
-  </>
-);
+    </>
+  );
+};
