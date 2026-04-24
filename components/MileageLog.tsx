@@ -329,7 +329,7 @@ export const MileageLog: React.FC<MileageLogProps> = ({
                     <span className={`rounded-full px-2 py-0.5 text-xs ${purposeBadgeClasses[trip.purpose]}`}>
                       {trip.purpose}
                     </span>
-                    {trip.notes.startsWith('Auto from') && (
+                    {trip.notes?.startsWith('Auto from') && (
                       <span className="flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-400">
                         <Link2 className="h-3 w-3" />
                         {trip.notes}
@@ -346,7 +346,7 @@ export const MileageLog: React.FC<MileageLogProps> = ({
                         &asymp; &pound;{calculateMileageClaim(trip.totalMiles, settings.businessRateFirst10k, settings.businessRateAfter10k).toFixed(2)} claimable
                       </p>
                     )}
-                    {!trip.notes.startsWith('Auto from') && trip.notes && (
+                    {!trip.notes?.startsWith('Auto from') && trip.notes && (
                       <p className="mt-1 text-xs text-slate-500">{trip.notes}</p>
                     )}
                     <p className="mt-1 text-xs text-slate-500">

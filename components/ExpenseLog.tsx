@@ -183,7 +183,7 @@ function MonthlySummaryBar({ expenses }: { expenses: ExpenseRecord[] }) {
         {(Object.entries(byCategory) as [ExpenseCategory, number][])
           .sort((left, right) => right[1] - left[1])
           .map(([category, amount]) => (
-            <span key={category} className={`rounded-full px-3 py-1 text-xs font-medium ${categoryMeta[category].circle}`}>
+            <span key={category} className={`rounded-full px-3 py-1 text-xs font-medium ${(categoryMeta[category] ?? { circle: 'bg-slate-500/20 text-slate-400' }).circle}`}>
               {category} {formatCurrency(amount)}
             </span>
           ))}
@@ -618,7 +618,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
           />
         ) : (
           filteredExpenses.map((expense) => {
-            const meta = categoryMeta[expense.category];
+            const meta = categoryMeta[expense.category] ?? { icon: Receipt, circle: 'bg-slate-500/20 text-slate-400' };
             const Icon = meta.icon;
             const energyQuantityText = formatEnergyQuantity(
               expense.energyQuantity ?? expense.liters,
