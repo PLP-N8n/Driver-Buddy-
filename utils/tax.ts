@@ -69,10 +69,11 @@ export function calculateEnglishIncomeTax(taxableIncome: number, personalAllowan
 export function calculateScottishIncomeTax(taxableIncome: number): number {
   if (taxableIncome <= 0) return 0;
 
+  // 2026/27 bands (Scottish Budget, January 2026)
   const bands = [
-    { limit: 2_306, rate: 0.19 },
-    { limit: 11_685, rate: 0.20 },
-    { limit: 17_101, rate: 0.21 },
+    { limit: 3_967, rate: 0.19 },
+    { limit: 12_989, rate: 0.20 },
+    { limit: 14_136, rate: 0.21 },
     { limit: 31_338, rate: 0.42 },
     { limit: 50_140, rate: 0.45 },
     { limit: Infinity, rate: 0.48 },

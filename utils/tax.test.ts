@@ -103,7 +103,7 @@ describe('calculateScottishIncomeTax', () => {
   });
 
   it('applies multiple bands correctly for 30,000 taxable income', () => {
-    assertCloseTo(calculateScottishIncomeTax(30_000), 6_137, 0);
+    assertCloseTo(calculateScottishIncomeTax(30_000), 6_091, 0);
   });
 });
 

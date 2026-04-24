@@ -328,6 +328,7 @@ export function AppShell() {
     setPlayerStats,
     triggerTextDownload,
     queueDownload,
+    clearDeletedIds,
   });
   useHydration({
     setTrips,

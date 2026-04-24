@@ -372,7 +372,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
           <>
             <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span className="number-large glow-amber text-xl text-white">{formatCurrency(weeklyTarget)}</span>
-              <span className="text-sm text-slate-400">/ week to cover your bill by 31 Jan</span>
+              <span className="text-sm text-slate-400">/ week to cover your bill by 5 April</span>
             </div>
             <p className="mt-1 text-xs text-slate-500">{weeksLeft} week{weeksLeft !== 1 ? 's' : ''} remaining in tax year</p>
           </>
@@ -500,8 +500,8 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
         const taxYearEndDate = getTaxYearEndDate();
         const endYear = Number(ukTaxYearEnd().slice(0, 4));
         const dates = [
-          { label: 'Self Assessment filing + payment', date: new Date(Date.UTC(endYear, 0, 31, 12)) },
-          { label: 'Payment on Account (2nd)', date: new Date(Date.UTC(endYear, 6, 31, 12)) },
+          { label: 'Self Assessment filing + payment', date: new Date(Date.UTC(endYear + 1, 0, 31, 12)) },
+          { label: 'Payment on Account (2nd)', date: new Date(Date.UTC(endYear + 1, 6, 31, 12)) },
           { label: 'Tax year end', date: taxYearEndDate },
         ];
 

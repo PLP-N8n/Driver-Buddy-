@@ -92,6 +92,7 @@ interface UseBackupRestoreParams {
   setPlayerStats: React.Dispatch<React.SetStateAction<PlayerStats>>;
   triggerTextDownload: (filename: string, content: string, mimeType: string) => void;
   queueDownload: (count: number, fn: () => void) => void;
+  clearDeletedIds?: () => void;
 }
 
 export function useBackupRestore({
@@ -108,6 +109,7 @@ export function useBackupRestore({
   setPlayerStats,
   triggerTextDownload,
   queueDownload,
+  clearDeletedIds,
 }: UseBackupRestoreParams) {
   const [backupCode, setBackupCode] = useState(() => getBackupCode());
   const [restoreStatusMessage, setRestoreStatusMessage] = useState<string | null>(null);
@@ -371,6 +373,8 @@ export function useBackupRestore({
       clearRegistrationCache(pendingRestoreReview.accountId);
       clearSessionCache();
       localStorage.removeItem('pending_identity');
+      localStorage.removeItem('driver_deleted_ids');
+      clearDeletedIds?.();
       setBackupCode(getBackupCode());
       setPendingRestoreReview(null);
 
