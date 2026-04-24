@@ -236,46 +236,54 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   return (
     <div className="space-y-4">
       <section className={`${panelClasses} p-5`}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className={`${subtlePanelClasses} p-4`}>
-            <p className="text-sm text-slate-400">Estimated tax bill</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(projection.estimatedLiability)}</p>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <div className={`${subtlePanelClasses} p-5`}>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">What to set aside this week</p>
+            {analysis.totalRevenue === 0 ? (
+              <>
+                <p className="number-large glow-amber mt-3 text-4xl text-white">{formatCurrency(0)}</p>
+                <p className="mt-2 text-sm text-slate-400">Log shifts to see your weekly target.</p>
+              </>
+            ) : projection.estimatedLiability === 0 ? (
+              <>
+                <p className="number-large mt-3 text-4xl text-green-400">{formatCurrency(0)}</p>
+                <p className="mt-2 text-sm text-green-400">No tax due, so nothing needs to be set aside.</p>
+              </>
+            ) : weeklyTarget === 0 ? (
+              <>
+                <p className="number-large mt-3 text-4xl text-green-400">{formatCurrency(0)}</p>
+                <p className="mt-2 text-sm text-green-400">You're on track and the tax pot is fully covered.</p>
+              </>
+            ) : (
+              <>
+                <p className="number-large glow-amber mt-3 text-4xl text-white">{formatCurrency(weeklyTarget)}</p>
+                <p className="mt-2 text-sm text-slate-400">
+                  Per week to cover your estimated bill by 5 April. {weeksLeft} week{weeksLeft !== 1 ? 's' : ''} remaining.
+                </p>
+              </>
+            )}
           </div>
-          <div className={`${subtlePanelClasses} p-4`}>
-            <p className="text-sm text-slate-400">Already set aside</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(taxSetAside)}</p>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            <div className={`${subtlePanelClasses} p-4`}>
+              <p className="text-sm text-slate-400">Estimated tax bill</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(projection.estimatedLiability)}</p>
+            </div>
+            <div className={`${subtlePanelClasses} p-4`}>
+              <p className="text-sm text-slate-400">Already set aside</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(taxSetAside)}</p>
+            </div>
+            <div className={`${subtlePanelClasses} p-4`}>
+              <p className="text-sm text-slate-400">Gap</p>
+              <p className={`mt-2 text-2xl font-semibold ${potGapAmount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                {formatCurrency(potGapAmount)}
+              </p>
+            </div>
           </div>
-          <div className={`${subtlePanelClasses} p-4`}>
-            <p className="text-sm text-slate-400">Gap</p>
-            <p className={`mt-2 text-2xl font-semibold ${potGapAmount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
-              {formatCurrency(potGapAmount)}
-            </p>
-          </div>
-          <div className={`${subtlePanelClasses} p-4`}>
-            <p className="text-sm text-slate-400">Weekly target to close gap</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(weeklyTarget)}</p>
-          </div>
-        </div>
-      </section>
-
-      <section data-testid="tax-pack-section" className={`${panelClasses} p-5`}>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-lg font-semibold text-white">Tax Pack - everything your accountant needs</p>
-            <p className="mt-2 text-sm text-slate-300">
-              Tax year {taxYearLabel} · {filteredLogs.length} work logs · {formatCurrency(filteredLogs.reduce((sum, log) => sum + log.revenue, 0))}
-            </p>
-            <p className="mt-2 text-sm text-slate-400">Includes: HMRC summary · Accountant CSV · Mileage log</p>
-          </div>
-          <button type="button" onClick={handleTaxPackDownload} className={primaryButtonClasses}>
-            <Download className="h-4 w-4" />
-            <span>Download Tax Pack (3 files)</span>
-          </button>
         </div>
       </section>
 
       <section className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-900/40 to-emerald-900/40 p-4">
-        <div className="flex items-center justify-between gap-4">
+        <div>
           <div>
             <p className="text-lg font-semibold text-white">Tax Year {taxYearLabel}</p>
             <span className="mt-2 inline-flex rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-300">
@@ -315,21 +323,6 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
               </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={handleHmrcSummaryDownload} className={secondaryButtonClasses}>
-              <Download className="h-4 w-4" />
-              <span>HMRC Summary</span>
-            </button>
-            <button
-              type="button"
-              title="Formatted for HMRC self-assessment"
-              onClick={handleExport}
-              className={secondaryButtonClasses}
-            >
-              <Download className="h-4 w-4" />
-              <span>Download Accountant CSV</span>
-            </button>
-          </div>
         </div>
       </section>
 
@@ -356,25 +349,6 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
               )}{' '}
               ({formatNumber(potPct * 100, 0)}%)
             </p>
-          </>
-        )}
-      </section>
-
-      <section className={`${subtlePanelClasses} p-4`}>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Weekly target</p>
-        {analysis.totalRevenue === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">Log shifts to see your weekly target.</p>
-        ) : projection.estimatedLiability === 0 ? (
-          <p className="mt-2 text-sm text-green-400">No tax due, so nothing needs to be set aside.</p>
-        ) : weeklyTarget === 0 ? (
-          <p className="mt-2 text-sm text-green-400">You're on track and the tax pot is fully covered.</p>
-        ) : (
-          <>
-            <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span className="number-large glow-amber text-xl text-white">{formatCurrency(weeklyTarget)}</span>
-              <span className="text-sm text-slate-400">/ week to cover your bill by 5 April</span>
-            </div>
-            <p className="mt-1 text-xs text-slate-500">{weeksLeft} week{weeksLeft !== 1 ? 's' : ''} remaining in tax year</p>
           </>
         )}
       </section>
@@ -613,6 +587,37 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
               ))
             )}
           </div>
+      </section>
+
+      <section data-testid="tax-pack-section" className={`${panelClasses} p-5`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-lg font-semibold text-white">Download records for accountant</p>
+            <p className="mt-2 text-sm text-slate-300">
+              Tax year {taxYearLabel} | {filteredLogs.length} work logs | {formatCurrency(filteredLogs.reduce((sum, log) => sum + log.revenue, 0))}
+            </p>
+            <p className="mt-2 text-sm text-slate-400">Includes: HMRC summary | Accountant CSV | Mileage log</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={handleTaxPackDownload} className={primaryButtonClasses}>
+              <Download className="h-4 w-4" />
+              <span>Download records for accountant</span>
+            </button>
+            <button type="button" onClick={handleHmrcSummaryDownload} className={secondaryButtonClasses}>
+              <Download className="h-4 w-4" />
+              <span>HMRC Summary</span>
+            </button>
+            <button
+              type="button"
+              title="Formatted for HMRC self-assessment"
+              onClick={handleExport}
+              className={secondaryButtonClasses}
+            >
+              <Download className="h-4 w-4" />
+              <span>Download Accountant CSV</span>
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   );

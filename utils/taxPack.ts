@@ -200,7 +200,7 @@ export function generateTaxPackCSVs(options: TaxPackOptions): {
   ];
 
   const detailRows: Array<Array<string | number>> = [];
-  detailRows.push(['REPORT', 'Driver Buddy Tax Pack']);
+  detailRows.push(['REPORT', 'Download records for accountant']);
   detailRows.push(['Tax Year', summary.taxYearLabel]);
   detailRows.push(['Date Range', summary.taxYearRangeLabel]);
   detailRows.push(['Important', 'Estimate for reference only. Verify with your accountant.']);

@@ -1,8 +1,8 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Bell, Car, Receipt, Share2, Sparkles } from 'lucide-react';
 import { calcKept } from '../../shared/calculations/tax';
 import type { CompletedShiftSummary } from '../../types';
-import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses } from '../../utils/ui';
+import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses, secondaryButtonClasses } from '../../utils/ui';
 
 type WeeklySummaryProps = {
   completedShiftSummary: CompletedShiftSummary;
@@ -12,9 +12,28 @@ type WeeklySummaryProps = {
   summaryProgressPercent: number;
   weeklyRevenueTarget: number;
   onDismissCompletedSummary: () => void;
+  onShareSummary: (summaryText: string) => void | Promise<void>;
+  onAddExpense: () => void;
+  onAddMiles: () => void;
+  onSetReminder: () => void;
 };
 
 const summaryStatClass = 'rounded-2xl border border-surface-border bg-surface-raised px-4 py-3';
+
+const buildEarningsSummaryLine = (summary: CompletedShiftSummary) => {
+  const parts = [`You kept ${formatCurrency(summary.realProfit)}`];
+  const taxSaved = Math.max(0, summary.mileageClaim + summary.expensesTotal);
+
+  if (taxSaved > 0) {
+    parts.push(`saved ${formatCurrency(taxSaved)} tax`);
+  }
+
+  if (summary.mileageClaim > 0) {
+    parts.push(`claimed ${formatCurrency(summary.mileageClaim)} mileage`);
+  }
+
+  return parts.join(', ');
+};
 
 export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   completedShiftSummary,
@@ -24,6 +43,10 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   summaryProgressPercent,
   weeklyRevenueTarget,
   onDismissCompletedSummary,
+  onShareSummary,
+  onAddExpense,
+  onAddMiles,
+  onSetReminder,
 }) => {
   // Keep this aligned with the shared tax layer instead of relying on a stored snapshot value.
   const kept = calcKept(
@@ -31,6 +54,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
     completedShiftSummary.expensesTotal,
     completedShiftSummary.taxToSetAside
   );
+  const earningsSummaryLine = buildEarningsSummaryLine(completedShiftSummary);
 
   return (
     <section data-testid="shift-summary-card" className={`${panelClasses} p-6`}>
@@ -75,6 +99,43 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
           <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${summaryProgressPercent}%` }} />
         </div>
+      </div>
+
+      <p className="mt-5 text-center text-sm font-medium text-slate-100">{earningsSummaryLine}</p>
+
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <button
+          type="button"
+          onClick={() => void onShareSummary(earningsSummaryLine)}
+          className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
+        >
+          <Share2 className="h-4 w-4" />
+          <span>Share</span>
+        </button>
+        <button
+          type="button"
+          onClick={onAddExpense}
+          className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
+        >
+          <Receipt className="h-4 w-4" />
+          <span>Add expense</span>
+        </button>
+        <button
+          type="button"
+          onClick={onAddMiles}
+          className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
+        >
+          <Car className="h-4 w-4" />
+          <span>Add miles</span>
+        </button>
+        <button
+          type="button"
+          onClick={onSetReminder}
+          className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
+        >
+          <Bell className="h-4 w-4" />
+          <span>Set reminder</span>
+        </button>
       </div>
 
       <button type="button" onClick={onDismissCompletedSummary} className={`${primaryButtonClasses} mt-5 w-full justify-center`}>

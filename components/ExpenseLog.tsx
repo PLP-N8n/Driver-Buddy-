@@ -15,12 +15,13 @@ import {
 } from 'lucide-react';
 import { Expense, ExpenseCategory, EXPENSE_CATEGORY_OPTIONS, Settings } from '../types';
 import { deleteImage, deleteRemoteReceipt, getImageWithRemoteFallback, saveImage } from '../services/imageStore';
-import { calcDeductibleAmount, classifyExpense } from '../shared/calculations/expenses';
+import { calcDeductibleAmount, classifyExpense, isVehicleRunningCostCategory } from '../shared/calculations/expenses';
 import type { Expense as EnhancedExpense } from '../shared/types/expense';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
 import { ReceiptStatusBadge } from './ReceiptStatusBadge';
 import { useReceiptUpload } from '../hooks/useReceiptUpload';
+import { getSimplifiedMileageDeductibleExplanation } from '../utils/simplifiedMileageDeductibleCopy';
 import { todayUK, ukTaxYearStart } from '../utils/ukDate';
 import {
   formatEnergyQuantity,
@@ -56,6 +57,10 @@ interface ExpenseLogProps {
   onDeleteExpense: (id: string) => void;
   showToast?: (message: string, type?: 'success' | 'error' | 'warning' | 'info', duration?: number) => void;
   openFormSignal?: number;
+  openFormDefaults?: {
+    date?: string;
+    linkedShiftId?: string;
+  };
   onOpenFormHandled?: () => void;
 }
 
@@ -127,7 +132,7 @@ const createDefaultExpenseDraft = (): Partial<ExpenseRecord> => ({
   liters: undefined,
 });
 
-function TaxYearDeductibleCallout({ expenses }: { expenses: ExpenseRecord[] }) {
+function TaxYearDeductibleCallout({ expenses, settings }: { expenses: ExpenseRecord[]; settings: Settings }) {
   const taxYearStart = ukTaxYearStart();
   const taxYearExpenses = expenses.filter((expense) => expense.date >= taxYearStart);
 
@@ -137,16 +142,29 @@ function TaxYearDeductibleCallout({ expenses }: { expenses: ExpenseRecord[] }) {
     (sum, expense) => sum + getStoredDeductibleAmount(expense),
     0
   );
+  const simplifiedMileageExplanation = getSimplifiedMileageDeductibleExplanation(
+    taxYearExpenses.map((expense) => ({
+      category: expense.category,
+      deductibleAmount: getStoredDeductibleAmount(expense),
+      scope: expense.scope,
+      taxTreatment: expense.taxTreatment,
+    })),
+    settings
+  );
 
   return (
     <section className="rounded-xl border border-green-500/20 bg-green-950/30 p-4">
       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tax year deductible</p>
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mono text-xl font-bold text-green-400">{formatCurrency(totalDeductible)}</span>
-        <span className="text-sm text-slate-400">
-          across {taxYearExpenses.length} expense{taxYearExpenses.length !== 1 ? 's' : ''}
-        </span>
-      </div>
+      {simplifiedMileageExplanation ? (
+        <p className="mt-2 text-sm font-medium text-green-200">{simplifiedMileageExplanation}</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="font-mono text-xl font-bold text-green-400">{formatCurrency(totalDeductible)}</span>
+          <span className="text-sm text-slate-400">
+            across {taxYearExpenses.length} expense{taxYearExpenses.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
     </section>
   );
 }
@@ -200,6 +218,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   onDeleteExpense,
   showToast,
   openFormSignal,
+  openFormDefaults,
   onOpenFormHandled,
 }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -360,9 +379,14 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
     if (!openFormSignal || handledOpenFormSignalRef.current === openFormSignal) return;
     handledOpenFormSignalRef.current = openFormSignal;
     closeForm();
+    setNewExpense({
+      ...createDefaultExpenseDraft(),
+      date: openFormDefaults?.date ?? todayUK(),
+      linkedShiftId: openFormDefaults?.linkedShiftId ?? null,
+    });
     setIsFormOpen(true);
     onOpenFormHandled?.();
-  }, [onOpenFormHandled, openFormSignal]);
+  }, [onOpenFormHandled, openFormDefaults, openFormSignal]);
   useEffect(() => {
     sessionStorage.setItem(EXPENSE_FILTER_KEY, activeFilter);
   }, [activeFilter]);
@@ -497,7 +521,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
       nonDeductibleAmount,
       vehicleExpenseType,
       taxTreatment,
-      linkedShiftId: editingExpense?.linkedShiftId ?? null,
+      linkedShiftId: editingExpense?.linkedShiftId ?? newExpense.linkedShiftId ?? null,
       sourceType: editingExpense?.sourceType ?? 'manual',
       reviewStatus: editingExpense ? 'edited' : 'confirmed',
       ...(isMetadataOnlyEdit && {
@@ -573,7 +597,7 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
         </div>
       </section>
 
-      <TaxYearDeductibleCallout expenses={expenses} />
+      <TaxYearDeductibleCallout expenses={expenses} settings={settings} />
       <MonthlySummaryBar expenses={expenses} />
 
       <section className="flex gap-2 overflow-x-auto px-4 py-3 no-scrollbar">

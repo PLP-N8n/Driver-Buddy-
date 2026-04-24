@@ -10,7 +10,7 @@ type IntelligenceFeedProps = {
   isPredictionExpanded: boolean;
   onTogglePrediction: () => void;
   onDismissPrediction: (message: string, type: DriverPrediction['type']) => void;
-  onOpenTaxTab?: () => void;
+  onSetReminder?: () => void;
   missedDays: string[];
   onOpenBackfill: () => void;
 };
@@ -23,7 +23,7 @@ export const IntelligenceFeed: React.FC<IntelligenceFeedProps> = ({
   isPredictionExpanded,
   onTogglePrediction,
   onDismissPrediction,
-  onOpenTaxTab,
+  onSetReminder,
   missedDays,
   onOpenBackfill,
 }) => (
@@ -59,10 +59,11 @@ export const IntelligenceFeed: React.FC<IntelligenceFeedProps> = ({
             {isPredictionExpanded && topPrediction.actionLabel && (
               <button
                 type="button"
+                data-testid="prediction-action"
                 onClick={(event) => {
                   event.stopPropagation();
                   if (topPrediction.type === 'target') {
-                    onOpenTaxTab?.();
+                    onSetReminder?.();
                   }
                 }}
                 className="mt-3 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-100"

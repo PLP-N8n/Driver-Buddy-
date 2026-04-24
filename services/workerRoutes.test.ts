@@ -184,7 +184,7 @@ describe('Worker auth route', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ expiresIn: 3600 });
+    expect(await response.json()).toMatchObject({ expiresIn: 900 });
   });
 });
 
@@ -205,7 +205,7 @@ describe('Worker receipt route', () => {
         }),
       }),
       {
-        DB: makeDb({ count: 0, oldest: Date.now() }),
+        DB: makeDb({ devices: ['1'.repeat(64)], firstResult: { count: 0, oldest: Date.now() } }),
         RECEIPTS: {} as R2Bucket,
         RECEIPT_SECRET: 'test-secret',
       }
@@ -237,7 +237,7 @@ describe('Worker actual response CORS headers', () => {
         },
       }),
       {
-        DB: makeDb({ devices: [] }),
+        DB: makeDb({ devices: ['f'.repeat(64)] }),
         RECEIPT_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
@@ -263,7 +263,7 @@ describe('Worker actual response CORS headers', () => {
         }),
       }),
       {
-        DB: makeDb({ devices: [] }),
+        DB: makeDb({ devices: ['2'.repeat(64)] }),
         RECEIPTS: {} as R2Bucket,
         RECEIPT_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
@@ -272,6 +272,33 @@ describe('Worker actual response CORS headers', () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe(extraOrigin);
+  });
+
+  it('rejects receipt upload when a valid X-Session-Token belongs to an account with no registered devices', async () => {
+    const token = await issueSessionToken('account-123', 'test-secret');
+    const response = await handleRequestUpload(
+      new Request('https://worker.example.test/api/receipts/request-upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: extraOrigin,
+          'X-Session-Token': token,
+        },
+        body: JSON.stringify({
+          filename: 'fuel receipt.jpg',
+          contentType: 'image/jpeg',
+        }),
+      }),
+      {
+        DB: makeDb({ devices: [], firstResult: { count: 0, oldest: Date.now() } }),
+        RECEIPTS: {} as R2Bucket,
+        RECEIPT_SECRET: 'test-secret',
+        EXTRA_ALLOWED_ORIGINS: extraOrigin,
+      }
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: 'unauthorized' });
   });
 
   it('allows extra configured origins on Plaid status responses', async () => {
@@ -285,7 +312,7 @@ describe('Worker actual response CORS headers', () => {
         },
       }),
       {
-        DB: makeDb({ plaidConnection: null }),
+        DB: makeDb({ devices: ['a'.repeat(64)], plaidConnection: null }),
         RECEIPT_SECRET: 'test-secret',
         PLAID_TOKEN_KEY: 'test-key',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
@@ -294,6 +321,71 @@ describe('Worker actual response CORS headers', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe(extraOrigin);
+    expect(await response.json()).toMatchObject({ connected: false });
+  });
+
+  it('rejects sync pull when a valid X-Session-Token belongs to an account with no registered devices', async () => {
+    const token = await issueSessionToken('account-123', 'test-secret');
+    const response = await handleSyncPull(
+      new Request('https://worker.example.test/api/sync/pull', {
+        method: 'GET',
+        headers: {
+          Origin: extraOrigin,
+          'X-Session-Token': token,
+        },
+      }),
+      {
+        DB: makeDb({ devices: [] }),
+        RECEIPT_SECRET: 'test-secret',
+        EXTRA_ALLOWED_ORIGINS: extraOrigin,
+      }
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: 'unauthorized' });
+  });
+
+  it('rejects bearer auth when a valid token belongs to an account with no registered devices', async () => {
+    const token = await issueSessionToken('account-123', 'test-secret');
+    const response = await handlePlaidStatus(
+      new Request('https://worker.example.test/api/plaid/status', {
+        method: 'GET',
+        headers: {
+          Origin: extraOrigin,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+      {
+        DB: makeDb({ devices: [], plaidConnection: null }),
+        RECEIPT_SECRET: 'test-secret',
+        PLAID_TOKEN_KEY: 'test-key',
+        EXTRA_ALLOWED_ORIGINS: extraOrigin,
+      }
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: 'unauthorized' });
+  });
+
+  it('accepts bearer auth when the account still has a registered device', async () => {
+    const token = await issueSessionToken('account-123', 'test-secret');
+    const response = await handlePlaidStatus(
+      new Request('https://worker.example.test/api/plaid/status', {
+        method: 'GET',
+        headers: {
+          Origin: extraOrigin,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+      {
+        DB: makeDb({ devices: ['b'.repeat(64)], plaidConnection: null }),
+        RECEIPT_SECRET: 'test-secret',
+        PLAID_TOKEN_KEY: 'test-key',
+        EXTRA_ALLOWED_ORIGINS: extraOrigin,
+      }
+    );
+
+    expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ connected: false });
   });
 });

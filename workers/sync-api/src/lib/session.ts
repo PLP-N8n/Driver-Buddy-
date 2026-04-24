@@ -4,7 +4,7 @@ export interface SessionPayload {
   exp: number;
 }
 
-const TOKEN_TTL_SECONDS = 3600;
+export const TOKEN_TTL_SECONDS = 900;
 
 function b64url(buf: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))

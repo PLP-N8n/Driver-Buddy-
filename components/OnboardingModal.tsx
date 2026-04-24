@@ -20,10 +20,9 @@ const roleOptions: Array<{ role: DriverRole; label: string; icon: React.Componen
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSkip, onComplete }) => {
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedRole, setSelectedRole] = useState<DriverRole>(settings.driverRoles[0] ?? 'COURIER');
   const [claimMethod, setClaimMethod] = useState<Settings['claimMethod']>(settings.claimMethod);
-  const [mileageTrackingEnabled, setMileageTrackingEnabled] = useState(settings.mileageTrackingEnabled);
 
   useFocusTrap(modalRef, true);
 
@@ -31,9 +30,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
     () => ({
       driverRoles: [selectedRole],
       claimMethod,
-      mileageTrackingEnabled,
     }),
-    [claimMethod, mileageTrackingEnabled, selectedRole]
+    [claimMethod, selectedRole]
   );
 
   const finishOnboarding = () => {
@@ -53,10 +51,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
         <div className="mb-6 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Getting Started</p>
-            <p className="mt-1 text-sm text-slate-300">Step {step} of 4</p>
+            <p className="mt-1 text-sm text-slate-300">Step {step} of 3</p>
           </div>
           {step > 1 ? (
-            <button type="button" onClick={() => setStep((current) => (current > 1 ? ((current - 1) as 1 | 2 | 3 | 4) : current))} className={secondaryButtonClasses}>
+            <button type="button" onClick={() => setStep((current) => (current > 1 ? ((current - 1) as 1 | 2 | 3) : current))} className={secondaryButtonClasses}>
               <ChevronLeft className="h-4 w-4" />
               <span>Back</span>
             </button>
@@ -133,36 +131,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
         )}
 
         {step === 3 && (
-          <>
-            <h2 className="text-2xl font-semibold text-white">Do you want to track mileage?</h2>
-            <p className="mt-3 text-sm text-slate-400">Manual mileage logging is available now. Automatic tracking is still in development.</p>
-            <div className="mt-5 space-y-3">
-              <button
-                type="button"
-                onClick={() => setMileageTrackingEnabled(true)}
-                className={`w-full rounded-3xl border p-4 text-left transition-colors ${
-                  mileageTrackingEnabled ? 'border-brand bg-brand/10 text-white' : 'border-surface-border bg-surface-raised text-slate-300'
-                }`}
-              >
-                Yes, I&apos;ll log miles manually
-              </button>
-              <button
-                type="button"
-                onClick={() => setMileageTrackingEnabled(false)}
-                className={`w-full rounded-3xl border p-4 text-left transition-colors ${
-                  !mileageTrackingEnabled ? 'border-brand bg-brand/10 text-white' : 'border-surface-border bg-surface-raised text-slate-300'
-                }`}
-              >
-                Skip for now
-              </button>
-            </div>
-            <button type="button" onClick={() => setStep(4)} className={`${primaryButtonClasses} mt-6 w-full justify-center`}>
-              Continue <ChevronRight className="h-4 w-4" />
-            </button>
-          </>
-        )}
-
-        {step === 4 && (
           <>
             <h2 className="text-2xl font-semibold text-white">You&apos;re ready</h2>
             <p className="mt-3 text-sm text-slate-300">Track your work. Know your real take-home after tax.</p>

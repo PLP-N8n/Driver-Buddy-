@@ -15,6 +15,8 @@ type DayStats = {
 };
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MIN_ELIGIBLE_LOGS_FOR_PREDICTIONS = 3;
+const ESTABLISHED_SAMPLE_LOG_COUNT = 10;
 
 const parseDate = (value: string) => new Date(`${value}T12:00:00Z`);
 
@@ -45,6 +47,11 @@ const formatHoursLabel = (bucket: ShiftBucket) => {
   }
 };
 
+const getReminderActionLabel = (settings: Settings) =>
+  settings.reminderEnabled
+    ? `Reminder already set for ${settings.reminderTime || '18:00'}`
+    : 'Set reminder';
+
 type ShiftBucket = 'lt4' | '4to6' | '6to8' | '8plus';
 
 const getBucket = (hours: number): ShiftBucket => {
@@ -73,11 +80,13 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
     .filter((log) => log.revenue > 0 && log.hoursWorked > 0)
     .sort(compareByDate);
 
-  if (eligibleLogs.length < 10) {
+  if (eligibleLogs.length < MIN_ELIGIBLE_LOGS_FOR_PREDICTIONS) {
     return [];
   }
 
   const predictions: DriverPrediction[] = [];
+  const isEarlySample = eligibleLogs.length < ESTABLISHED_SAMPLE_LOG_COUNT;
+  const earlySamplePrefix = isEarlySample ? `Based on your first ${eligibleLogs.length} shifts, ` : '';
   const overallAverageRevenue = average(eligibleLogs.map((log) => log.revenue));
   const overallRevenuePerHour = average(eligibleLogs.map((log) => log.revenue / log.hoursWorked));
 
@@ -93,18 +102,21 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
   }
 
   const bestDay = [...dayMap.values()]
-    .filter((entry) => entry.count >= 2)
+    .filter((entry) => entry.count >= (isEarlySample ? 1 : 2))
     .map((entry) => ({
       ...entry,
       averageRevenue: entry.revenue / entry.count,
     }))
     .sort((left, right) => right.averageRevenue - left.averageRevenue)[0];
 
-  if (bestDay && overallAverageRevenue > 0 && bestDay.averageRevenue > overallAverageRevenue * 1.15) {
+  const minimumDayUplift = isEarlySample ? 1.05 : 1.15;
+  if (bestDay && overallAverageRevenue > 0 && bestDay.averageRevenue > overallAverageRevenue * minimumDayUplift) {
     const uplift = bestDay.averageRevenue - overallAverageRevenue;
     predictions.push({
       type: 'schedule',
-      message: `Your best day is ${DAY_NAMES[bestDay.day]} - you earn ${formatCurrency(uplift)} more on average.`,
+      message: isEarlySample
+        ? `${earlySamplePrefix}${DAY_NAMES[bestDay.day]} looks strongest so far - ${bestDay.count === 1 ? 'you earned' : 'you earn'} ${formatCurrency(uplift)} more ${bestDay.count === 1 ? 'than your current average' : 'on average'}.`
+        : `Your best day is ${DAY_NAMES[bestDay.day]} - you earn ${formatCurrency(uplift)} more on average.`,
       confidence: clamp(0.62 + bestDay.count * 0.04 + uplift / Math.max(overallAverageRevenue, 1) * 0.2, 0, 0.95),
       actionLabel: 'Plan around it',
     });
@@ -132,14 +144,16 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
         revenuePerHour: values.hours > 0 ? values.revenue / values.hours : 0,
       };
     })
-    .filter((entry) => entry.count >= 3 && entry.revenuePerHour > 0)
+    .filter((entry) => entry.count >= (isEarlySample ? 2 : 3) && entry.revenuePerHour > 0)
     .sort((left, right) => right.revenuePerHour - left.revenuePerHour)[0];
 
   if (topProviderDay && overallRevenuePerHour > 0 && topProviderDay.revenuePerHour > overallRevenuePerHour * 1.2) {
     const hourlyLift = topProviderDay.revenuePerHour - overallRevenuePerHour;
     predictions.push({
       type: 'platform',
-      message: `${topProviderDay.provider} on ${DAY_NAMES[topProviderDay.day]}s earns you ${formatCurrency(hourlyLift)}/hr more - worth prioritising.`,
+      message: isEarlySample
+        ? `${earlySamplePrefix}${topProviderDay.provider} on ${DAY_NAMES[topProviderDay.day]}s is ahead by ${formatCurrency(hourlyLift)}/hr so far.`
+        : `${topProviderDay.provider} on ${DAY_NAMES[topProviderDay.day]}s earns you ${formatCurrency(hourlyLift)}/hr more - worth prioritising.`,
       confidence: clamp(0.62 + topProviderDay.count * 0.04 + hourlyLift / Math.max(overallRevenuePerHour, 1) * 0.18, 0, 0.96),
       actionLabel: 'Prioritise it',
     });
@@ -162,13 +176,15 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
       count: values.count,
       revenuePerHour: values.hours > 0 ? values.revenue / values.hours : 0,
     }))
-    .filter((entry) => entry.count >= 3 && entry.revenuePerHour > 0)
+    .filter((entry) => entry.count >= (isEarlySample ? 2 : 3) && entry.revenuePerHour > 0)
     .sort((left, right) => right.revenuePerHour - left.revenuePerHour)[0];
 
   if (topBucket && overallRevenuePerHour > 0 && topBucket.revenuePerHour > overallRevenuePerHour * 1.15) {
     predictions.push({
       type: 'timing',
-      message: `Your sweet spot is ${formatHoursLabel(topBucket.bucket)} hour shifts - that's when you earn the most per hour.`,
+      message: isEarlySample
+        ? `${earlySamplePrefix}${formatHoursLabel(topBucket.bucket)} hour shifts look strongest per hour so far.`
+        : `Your sweet spot is ${formatHoursLabel(topBucket.bucket)} hour shifts - that's when you earn the most per hour.`,
       confidence: clamp(0.61 + topBucket.count * 0.04 + (topBucket.revenuePerHour / overallRevenuePerHour - 1) * 0.25, 0, 0.94),
       actionLabel: 'Shape your next shift',
     });
@@ -190,7 +206,7 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
         type: 'target',
         message: `You need ${formatCurrency(remaining)} more this week to hit your target - ${Math.max(1, shiftsNeeded)} more shifts at your average should do it.`,
         confidence: clamp(0.64 + Math.min(weeklyLogs.length, 4) * 0.03, 0, 0.88),
-        actionLabel: 'Set reminder',
+        actionLabel: getReminderActionLabel(settings),
       });
     }
   }
@@ -236,7 +252,19 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
     }
   }
 
-  return predictions
+  const visiblePredictions = predictions
     .filter((prediction) => prediction.confidence > 0.6)
     .sort((left, right) => right.confidence - left.confidence);
+
+  if (visiblePredictions.length === 0 && isEarlySample && overallAverageRevenue > 0 && settings.weeklyRevenueTarget > 0) {
+    const shiftsNeeded = Math.max(1, Math.ceil(settings.weeklyRevenueTarget / overallAverageRevenue));
+    visiblePredictions.push({
+      type: 'target',
+      message: `${earlySamplePrefix}${shiftsNeeded} shifts at your current average would hit your ${formatCurrency(settings.weeklyRevenueTarget)} weekly target.`,
+      confidence: 0.61,
+      actionLabel: getReminderActionLabel(settings),
+    });
+  }
+
+  return visiblePredictions;
 }

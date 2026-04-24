@@ -74,12 +74,14 @@ const getProvidersByRole = (role: DriverRole): string[] => {
   }
 };
 
-const getProviderOptions = (roles: DriverRole[], predictedProvider?: string) => {
+const getProviderOptions = (roles: DriverRole[], ...selectedProviders: Array<string | undefined>) => {
   const providers = Array.from(new Set(roles.flatMap(getProvidersByRole)));
-  if (predictedProvider && !providers.includes(predictedProvider)) {
-    providers.unshift(predictedProvider);
-  }
-  return providers;
+  const missingSelectedProviders = selectedProviders
+    .map((provider) => provider?.trim())
+    .filter((provider): provider is string => Boolean(provider))
+    .filter((provider) => !providers.includes(provider));
+
+  return Array.from(new Set([...missingSelectedProviders, ...providers]));
 };
 
 const hashPrediction = (value: string) => {
@@ -124,8 +126,12 @@ interface DashboardProps {
   onSaveManualShift: (payload: ManualShiftPayload) => CompletedShiftSummary;
   onShowCompletedSummary: (summary: CompletedShiftSummary) => void;
   onDismissCompletedSummary: () => void;
+  onShareCompletedSummary: (summaryText: string) => void | Promise<void>;
+  onAddCompletedShiftExpense: (summary: CompletedShiftSummary) => void;
+  onAddCompletedShiftMiles: (summary: CompletedShiftSummary) => void;
+  onOpenReminderSettings: () => void;
+  onSetPredictionReminder: () => void;
   onOpenBackfill: () => void;
-  onOpenTaxTab?: () => void;
 }
 
 type EndSheetMode = 'active' | 'manual';
@@ -244,8 +250,12 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   onSaveManualShift,
   onShowCompletedSummary,
   onDismissCompletedSummary,
+  onShareCompletedSummary,
+  onAddCompletedShiftExpense,
+  onAddCompletedShiftMiles,
+  onOpenReminderSettings,
+  onSetPredictionReminder,
   onOpenBackfill,
-  onOpenTaxTab,
 }) => {
   const [showStartSheet, setShowStartSheet] = useState(false);
   const [showEndSheet, setShowEndSheet] = useState(false);
@@ -269,6 +279,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const recentLogs = useMemo(() => [...dailyLogs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [dailyLogs]);
   const mostRecentShift = useMemo(() => getMostRecentShift(dailyLogs), [dailyLogs]);
   const missedDays = useMemo(() => getMissedDays(dailyLogs, settings.dayOffDates), [dailyLogs, settings.dayOffDates]);
+  const visibleMissedDays = dailyLogs.length > 0 ? missedDays : [];
   const trackedMilesForSession = useMemo(() => {
     if (!activeSession) return 0;
     return trips
@@ -736,6 +747,10 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           summaryProgressPercent={summaryProgressPercent}
           weeklyRevenueTarget={settings.weeklyRevenueTarget}
           onDismissCompletedSummary={onDismissCompletedSummary}
+          onShareSummary={onShareCompletedSummary}
+          onAddExpense={() => onAddCompletedShiftExpense(completedShiftSummary)}
+          onAddMiles={() => onAddCompletedShiftMiles(completedShiftSummary)}
+          onSetReminder={onOpenReminderSettings}
         />
       ) : (
         <>
@@ -776,8 +791,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
                 setExpandedPredictionId((current) => (current === predictionId ? null : predictionId));
               }}
               onDismissPrediction={dismissPrediction}
-              onOpenTaxTab={onOpenTaxTab}
-              missedDays={missedDays}
+              onSetReminder={onSetPredictionReminder}
+              missedDays={visibleMissedDays}
               onOpenBackfill={onOpenBackfill}
             />
           </section>
@@ -888,7 +903,11 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         manualShiftDate={manualShiftDate}
         manualPrediction={manualPrediction}
         manualProviderOptions={getProviderOptions(settings.driverRoles ?? ['COURIER'], manualProvider)}
-        endShiftProviderOptions={getProviderOptions(settings.driverRoles ?? ['COURIER'])}
+        endShiftProviderOptions={getProviderOptions(
+          settings.driverRoles ?? ['COURIER'],
+          endSheetMode === 'active' ? activeSession?.provider : manualProvider,
+          ...endShiftDraft.providers.map((row) => row.provider)
+        )}
         manualProvider={manualProvider}
         onManualProviderChange={setManualProvider}
         manualHoursWorked={manualHoursWorked}

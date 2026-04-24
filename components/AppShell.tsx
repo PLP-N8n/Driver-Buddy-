@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calculator,
   Car,
@@ -18,6 +18,7 @@ import {
 import {
   ActiveWorkSession,
   AppTab,
+  CompletedShiftSummary,
   DailyWorkLog,
   PlayerStats,
   Settings,
@@ -48,6 +49,7 @@ import { usePersistence } from '../hooks/usePersistence';
 import { useReceiptMigration } from '../hooks/useReceiptMigration';
 import { useSyncOrchestrator } from '../hooks/useSyncOrchestrator';
 import { setAnalyticsConsent, trackEvent } from '../services/analyticsService';
+import { cancelDailyReminder, ensureReminderPermission, scheduleDailyReminder } from '../services/reminderService';
 import { stampSettings } from '../services/settingsService';
 import {
   dialogBackdropClasses,
@@ -138,6 +140,8 @@ export function AppShell() {
   const prefersReducedMotion = useReducedMotion();
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const exportModalRef = useRef<HTMLDivElement | null>(null);
+  const [showDailyReminderPrompt, setShowDailyReminderPrompt] = useState(false);
+  const [reminderSettingsFocusRequest, setReminderSettingsFocusRequest] = useState<number | null>(null);
   const {
     activeTab,
     setActiveTab,
@@ -216,9 +220,13 @@ export function AppShell() {
   useFocusTrap(exportModalRef, showExportModal, () => setShowExportModal(false));
   const { isOnline, connectivityBanner } = useSyncOrchestrator({
     trips,
+    setTrips,
     expenses,
+    setExpenses,
     dailyLogs,
+    setDailyLogs,
     settings,
+    setSettings,
     deletedIds,
     hasHydrated,
     onPushSuccess: clearDeletedIds,
@@ -397,6 +405,30 @@ export function AppShell() {
 
   const dismissCompletedShiftSummary = () => setCompletedShiftSummary(null);
 
+  const shareCompletedShiftSummary = async (summaryText: string) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Driver Buddy shift summary',
+          text: summaryText,
+        });
+        showToast('Shared', 'success', 1500);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(summaryText);
+      showToast('Copied summary', 'success', 1500);
+    } catch {
+      showToast('Could not share summary', 'error');
+    }
+  };
+
   const handleBackfillSettingsUpdate = (nextSettings: Settings) => {
     const addedDayOff = nextSettings.dayOffDates.find((date) => !settings.dayOffDates.includes(date));
     if (addedDayOff) {
@@ -410,14 +442,76 @@ export function AppShell() {
   const totalRevenue = dailyLogs.reduce((sum, log) => sum + log.revenue, 0);
   const totalTaxSetAside = totalRevenue * (settings.taxSetAsidePercent / 100);
   const contentAnimationClass = getAnimationClass('animate-content-in', prefersReducedMotion);
-  const openQuickLog = (tab: 'mileage' | 'worklog' | 'expenses') => {
+  const openQuickLog = (
+    tab: 'mileage' | 'worklog' | 'expenses',
+    options?: { date?: string; linkedShiftId?: string }
+  ) => {
     navigateToTab(tab, { preserveQuickLog: true });
-    setQuickLogRequest({ tab, token: Date.now() });
+    setQuickLogRequest({ tab, token: Date.now(), ...options });
+  };
+  const openCompletedShiftExpense = (summary: CompletedShiftSummary) => {
+    openQuickLog('expenses', {
+      date: summary.date,
+      linkedShiftId: summary.shiftId ?? summary.id,
+    });
+  };
+  const openCompletedShiftMiles = (summary: CompletedShiftSummary) => {
+    openQuickLog('mileage', {
+      date: summary.date,
+      linkedShiftId: summary.shiftId ?? summary.id,
+    });
+  };
+  const openReminderSettings = () => {
+    navigateToTab('settings');
+    setReminderSettingsFocusRequest(Date.now());
+  };
+  const setPredictionReminder = () => {
+    const reminderTime = settings.reminderTime || '18:00';
+
+    if (settings.reminderEnabled) {
+      showToast(`Reminder already set for ${reminderTime}`, 'info', 2500);
+      return;
+    }
+
+    updateSettings((current) => ({
+      ...current,
+      reminderEnabled: true,
+      reminderTime: current.reminderTime || '18:00',
+    }));
+    void ensureReminderPermission();
+    openReminderSettings();
+    showToast(`Reminder set for ${reminderTime}`, 'success', 2000);
   };
   const openDashboardManualEntry = (date?: string) => {
     navigateToTab('dashboard');
     setManualEntryRequest({ token: Date.now(), date });
   };
+  const openDailyReminderShiftFlow = () => {
+    setShowDailyReminderPrompt(false);
+    openQuickLog('worklog');
+  };
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    if (!settings.reminderEnabled || !settings.reminderTime) {
+      cancelDailyReminder();
+      setShowDailyReminderPrompt(false);
+      return;
+    }
+
+    scheduleDailyReminder(
+      {
+        reminderEnabled: settings.reminderEnabled,
+        reminderTime: settings.reminderTime,
+      },
+      {
+        onInAppReminder: () => setShowDailyReminderPrompt(true),
+        onNotificationClick: openDailyReminderShiftFlow,
+      }
+    );
+
+    return () => cancelDailyReminder();
+  }, [hasHydrated, settings.reminderEnabled, settings.reminderTime]);
   useEffect(() => {
     if (!hasHydrated) return;
 
@@ -528,7 +622,7 @@ export function AppShell() {
             <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-amber-100">
-                  Self Assessment deadline: 31 January. Your tax pack is ready to download.
+                  Self Assessment deadline: 31 January. Your accountant records are ready to download.
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -550,6 +644,24 @@ export function AppShell() {
                     }}
                     className={secondaryButtonClasses}
                   >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+          {showDailyReminderPrompt && (
+            <section className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-cyan-100">Driver Buddy</p>
+                  <p className="text-sm text-cyan-50">Still need to log today?</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={openDailyReminderShiftFlow} className={primaryButtonClasses}>
+                    Log shift
+                  </button>
+                  <button type="button" onClick={() => setShowDailyReminderPrompt(false)} className={secondaryButtonClasses}>
                     Dismiss
                   </button>
                 </div>
@@ -599,8 +711,12 @@ export function AppShell() {
                       onSaveManualShift={handleSaveManualShift}
                       onShowCompletedSummary={setCompletedShiftSummary}
                       onDismissCompletedSummary={dismissCompletedShiftSummary}
+                      onShareCompletedSummary={shareCompletedShiftSummary}
+                      onAddCompletedShiftExpense={openCompletedShiftExpense}
+                      onAddCompletedShiftMiles={openCompletedShiftMiles}
+                      onOpenReminderSettings={openReminderSettings}
+                      onSetPredictionReminder={setPredictionReminder}
                       onOpenBackfill={() => setIsBackfillOpen(true)}
-                      onOpenTaxTab={() => navigateToTab('tax')}
                     />
                   </div>
                 )}
@@ -612,6 +728,10 @@ export function AppShell() {
                     onUpdateTrip={updateTrip}
                     settings={settings}
                     openFormSignal={quickLogRequest?.tab === 'mileage' ? quickLogRequest.token : undefined}
+                    openFormDefaults={quickLogRequest?.tab === 'mileage' ? {
+                      date: quickLogRequest.date,
+                      linkedShiftId: quickLogRequest.linkedShiftId,
+                    } : undefined}
                     onOpenFormHandled={() => setQuickLogRequest(null)}
                   />
                 )}
@@ -624,6 +744,10 @@ export function AppShell() {
                     onDeleteExpense={deleteExpense}
                     showToast={showToast}
                     openFormSignal={quickLogRequest?.tab === 'expenses' ? quickLogRequest.token : undefined}
+                    openFormDefaults={quickLogRequest?.tab === 'expenses' ? {
+                      date: quickLogRequest.date,
+                      linkedShiftId: quickLogRequest.linkedShiftId,
+                    } : undefined}
                     onOpenFormHandled={() => setQuickLogRequest(null)}
                   />
                 )}
@@ -670,6 +794,8 @@ export function AppShell() {
                     isPreparingRestore={isPreparingRestore}
                     dataCounts={{ logs: dailyLogs.length, expenses: expenses.length, trips: trips.length }}
                     restoreStatusMessage={restoreStatusMessage}
+                    reminderFocusSignal={reminderSettingsFocusRequest ?? undefined}
+                    onReminderFocusHandled={() => setReminderSettingsFocusRequest(null)}
                   />
                 )}
               </div>

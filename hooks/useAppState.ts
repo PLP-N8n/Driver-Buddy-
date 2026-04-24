@@ -24,6 +24,8 @@ export type ToastState = {
 export type QuickLogRequest = {
   tab: 'mileage' | 'worklog' | 'expenses';
   token: number;
+  date?: string;
+  linkedShiftId?: string;
 };
 
 export function useAppState() {

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   BatteryCharging,
   CalendarDays,
   Car,
   Check,
+  Clock3,
   Copy,
   Download,
   HelpCircle,
@@ -25,6 +26,7 @@ import { DriverRole, Settings, VehicleFuelType } from '../types';
 import { LinkedDevicesPanel } from './LinkedDevicesPanel';
 import { PlaidSyncToggle } from './PlaidSyncToggle';
 import { ReceiptSyncPanel } from './ReceiptSyncPanel';
+import { ensureReminderPermission, getReminderPermission, type ReminderPermissionState } from '../services/reminderService';
 import {
   fieldLabelClasses,
   getNumericInputProps,
@@ -51,6 +53,8 @@ interface SettingsProps {
     trips: number;
   };
   restoreStatusMessage: string | null;
+  reminderFocusSignal?: number;
+  onReminderFocusHandled?: () => void;
 }
 
 const roleOptions: Array<{ role: DriverRole; label: string; description: string; icon: LucideIcon }> = [
@@ -68,6 +72,13 @@ const fuelTypeOptions: Array<{ type: VehicleFuelType; label: string; description
   { type: 'EV', label: 'Electric', description: 'Track public and home charging.', icon: BatteryCharging },
 ];
 
+const visibleSettingsSections = {
+  debtAllocation: false,
+  linkedDevices: false,
+  receiptSync: false,
+  bankSync: false,
+} as const;
+
 export const SettingsPanel: React.FC<SettingsProps> = ({
   settings,
   onUpdateSettings,
@@ -81,14 +92,43 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
   isPreparingRestore = false,
   dataCounts,
   restoreStatusMessage,
+  reminderFocusSignal,
+  onReminderFocusHandled,
 }) => {
   const update = (patch: Partial<Settings>) => onUpdateSettings({ ...settings, ...patch });
+  const reminderSectionRef = useRef<HTMLElement | null>(null);
+  const reminderTimeInputRef = useRef<HTMLInputElement | null>(null);
   const [restoreCode, setRestoreCode] = useState('');
   const [vehicleTaxInput, setVehicleTaxInput] = useState(settings.vehicleTax ? settings.vehicleTax.toString() : '');
+  const [reminderPermission, setReminderPermission] = useState<ReminderPermissionState>(() => getReminderPermission());
 
   useEffect(() => {
     localStorage.setItem('dtpro_settings_visited', 'true');
   }, []);
+
+  useEffect(() => {
+    if (!reminderFocusSignal) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      reminderSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      const timeInput = reminderTimeInputRef.current;
+
+      if (timeInput) {
+        timeInput.focus({ preventScroll: true });
+        try {
+          timeInput.showPicker?.();
+        } catch {
+          // Some browsers require a tighter user-activation window; focus is the fallback.
+        }
+      } else {
+        reminderSectionRef.current?.focus({ preventScroll: true });
+      }
+
+      onReminderFocusHandled?.();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [onReminderFocusHandled, reminderFocusSignal]);
 
   const toggleDriverRole = (role: DriverRole) => {
     const nextRoles = settings.driverRoles.includes(role)
@@ -99,6 +139,25 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
       update({ driverRoles: nextRoles });
     }
   };
+
+  const handleReminderToggle = async () => {
+    if (settings.reminderEnabled) {
+      update({ reminderEnabled: false });
+      return;
+    }
+
+    const permission = await ensureReminderPermission();
+    setReminderPermission(permission);
+    update({ reminderEnabled: true, reminderTime: settings.reminderTime || '18:00' });
+  };
+
+  const reminderStatusText = (() => {
+    if (!settings.reminderEnabled) return 'Off';
+    if (reminderPermission === 'granted') return `Scheduled daily at ${settings.reminderTime || '18:00'}.`;
+    if (reminderPermission === 'denied') return 'Browser notifications are blocked. Driver Buddy will show an in-app prompt while open.';
+    if (reminderPermission === 'unsupported') return 'This browser will show an in-app prompt while Driver Buddy is open.';
+    return 'Scheduled. Allow browser notifications when prompted for background-style alerts.';
+  })();
 
   return (
     <div className="space-y-4">
@@ -435,9 +494,9 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
       <section className={`${panelClasses} p-5`}>
         <div className="mb-4">
           <h2 className="text-base font-semibold text-white">Set-aside rules</h2>
-          <p className="text-sm text-slate-400">Protect part of each shift for tax, maintenance, and debt.</p>
+          <p className="text-sm text-slate-400">Protect part of each shift for tax and maintenance.</p>
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-2">
           <label htmlFor="settings-tax-set-aside" className={`${subtlePanelClasses} p-4`}>
             <div className="mb-3 flex items-center justify-between text-sm">
               <span className="text-slate-200">Tax pot</span>
@@ -470,53 +529,77 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
               className="h-2 w-full accent-amber-500"
             />
           </label>
-          <label htmlFor="settings-debt-set-aside" className={`${subtlePanelClasses} p-4`}>
-            <div className="mb-3 flex items-center justify-between text-sm">
-              <span className="text-slate-200">Debt allocation</span>
-              <span className="font-mono text-white">{settings.debtSetAsidePercent}%</span>
-            </div>
-            <input
-              id="settings-debt-set-aside"
-              type="range"
-              min="0"
-              max="50"
-              step="1"
-              value={settings.debtSetAsidePercent}
-              onChange={(event) => update({ debtSetAsidePercent: parseInt(event.target.value, 10) })}
-              className="h-2 w-full accent-violet-500"
-            />
-          </label>
+          {visibleSettingsSections.debtAllocation && (
+            <label htmlFor="settings-debt-set-aside" className={`${subtlePanelClasses} p-4`}>
+              <div className="mb-3 flex items-center justify-between text-sm">
+                <span className="text-slate-200">Debt allocation</span>
+                <span className="font-mono text-white">{settings.debtSetAsidePercent}%</span>
+              </div>
+              <input
+                id="settings-debt-set-aside"
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={settings.debtSetAsidePercent}
+                onChange={(event) => update({ debtSetAsidePercent: parseInt(event.target.value, 10) })}
+                className="h-2 w-full accent-violet-500"
+              />
+            </label>
+          )}
         </div>
       </section>
 
-      <section className={`${panelClasses} p-5`}>
+      <section ref={reminderSectionRef} tabIndex={-1} className={`${panelClasses} p-5 outline-none`}>
         <div className="mb-4 flex items-center gap-3">
-          <Bell className="h-4 w-4 text-slate-400" />
+          <div className="rounded-xl bg-surface-raised p-3 text-slate-200">
+            <Bell className="h-5 w-5" />
+          </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-white">Daily reminder</h2>
-              <span className="rounded-full bg-slate-700/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                Coming soon
-              </span>
-            </div>
-            <p className="text-sm text-slate-400">End-of-shift reminder controls are still in development.</p>
+            <h2 className="text-base font-semibold text-white">Daily reminder</h2>
+            <p className="text-sm text-slate-400">Get a daily nudge to log your shift before the day gets away.</p>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <span className="text-sm text-slate-300">Remind me to log at end of shift</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={false}
-            aria-label="Daily reminders coming soon"
-            disabled
-            title="Daily reminders are coming soon"
-            className="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent bg-surface-raised transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            <span className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 translate-x-0" />
-          </button>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem]">
+          <div className={`${subtlePanelClasses} flex items-center justify-between gap-4 px-4 py-3`}>
+            <div>
+              <p className="text-sm font-medium text-white">Remind me to log today</p>
+              <p className="text-xs text-slate-400">{reminderStatusText}</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.reminderEnabled}
+              aria-label="Daily reminder"
+              onClick={() => void handleReminderToggle()}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
+                settings.reminderEnabled ? 'bg-brand' : 'bg-surface-raised'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  settings.reminderEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+          <div>
+            <label htmlFor="daily-reminder-time" className={fieldLabelClasses}>
+              Reminder time
+            </label>
+            <div className="relative">
+              <Clock3 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                ref={reminderTimeInputRef}
+                id="daily-reminder-time"
+                type="time"
+                value={settings.reminderTime || '18:00'}
+                onChange={(event) => update({ reminderTime: event.target.value || '18:00' })}
+                className={`${inputClasses} pl-11 font-mono`}
+              />
+            </div>
+          </div>
         </div>
-        <p className="mt-3 text-xs italic text-slate-500">Reminder notifications are not live yet.</p>
       </section>
 
       <section className={`${panelClasses} p-5`}>
@@ -585,9 +668,9 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
         {restoreStatusMessage && <p className="mt-3 text-sm text-emerald-300">{restoreStatusMessage}</p>}
       </section>
 
-      <LinkedDevicesPanel />
+      {visibleSettingsSections.linkedDevices && <LinkedDevicesPanel />}
 
-      <ReceiptSyncPanel />
+      {visibleSettingsSections.receiptSync && <ReceiptSyncPanel />}
 
       <section className={`${panelClasses} p-5`}>
         <div className="mb-4">
@@ -668,18 +751,20 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
         </div>
       </section>
 
-      <section className={`${panelClasses} p-5`}>
-        <div className="mb-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold text-white">Bank account sync</h2>
-            <span className="rounded-full bg-slate-700/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-              New connections coming soon
-            </span>
+      {visibleSettingsSections.bankSync && (
+        <section className={`${panelClasses} p-5`}>
+          <div className="mb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-white">Bank account sync</h2>
+              <span className="rounded-full bg-slate-700/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+                New connections coming soon
+              </span>
+            </div>
+            <p className="text-sm text-slate-400">Plaid-powered bank sync is still in development. Existing connections can still be reviewed or disconnected here.</p>
           </div>
-          <p className="text-sm text-slate-400">Plaid-powered bank sync is still in development. Existing connections can still be reviewed or disconnected here.</p>
-        </div>
-        <PlaidSyncToggle />
-      </section>
+          <PlaidSyncToggle />
+        </section>
+      )}
     </div>
   );
 };

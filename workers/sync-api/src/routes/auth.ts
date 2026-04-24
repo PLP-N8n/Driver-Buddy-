@@ -1,6 +1,6 @@
 import { jsonErr, jsonErrWithRetry, jsonOk } from '../lib/json';
 import { checkRateLimit } from '../lib/rateLimit';
-import { issueSessionToken } from '../lib/session';
+import { issueSessionToken, TOKEN_TTL_SECONDS } from '../lib/session';
 import { getAuthenticatedAccountId } from '../lib/auth';
 
 export interface Env {
@@ -145,7 +145,7 @@ export async function handleAuthSession(request: Request, env: Env): Promise<Res
   }
 
   const token = await issueSessionToken(body.accountId, env.RECEIPT_SECRET);
-  return jsonOk(request, { token, expiresIn: 3600 }, 200, env);
+  return jsonOk(request, { token, expiresIn: TOKEN_TTL_SECONDS }, 200, env);
 }
 
 export async function handleListDevices(request: Request, env: Env): Promise<Response> {

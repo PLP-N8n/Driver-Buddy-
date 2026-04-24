@@ -25,6 +25,8 @@ test('shows the empty dashboard state for a new user', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Quick add expense' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mileage' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Expenses' })).toBeVisible();
+  await expect(page.getByTestId('missed-log-banner')).toHaveCount(0);
+  await expect(page.getByText('New version available')).toHaveCount(0);
 });
 
 test('downloads the accountant export CSV from settings', async ({ page }) => {

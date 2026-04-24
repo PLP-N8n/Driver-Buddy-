@@ -282,6 +282,7 @@ export interface ActiveWorkSession {
 
 export interface CompletedShiftSummary {
   id: string;
+  shiftId?: string;
   date: string;
   startedAt: string;
   endedAt: string;

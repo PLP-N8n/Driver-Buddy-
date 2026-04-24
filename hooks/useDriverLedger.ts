@@ -303,6 +303,7 @@ export function useDriverLedger({
 
     return {
       id: `${Date.now()}_summary`,
+      shiftId: logId,
       date: session.date,
       startedAt: session.startedAt,
       endedAt,
@@ -377,8 +378,9 @@ export function useDriverLedger({
       });
     });
 
+    const logId = `${Date.now()}_manual_log`;
     const completedLog: DailyWorkLog = {
-      id: `${Date.now()}_manual_log`,
+      id: logId,
       date: payload.date,
       provider: payload.provider,
       hoursWorked: payload.hoursWorked,
@@ -406,6 +408,7 @@ export function useDriverLedger({
 
     return {
       id: `${Date.now()}_manual_summary`,
+      shiftId: logId,
       date: payload.date,
       startedAt,
       endedAt,

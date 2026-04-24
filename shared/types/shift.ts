@@ -58,6 +58,7 @@ export interface ActiveShift {
 
 export interface ShiftSummary {
   id: string;
+  shiftId?: string;
   date: string;
   startedAt: string;
   endedAt: string;

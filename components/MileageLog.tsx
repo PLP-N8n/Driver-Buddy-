@@ -39,6 +39,10 @@ interface MileageLogProps {
   onUpdateTrip: (id: string, updates: Partial<Trip>) => void;
   settings: Settings;
   openFormSignal?: number;
+  openFormDefaults?: {
+    date?: string;
+    linkedShiftId?: string;
+  };
   onOpenFormHandled?: () => void;
 }
 
@@ -108,6 +112,7 @@ export const MileageLog: React.FC<MileageLogProps> = ({
   onUpdateTrip,
   settings,
   openFormSignal,
+  openFormDefaults,
   onOpenFormHandled,
 }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -150,9 +155,22 @@ export const MileageLog: React.FC<MileageLogProps> = ({
     if (!openFormSignal || handledOpenFormSignalRef.current === openFormSignal) return;
     handledOpenFormSignalRef.current = openFormSignal;
     closeForm();
+    const startValue = parseFloat(liveOdometer.toFixed(1));
+    setNewTrip({
+      date: openFormDefaults?.date ?? todayUK(),
+      purpose: 'Business',
+      startLocation: '',
+      endLocation: '',
+      startOdometer: startValue,
+      endOdometer: 0,
+      totalMiles: 0,
+      notes: openFormDefaults?.linkedShiftId ? 'For completed shift' : '',
+    });
+    setStartOdometerInput(startValue.toString());
+    setEndOdometerInput('');
     setIsFormOpen(true);
     onOpenFormHandled?.();
-  }, [onOpenFormHandled, openFormSignal]);
+  }, [liveOdometer, onOpenFormHandled, openFormDefaults, openFormSignal]);
   useEffect(() => {
     sessionStorage.setItem(MILEAGE_SEARCH_KEY, searchQuery);
   }, [searchQuery]);
