@@ -197,3 +197,51 @@ Internal compatibility names may still include `drivertax`:
 - legacy docs
 
 Do not rename persistent keys or backend identifiers without a migration plan.
+
+## Current Status (2026-04-25)
+
+### Recently Shipped (2026-04-24/25 — commit d3610d5)
+
+10-task retention + UX overhaul based on Codex deep-dive audit of drivertax.rudradigital.uk:
+
+**Fresh-install trust**
+- Missed-days banner hidden until at least 1 shift logged (`DashboardScreen.tsx`)
+- `NEW_VERSION` SW prompt suppressed on first activation (`sw.js`)
+
+**Shift flow**
+- Work Day provider carries through to end-shift sheet (`DashboardScreen.tsx:77`)
+- Post-shift summary: earnings line ("You kept X, saved Y tax, claimed Z mileage") + Share / Add expense / Add miles / Set reminder CTAs (`WeeklySummary.tsx`, `AppShell.tsx`)
+
+**Habit loop / retention**
+- Daily reminder MVP live: toggle + time picker replaces "Coming Soon" (`Settings.tsx:514`, `reminderService.ts`)
+- SW notification click opens `/?action=add-shift`; in-app fallback also wired
+- `generatePredictions` fires after 3 shifts (was ~10) (`predictions.ts:18`)
+- "Set reminder" in predictions actually enables reminder + opens time picker
+
+**Tax tab**
+- Weekly set-aside figure now first; "Download records for accountant" moved to bottom (`TaxLogic.tsx`)
+- "Tax Pack" label renamed throughout (`taxPack.ts`)
+
+**Expense UX**
+- Fuel under simplified mileage shows plain-English explanation instead of bare £0.00 (`ExpenseLog.tsx`, `simplifiedMileageDeductibleCopy.ts`)
+
+**Settings cleanup**
+- Bank Sync, Linked Devices, Receipt Sync, Debt Manager hidden (code retained, `Settings.tsx:75`)
+- `mileageTrackingEnabled` removed from onboarding — was a no-op (`OnboardingModal.tsx`)
+
+**Sync**
+- Pull-on-start and pull-on-focus added to `useSyncOrchestrator` (2s debounce, tombstone safety)
+- Workers: token TTL constant, session and receipts route fixes
+
+### Previously Shipped
+- **Live crash fix**: `trip.notes?.startsWith` undefined access + `categoryMeta` fallback for unknown expense categories
+- **Worker error rate**: Applied missing D1 migrations 0007–0009 to production — resolved 13.4% auth failure rate
+- **Session revocation**: `getAuthenticatedAccountId` checks `account_devices` COUNT on every token verification; TTL 3600→900s
+- **Tombstone leak**: `driver_deleted_ids` cleared in `confirmPendingRestore`
+- **HMRC deadlines**: Corrected `endYear + 1` for January 31 dates
+- **Scottish income tax**: Updated to 2026/27 bands
+
+### Next Up
+1. **CORS/401 on first load** — production still hit CORS errors on first open per Codex audit; needs deployment verification (not a code issue)
+2. **Twitter banner** — @RudraDigitalUK registered, no banner yet
+3. **Reddit launch** — r/UberDriversUK (Driver Buddy) + r/smallbusiness (Rudra Digital)
