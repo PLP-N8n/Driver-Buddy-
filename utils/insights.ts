@@ -1,4 +1,4 @@
-import { DailyWorkLog, ProviderSplit, Settings, Trip } from '../types';
+import { DailyWorkLog, Expense, ExpenseCategory, ProviderSplit, Settings, Trip } from '../types';
 import { buildProjection, calculateMileageClaim } from './tax';
 import { toUKDateString, ukWeekStart } from './ukDate';
 
@@ -119,11 +119,25 @@ const getTaxProjection = (logs: DailyWorkLog[], settings: Settings, trips: Trip[
   };
 };
 
+const FUEL_EXPENSE_CATEGORIES = new Set<ExpenseCategory>([
+  ExpenseCategory.FUEL,
+  ExpenseCategory.PUBLIC_CHARGING,
+  ExpenseCategory.HOME_CHARGING,
+]);
+
+const FIXED_EXPENSE_CATEGORIES = new Set<ExpenseCategory>([
+  ExpenseCategory.PHONE,
+  ExpenseCategory.INSURANCE,
+  ExpenseCategory.SUBSCRIPTIONS,
+  ExpenseCategory.BANK_CHARGES,
+]);
+
 export function generateInsights(
   today: DailyWorkLog,
   history: DailyWorkLog[],
   settings: Settings,
-  trips: Trip[] = []
+  trips: Trip[] = [],
+  allExpenses: Expense[] = []
 ): string[] {
   const candidates: InsightCandidate[] = [];
   const revenue = today.revenue || 0;
@@ -235,6 +249,88 @@ export function generateInsights(
       message: `You're ${formatCurrency(taxProjection.estimatedLiability - taxProjection.taxSaved)} short of your tax pot target`,
       weight: 88,
     });
+  }
+
+  if (allExpenses.length > 0) {
+    const { start: thisWeekStart, end: thisWeekEnd } = getWeekRange(today.date, settings.workWeekStartDay);
+    const { start: lastWeekStart, end: lastWeekEnd } = getWeekRange(formatDateKey(previousWeekDate), settings.workWeekStartDay);
+
+    const thisWeekFuel = allExpenses
+      .filter((e) => FUEL_EXPENSE_CATEGORIES.has(e.category) && e.date >= thisWeekStart && e.date <= thisWeekEnd)
+      .reduce((sum, e) => sum + e.amount, 0);
+    const lastWeekFuel = allExpenses
+      .filter((e) => FUEL_EXPENSE_CATEGORIES.has(e.category) && e.date >= lastWeekStart && e.date <= lastWeekEnd)
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    if (lastWeekFuel > 5 && thisWeekFuel > lastWeekFuel) {
+      const fuelIncrease = ((thisWeekFuel - lastWeekFuel) / lastWeekFuel) * 100;
+      if (fuelIncrease >= 15) {
+        candidates.push({
+          message: `Fuel costs up ${formatPercent(fuelIncrease)} this week — ${formatCurrency(thisWeekFuel - lastWeekFuel)} more than last week`,
+          weight: 84,
+        });
+      }
+    }
+
+    const thirtyDayStart = parseDate(today.date);
+    thirtyDayStart.setUTCDate(thirtyDayStart.getUTCDate() - 29);
+    const thirtyDayStartStr = formatDateKey(thirtyDayStart);
+    const recentExpenses = allExpenses.filter((e) => e.date >= thirtyDayStartStr && e.date <= today.date);
+    const totalRecentAmount = recentExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+    if (totalRecentAmount > 20) {
+      const categoryTotals = new Map<ExpenseCategory, number>();
+      for (const e of recentExpenses) {
+        categoryTotals.set(e.category, (categoryTotals.get(e.category) ?? 0) + e.amount);
+      }
+
+      const topEntry = [...categoryTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (topEntry) {
+        const [topCat, topCatTotal] = topEntry;
+        const topCatPercent = (topCatTotal / totalRecentAmount) * 100;
+        if (topCatPercent > 40 && topCat !== ExpenseCategory.OTHER) {
+          candidates.push({
+            message: `${topCat} is ${formatPercent(topCatPercent)} of running costs this month — ${formatCurrency(topCatTotal)}`,
+            weight: 72,
+          });
+        }
+      }
+
+      const otherTotal = categoryTotals.get(ExpenseCategory.OTHER) ?? 0;
+      if (otherTotal > 10 && otherTotal / totalRecentAmount > 0.2) {
+        candidates.push({
+          message: `${formatCurrency(otherTotal)} logged as 'Other' this month — recategorising helps your tax deductions`,
+          weight: 76,
+        });
+      }
+    }
+
+    const last10Shifts = history
+      .filter((log) => log.id !== today.id)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 10);
+    if (last10Shifts.length >= 5) {
+      const shiftDates = new Set(last10Shifts.map((log) => log.date));
+      const expenseDatesWithShift = new Set(allExpenses.filter((e) => shiftDates.has(e.date)).map((e) => e.date));
+      const loggingRate = expenseDatesWithShift.size / last10Shifts.length;
+      if (loggingRate < 0.3) {
+        candidates.push({
+          message: `Expenses logged on ${expenseDatesWithShift.size} of your last ${last10Shifts.length} shifts — missed claims add up`,
+          weight: 68,
+        });
+      }
+    }
+
+    const thisMonthStart = `${today.date.slice(0, 7)}-01`;
+    const fixedTotal = allExpenses
+      .filter((e) => FIXED_EXPENSE_CATEGORIES.has(e.category) && e.date >= thisMonthStart && e.date <= today.date)
+      .reduce((sum, e) => sum + e.amount, 0);
+    if (fixedTotal > 30) {
+      candidates.push({
+        message: `Fixed costs this month: ${formatCurrency(fixedTotal)} — check they're all logged for your tax return`,
+        weight: 60,
+      });
+    }
   }
 
   return [...new Map(candidates.sort((left, right) => right.weight - left.weight).map((item) => [item.message, item])).values()]

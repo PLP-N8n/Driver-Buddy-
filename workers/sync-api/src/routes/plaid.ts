@@ -4,7 +4,7 @@ import { decryptToken } from '../lib/crypto';
 
 export interface Env {
   DB: D1Database;
-  RECEIPT_SECRET: string;
+  SESSION_SECRET: string;
   PLAID_TOKEN_KEY: string;
   PLAID_TOKEN_KEY_V2?: string;
   EXTRA_ALLOWED_ORIGINS?: string;

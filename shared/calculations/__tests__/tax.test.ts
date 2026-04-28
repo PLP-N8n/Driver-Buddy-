@@ -92,6 +92,42 @@ describe('calcVehicleTaxDeductions', () => {
     expect(result.otherBusinessExpenses).toBe(10);
     expect(result.actualDeduction).toBe(110);
   });
+
+  it('excludes personal-scope expense from otherBusinessExpenses when taxTreatment is stored', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Phone', amount: 50, taxTreatment: 'non_deductible', deductibleAmount: 0 },
+        { category: 'Phone', amount: 30, taxTreatment: 'deductible', deductibleAmount: 30 },
+      ],
+      totalMileageAllowance: 0,
+      businessUsePercent: 1,
+    });
+    expect(result.otherBusinessExpenses).toBe(30);
+  });
+
+  it('uses deductibleAmount for mixed-use non-vehicle expense', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Phone', amount: 100, taxTreatment: 'partially_deductible', deductibleAmount: 80 },
+      ],
+      totalMileageAllowance: 0,
+      businessUsePercent: 1,
+    });
+    expect(result.otherBusinessExpenses).toBe(80);
+    expect(result.actualDeduction).toBe(80);
+  });
+
+  it('excludes personal-scope fuel from vehicle running costs', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Fuel', amount: 100, taxTreatment: 'non_deductible', deductibleAmount: 0 },
+        { category: 'Fuel', amount: 60, taxTreatment: 'blocked_under_simplified', deductibleAmount: 0 },
+      ],
+      totalMileageAllowance: 0,
+      businessUsePercent: 1,
+    });
+    expect(result.vehicleRunningCosts).toBe(60);
+  });
 });
 
 describe('compareTaxMethods', () => {

@@ -184,6 +184,19 @@ export function useDriverLedger({
     trackEvent('shift_logged', { platform: log.provider });
   };
 
+  const removeSubsumedLogs = (date: string, splits: ProviderSplit[]) => {
+    for (const split of splits) {
+      const match = dailyLogs.find(
+        (log) =>
+          log.date === date &&
+          log.provider === split.provider &&
+          Math.abs(log.revenue - split.revenue) < 0.01 &&
+          !log.providerSplits?.length
+      );
+      if (match) deleteDailyLog(match.id);
+    }
+  };
+
   const deleteDailyLog = (id: string) => {
     setDailyLogs((current) => current.filter((log) => log.id !== id));
     appendDeletedDailyLogId(id);
@@ -289,6 +302,9 @@ export function useDriverLedger({
       updatedAt,
     };
 
+    if (completedLog.providerSplits?.length) {
+      removeSubsumedLogs(completedLog.date, completedLog.providerSplits);
+    }
     addDailyLog(completedLog);
 
     const allLogs = [...dailyLogs, completedLog];
@@ -319,7 +335,8 @@ export function useDriverLedger({
         completedLog,
         allLogs,
         settings,
-        linkedTripForInsights ? [...trips, linkedTripForInsights] : trips
+        linkedTripForInsights ? [...trips, linkedTripForInsights] : trips,
+        expenses
       ),
       weekRevenue,
       weekTaxToSetAside,
@@ -396,6 +413,9 @@ export function useDriverLedger({
       updatedAt,
     };
 
+    if (completedLog.providerSplits?.length) {
+      removeSubsumedLogs(completedLog.date, completedLog.providerSplits);
+    }
     addDailyLog(completedLog);
 
     const allLogs = [...dailyLogs, completedLog];
@@ -424,7 +444,8 @@ export function useDriverLedger({
         completedLog,
         allLogs,
         settings,
-        linkedTripForInsights ? [...trips, linkedTripForInsights] : trips
+        linkedTripForInsights ? [...trips, linkedTripForInsights] : trips,
+        expenses
       ),
       weekRevenue,
       weekTaxToSetAside,

@@ -25,6 +25,7 @@ export const normalizeSettings = (storedSettings: StoredSettings): Settings => {
     directDebits: storedSettings.directDebits ?? DEFAULT_SETTINGS.directDebits,
     debtStrategy: storedSettings.debtStrategy ?? DEFAULT_SETTINGS.debtStrategy,
     manualAllowances: storedSettings.manualAllowances ?? DEFAULT_SETTINGS.manualAllowances,
+    recurringExpenses: storedSettings.recurringExpenses ?? DEFAULT_SETTINGS.recurringExpenses,
     updatedAt: storedSettings.updatedAt,
   };
 };

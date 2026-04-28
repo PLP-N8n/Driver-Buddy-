@@ -4,7 +4,7 @@ import { checkRateLimit } from '../lib/rateLimit';
 
 export interface Env {
   DB: D1Database;
-  RECEIPT_SECRET: string;
+  SESSION_SECRET: string;
   RECEIPTS?: R2Bucket;
   EXTRA_ALLOWED_ORIGINS?: string;
 }

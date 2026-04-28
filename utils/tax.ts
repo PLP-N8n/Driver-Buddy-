@@ -7,7 +7,9 @@ import {
 const BASE_PERSONAL_ALLOWANCE = 12_570;
 const TAPER_THRESHOLD = 100_000;
 const BASIC_RATE_LIMIT = 50_270;
+const BASIC_RATE_BAND = 37_700;
 const HIGHER_RATE_LIMIT = 125_140;
+const CLASS4_LOWER_PROFITS_LIMIT = 12_570;
 const CLASS_4_MAIN_RATE = 0.06;
 const CLASS_4_UPPER_RATE = 0.02;
 
@@ -48,13 +50,13 @@ export function calculateEnglishIncomeTax(taxableIncome: number, personalAllowan
   if (taxableIncome <= 0) return 0;
 
   let tax = 0;
-  const basicBandWidth = BASIC_RATE_LIMIT - personalAllowance;
-  const inBasic = Math.min(taxableIncome, basicBandWidth);
+  const additionalRateThreshold = HIGHER_RATE_LIMIT - personalAllowance;
+  const inBasic = Math.min(taxableIncome, BASIC_RATE_BAND);
   tax += inBasic * 0.2;
 
-  if (taxableIncome > basicBandWidth) {
-    const remaining = taxableIncome - basicBandWidth;
-    const higherBandWidth = HIGHER_RATE_LIMIT - BASIC_RATE_LIMIT;
+  if (taxableIncome > BASIC_RATE_BAND) {
+    const remaining = taxableIncome - BASIC_RATE_BAND;
+    const higherBandWidth = Math.max(0, additionalRateThreshold - BASIC_RATE_BAND);
     const inHigher = Math.min(remaining, higherBandWidth);
     tax += inHigher * 0.4;
 
@@ -116,9 +118,9 @@ export const buildProjection = (totalRevenue: number, deductionUsed: number, opt
   let class4Main = 0;
   let class4Upper = 0;
 
-  if (taxableProfit > personalAllowance) {
-    const niBandWidth = BASIC_RATE_LIMIT - personalAllowance;
-    const profitForNi = taxableProfit - personalAllowance;
+  if (taxableProfit > CLASS4_LOWER_PROFITS_LIMIT) {
+    const niBandWidth = BASIC_RATE_LIMIT - CLASS4_LOWER_PROFITS_LIMIT;
+    const profitForNi = taxableProfit - CLASS4_LOWER_PROFITS_LIMIT;
     class4Main = Math.min(profitForNi, niBandWidth) * CLASS_4_MAIN_RATE;
     estimatedClass4NI += class4Main;
 

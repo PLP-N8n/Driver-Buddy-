@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   BatteryCharging,
+  CalendarClock,
   CalendarDays,
   Car,
   Check,
@@ -22,7 +23,7 @@ import {
   UserRound,
   UtensilsCrossed,
 } from 'lucide-react';
-import { DriverRole, Settings, VehicleFuelType } from '../types';
+import { DriverRole, EXPENSE_CATEGORY_OPTIONS, ExpenseCategory, RecurringExpense, RecurringExpenseFrequency, Settings, VehicleFuelType } from '../types';
 import { LinkedDevicesPanel } from './LinkedDevicesPanel';
 import { PlaidSyncToggle } from './PlaidSyncToggle';
 import { ReceiptSyncPanel } from './ReceiptSyncPanel';
@@ -101,6 +102,12 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
   const [restoreCode, setRestoreCode] = useState('');
   const [vehicleTaxInput, setVehicleTaxInput] = useState(settings.vehicleTax ? settings.vehicleTax.toString() : '');
   const [reminderPermission, setReminderPermission] = useState<ReminderPermissionState>(() => getReminderPermission());
+  const [showAddRecurring, setShowAddRecurring] = useState(false);
+  const [newRecurringDesc, setNewRecurringDesc] = useState('');
+  const [newRecurringCategory, setNewRecurringCategory] = useState<ExpenseCategory>(ExpenseCategory.FUEL);
+  const [newRecurringAmount, setNewRecurringAmount] = useState('');
+  const [newRecurringFrequency, setNewRecurringFrequency] = useState<RecurringExpenseFrequency>('monthly');
+  const [newRecurringMonth, setNewRecurringMonth] = useState(1);
 
   useEffect(() => {
     localStorage.setItem('dtpro_settings_visited', 'true');
@@ -548,6 +555,153 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
             </label>
           )}
         </div>
+      </section>
+
+      <section className={`${panelClasses} p-5`}>
+        <div className="mb-4 flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-slate-400" />
+          <div>
+            <h2 className="text-base font-semibold text-white">Regular Expenses</h2>
+            <p className="text-sm text-slate-400">Fixed costs logged once — prompted on your dashboard each period.</p>
+          </div>
+        </div>
+
+        {settings.recurringExpenses.length > 0 && (
+          <div className="mb-4 flex flex-col gap-2">
+            {settings.recurringExpenses.map((item) => (
+              <div key={item.id} className={`${subtlePanelClasses} flex items-center justify-between gap-3 px-4 py-3`}>
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-white">{item.description}</p>
+                  <p className="text-xs text-slate-400">
+                    £{item.amount.toFixed(2)} · {item.category} · {item.frequency}
+                    {item.lastLoggedDate ? ` · last logged ${item.lastLoggedDate}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Remove ${item.description}`}
+                  onClick={() => update({ recurringExpenses: settings.recurringExpenses.filter((r) => r.id !== item.id) })}
+                  className="shrink-0 rounded-full border border-surface-border px-3 py-1 text-xs text-slate-400 transition-colors hover:border-red-500/40 hover:text-red-400"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAddRecurring ? (
+          <div className={`${subtlePanelClasses} flex flex-col gap-3 p-4`}>
+            <div>
+              <label htmlFor="recurring-desc" className={fieldLabelClasses}>Description</label>
+              <input
+                id="recurring-desc"
+                type="text"
+                value={newRecurringDesc}
+                onChange={(e) => setNewRecurringDesc(e.target.value)}
+                className={inputClasses}
+                placeholder="e.g. Phone bill"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="recurring-amount" className={fieldLabelClasses}>Amount (£)</label>
+                <input
+                  id="recurring-amount"
+                  type="number"
+                  inputMode="decimal"
+                  value={newRecurringAmount}
+                  onChange={(e) => setNewRecurringAmount(e.target.value)}
+                  className={`${inputClasses} font-mono`}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label htmlFor="recurring-frequency" className={fieldLabelClasses}>Frequency</label>
+                <select
+                  id="recurring-frequency"
+                  value={newRecurringFrequency}
+                  onChange={(e) => setNewRecurringFrequency(e.target.value as RecurringExpenseFrequency)}
+                  className={inputClasses}
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="annual">Annual</option>
+                </select>
+              </div>
+            </div>
+            {newRecurringFrequency === 'annual' && (
+              <div>
+                <label htmlFor="recurring-month" className={fieldLabelClasses}>Month due</label>
+                <select
+                  id="recurring-month"
+                  value={newRecurringMonth}
+                  onChange={(e) => setNewRecurringMonth(parseInt(e.target.value, 10))}
+                  className={inputClasses}
+                >
+                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                    <option key={m} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label htmlFor="recurring-category" className={fieldLabelClasses}>Category</label>
+              <select
+                id="recurring-category"
+                value={newRecurringCategory}
+                onChange={(e) => setNewRecurringCategory(e.target.value as ExpenseCategory)}
+                className={inputClasses}
+              >
+                {EXPENSE_CATEGORY_OPTIONS.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const amount = parseFloat(newRecurringAmount);
+                  if (!newRecurringDesc.trim() || !amount || amount <= 0) return;
+                  const item: RecurringExpense = {
+                    id: Date.now().toString(),
+                    description: newRecurringDesc.trim(),
+                    category: newRecurringCategory,
+                    amount,
+                    frequency: newRecurringFrequency,
+                    ...(newRecurringFrequency === 'annual' ? { monthOfYear: newRecurringMonth } : {}),
+                  };
+                  update({ recurringExpenses: [...settings.recurringExpenses, item] });
+                  setNewRecurringDesc('');
+                  setNewRecurringAmount('');
+                  setNewRecurringFrequency('monthly');
+                  setShowAddRecurring(false);
+                }}
+                className="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90 active:scale-95"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddRecurring(false)}
+                className={secondaryButtonClasses}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAddRecurring(true)}
+            className={secondaryButtonClasses}
+          >
+            Add regular expense
+          </button>
+        )}
       </section>
 
       <section ref={reminderSectionRef} tabIndex={-1} className={`${panelClasses} p-5 outline-none`}>

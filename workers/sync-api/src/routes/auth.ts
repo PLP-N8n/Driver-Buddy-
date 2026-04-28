@@ -5,7 +5,7 @@ import { getAuthenticatedAccountId } from '../lib/auth';
 
 export interface Env {
   DB: D1Database;
-  RECEIPT_SECRET: string;
+  SESSION_SECRET: string;
   EXTRA_ALLOWED_ORIGINS?: string;
 }
 
@@ -144,7 +144,7 @@ export async function handleAuthSession(request: Request, env: Env): Promise<Res
     return jsonErr(request, 'unauthorized', 401, env);
   }
 
-  const token = await issueSessionToken(body.accountId, env.RECEIPT_SECRET);
+  const token = await issueSessionToken(body.accountId, env.SESSION_SECRET);
   return jsonOk(request, { token, expiresIn: TOKEN_TTL_SECONDS }, 200, env);
 }
 

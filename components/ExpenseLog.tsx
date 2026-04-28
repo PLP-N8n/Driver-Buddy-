@@ -22,6 +22,7 @@ import { EmptyState } from './EmptyState';
 import { ReceiptStatusBadge } from './ReceiptStatusBadge';
 import { useReceiptUpload } from '../hooks/useReceiptUpload';
 import { getSimplifiedMileageDeductibleExplanation } from '../utils/simplifiedMileageDeductibleCopy';
+import { suggestCategory } from '../utils/expenseCategorySuggestions';
 import { todayUK, ukTaxYearStart } from '../utils/ukDate';
 import {
   formatEnergyQuantity,
@@ -546,6 +547,10 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
     closeForm();
   };
 
+  const formCategory = (newExpense.category as ExpenseCategory) || ExpenseCategory.FUEL;
+  const categorySuggestion = suggestCategory(newExpense.description ?? '');
+  const showCategorySuggestion = categorySuggestion !== null && categorySuggestion !== formCategory;
+
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-surface-border bg-surface p-4">
@@ -825,6 +830,16 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
                     className={inputClasses}
                     placeholder="Receipt details"
                   />
+                  {showCategorySuggestion && (
+                    <button
+                      type="button"
+                      onClick={() => setNewExpense({ ...newExpense, category: categorySuggestion! })}
+                      className="mt-2 flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1 text-xs text-brand transition-colors hover:bg-brand/20 active:scale-95"
+                    >
+                      <span>Looks like: {categorySuggestion}</span>
+                      <span className="font-semibold">— use this?</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

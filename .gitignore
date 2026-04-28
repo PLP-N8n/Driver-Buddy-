@@ -22,6 +22,7 @@ dist-split-test
 
 # Build outputs / tooling
 output/
+dist/assets/meta.json
 dist-split-test/
 /screenshots/
 

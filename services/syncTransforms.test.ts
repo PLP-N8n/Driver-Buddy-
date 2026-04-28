@@ -30,6 +30,15 @@ describe('syncTransforms', () => {
         isVatClaimable: false,
         energyQuantity: 18.5,
         energyUnit: 'kWh',
+        scope: 'mixed',
+        businessUsePercent: 75,
+        deductibleAmount: 30,
+        nonDeductibleAmount: 10,
+        vehicleExpenseType: 'running_cost',
+        taxTreatment: 'partially_deductible',
+        linkedShiftId: 'log-1',
+        sourceType: 'manual',
+        reviewStatus: 'edited',
         updatedAt: '2026-04-03T20:05:00.000Z',
       },
     ];
@@ -77,6 +86,15 @@ describe('syncTransforms', () => {
       expect.objectContaining({
         id: 'expense-1',
         hasImage: true,
+        scope: 'mixed',
+        businessUsePercent: 75,
+        deductibleAmount: 30,
+        nonDeductibleAmount: 10,
+        vehicleExpenseType: 'running_cost',
+        taxTreatment: 'partially_deductible',
+        linkedShiftId: 'log-1',
+        sourceType: 'manual',
+        reviewStatus: 'edited',
         updatedAt: '2026-04-03T20:05:00.000Z',
       })
     );
@@ -207,6 +225,44 @@ describe('syncTransforms', () => {
         description: 'Rapid charger',
         energyQuantity: 24.8,
         energyUnit: 'kWh',
+      }),
+    ]);
+  });
+
+  it('applyPulledExpenses restores synced tax classification fields', () => {
+    const merged = applyPulledExpenses([
+      {
+        id: 'expense-classified',
+        date: '2026-04-09',
+        category: ExpenseCategory.FUEL,
+        amount: 100,
+        description: JSON.stringify({ description: 'Mixed-use fuel' }),
+        has_image: 0,
+        scope: 'mixed',
+        business_use_percent: 60,
+        deductible_amount: 60,
+        non_deductible_amount: 40,
+        vehicle_expense_type: 'running_cost',
+        tax_treatment: 'partially_deductible',
+        linked_shift_id: 'shift-123',
+        source_type: 'bank_import',
+        review_status: 'pending',
+        updated_at: '2026-04-09T12:00:00.000Z',
+      },
+    ]);
+
+    expect(merged).toEqual([
+      expect.objectContaining({
+        id: 'expense-classified',
+        scope: 'mixed',
+        businessUsePercent: 60,
+        deductibleAmount: 60,
+        nonDeductibleAmount: 40,
+        vehicleExpenseType: 'running_cost',
+        taxTreatment: 'partially_deductible',
+        linkedShiftId: 'shift-123',
+        sourceType: 'bank_import',
+        reviewStatus: 'pending',
       }),
     ]);
   });

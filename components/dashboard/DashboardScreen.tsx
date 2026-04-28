@@ -19,6 +19,7 @@ import {
   Expense,
   ExpenseCategory,
   ProviderSplit,
+  RecurringExpense,
   Settings,
   Trip,
 } from '../../types';
@@ -29,6 +30,8 @@ import { QuickAddForm } from './QuickAddForm';
 import { TaxEstimateCard } from './TaxEstimateCard';
 import { WeeklySummary } from './WeeklySummary';
 import { getHabitState } from '../../utils/habitEngine';
+import { useRecurringExpensesDue } from '../../hooks/useRecurringExpensesDue';
+import { getNudgesForShift } from '../../utils/expenseNudges';
 import { generateInsights } from '../../utils/insights';
 import { getMissedDays } from '../../utils/missedDays';
 import { DriverPrediction, generatePredictions } from '../../utils/predictions';
@@ -132,6 +135,8 @@ interface DashboardProps {
   onOpenReminderSettings: () => void;
   onSetPredictionReminder: () => void;
   onOpenBackfill: () => void;
+  onAddExpense: (expense: Expense) => void;
+  onUpdateSettings: (settings: Settings) => void;
 }
 
 type EndSheetMode = 'active' | 'manual';
@@ -256,6 +261,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   onOpenReminderSettings,
   onSetPredictionReminder,
   onOpenBackfill,
+  onAddExpense,
+  onUpdateSettings,
 }) => {
   const [showStartSheet, setShowStartSheet] = useState(false);
   const [showEndSheet, setShowEndSheet] = useState(false);
@@ -280,6 +287,24 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const mostRecentShift = useMemo(() => getMostRecentShift(dailyLogs), [dailyLogs]);
   const missedDays = useMemo(() => getMissedDays(dailyLogs, settings.dayOffDates), [dailyLogs, settings.dayOffDates]);
   const visibleMissedDays = dailyLogs.length > 0 ? missedDays : [];
+  const dueRecurringExpenses = useRecurringExpensesDue(settings.recurringExpenses, todayKey, settings.workWeekStartDay);
+  const handleLogRecurring = (item: RecurringExpense) => {
+    onAddExpense({
+      id: Date.now().toString(),
+      date: todayKey,
+      category: item.category,
+      amount: item.amount,
+      description: item.description,
+      updatedAt: new Date().toISOString(),
+    });
+    onUpdateSettings({
+      ...settings,
+      recurringExpenses: settings.recurringExpenses.map((r) =>
+        r.id === item.id ? { ...r, lastLoggedDate: todayKey } : r
+      ),
+      updatedAt: new Date().toISOString(),
+    });
+  };
   const trackedMilesForSession = useMemo(() => {
     if (!activeSession) return 0;
     return trips
@@ -348,13 +373,27 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     const map = new Map<string, { revenue: number; days: number; hours: number }>();
 
     for (const log of dailyLogs) {
-      const key = log.provider || 'Other';
-      const existing = map.get(key) ?? { revenue: 0, days: 0, hours: 0 };
-      map.set(key, {
-        revenue: existing.revenue + log.revenue,
-        days: existing.days + 1,
-        hours: existing.hours + log.hoursWorked,
-      });
+      if (log.providerSplits?.length) {
+        const totalSplitRevenue = log.providerSplits.reduce((sum, s) => sum + s.revenue, 0) || log.revenue || 0;
+        for (const split of log.providerSplits) {
+          const key = split.provider || 'Other';
+          const share = totalSplitRevenue > 0 ? split.revenue / totalSplitRevenue : 1 / log.providerSplits.length;
+          const existing = map.get(key) ?? { revenue: 0, days: 0, hours: 0 };
+          map.set(key, {
+            revenue: existing.revenue + split.revenue,
+            days: existing.days + 1,
+            hours: existing.hours + log.hoursWorked * share,
+          });
+        }
+      } else {
+        const key = log.provider || 'Other';
+        const existing = map.get(key) ?? { revenue: 0, days: 0, hours: 0 };
+        map.set(key, {
+          revenue: existing.revenue + log.revenue,
+          days: existing.days + 1,
+          hours: existing.hours + log.hoursWorked,
+        });
+      }
     }
 
     return [...map.entries()]
@@ -418,7 +457,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       sourceLog,
       sourceLog.id.startsWith('today-') || sourceLog.id === activeSession?.id ? [...dailyLogs, sourceLog] : dailyLogs,
       settings,
-      trips
+      trips,
+      expenses
     );
 
     return insightList[0] ?? null;
@@ -428,6 +468,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     activeFuelLiters,
     activeSession,
     dailyLogs,
+    expenses,
     liveMiles,
     liveRevenue,
     mostRecentShift,
@@ -454,7 +495,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           },
           dailyLogs,
           settings,
-          trips
+          trips,
+          expenses
         )[0]
       : null);
 
@@ -735,6 +777,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const summaryProgressPercent = completedShiftSummary
     ? getProgressPercent(completedShiftSummary.weekRevenue, settings.weeklyRevenueTarget)
     : 0;
+  const shiftNudges = completedShiftSummary ? getNudgesForShift(completedShiftSummary, expenses) : [];
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 pb-4 pt-2">
@@ -751,6 +794,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           onAddExpense={() => onAddCompletedShiftExpense(completedShiftSummary)}
           onAddMiles={() => onAddCompletedShiftMiles(completedShiftSummary)}
           onSetReminder={onOpenReminderSettings}
+          shiftNudges={shiftNudges}
         />
       ) : (
         <>
@@ -794,6 +838,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
               onSetReminder={onSetPredictionReminder}
               missedDays={visibleMissedDays}
               onOpenBackfill={onOpenBackfill}
+              dueRecurringExpenses={dueRecurringExpenses}
+              onLogRecurring={handleLogRecurring}
             />
           </section>
 

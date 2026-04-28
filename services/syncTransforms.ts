@@ -112,7 +112,7 @@ const formatPlatformLabel = (value: string | null | undefined) => {
 const toSyncTimestamp = (updatedAt: string | undefined, fallbackDate: string): string =>
   updatedAt ?? `${fallbackDate}T12:00:00.000Z`;
 
-export const sanitizeExpenseForStorage = (expense: Expense): Expense => {
+export const sanitizeExpenseForStorage = <T extends Expense>(expense: T): T => {
   const { receiptUrl: _receiptUrl, ...rest } = expense;
   const storedReceiptUrl =
     typeof expense.receiptUrl === 'string' &&
@@ -126,7 +126,7 @@ export const sanitizeExpenseForStorage = (expense: Expense): Expense => {
     ...rest,
     receiptUrl: storedReceiptUrl,
     hasReceiptImage: expense.hasReceiptImage ?? Boolean(expense.receiptId || expense.receiptUrl),
-  };
+  } as T;
 };
 
 export const prepareExpensesForLocalState = async (storedExpenses: Expense[]): Promise<Expense[]> => {
@@ -249,6 +249,15 @@ export const buildSyncPayload = (
       amount: expense.amount,
       taxDeductible: true,
       hasImage: Boolean(expense.hasReceiptImage || expense.receiptId || expense.receiptUrl),
+      scope: expense.scope,
+      businessUsePercent: expense.businessUsePercent,
+      deductibleAmount: expense.deductibleAmount,
+      nonDeductibleAmount: expense.nonDeductibleAmount,
+      vehicleExpenseType: expense.vehicleExpenseType,
+      taxTreatment: expense.taxTreatment,
+      linkedShiftId: expense.linkedShiftId,
+      sourceType: expense.sourceType,
+      reviewStatus: expense.reviewStatus,
       updatedAt: toSyncTimestamp(expense.updatedAt, expense.date),
     })),
     settings,
@@ -389,6 +398,14 @@ export const applyPulledExpenses = (
     const legacyLiters = toOptionalNumber(meta?.liters);
     const energyQuantity = toOptionalNumber(meta?.energyQuantity) ?? legacyLiters;
     const energyUnit = isEnergyQuantityUnit(meta?.energyUnit) ? meta.energyUnit : energyQuantity !== undefined ? 'litre' : undefined;
+    const businessUsePercent = toOptionalNumber(row.businessUsePercent ?? row.business_use_percent);
+    const deductibleAmount = toOptionalNumber(row.deductibleAmount ?? row.deductible_amount);
+    const nonDeductibleAmount = toOptionalNumber(row.nonDeductibleAmount ?? row.non_deductible_amount);
+    const linkedShiftId = row.linkedShiftId !== undefined ? row.linkedShiftId : row.linked_shift_id;
+    const sourceType = row.sourceType ?? row.source_type;
+    const reviewStatus = row.reviewStatus ?? row.review_status;
+    const taxTreatment = row.taxTreatment ?? row.tax_treatment;
+    const vehicleExpenseType = row.vehicleExpenseType ?? row.vehicle_expense_type;
 
     return sanitizeExpenseForStorage({
       id: row.id,
@@ -403,6 +420,15 @@ export const applyPulledExpenses = (
       energyQuantity,
       energyUnit,
       liters: legacyLiters,
+      ...(row.scope != null ? { scope: row.scope } : {}),
+      ...(businessUsePercent !== undefined ? { businessUsePercent } : {}),
+      ...(deductibleAmount !== undefined ? { deductibleAmount } : {}),
+      ...(nonDeductibleAmount !== undefined ? { nonDeductibleAmount } : {}),
+      ...(vehicleExpenseType != null ? { vehicleExpenseType } : {}),
+      ...(taxTreatment != null ? { taxTreatment } : {}),
+      ...(linkedShiftId !== undefined ? { linkedShiftId } : {}),
+      ...(sourceType != null ? { sourceType } : {}),
+      ...(reviewStatus != null ? { reviewStatus } : {}),
       updatedAt: row.updated_at ?? undefined,
     });
   }));

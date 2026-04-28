@@ -1,5 +1,12 @@
 
 import { getTaxYear, todayUK, ukTaxYearStart } from './utils/ukDate.js';
+import type {
+  ExpenseReviewStatus,
+  ExpenseScope,
+  ExpenseSourceType,
+  TaxTreatment,
+  VehicleExpenseType,
+} from './shared/types/expense';
 
 export type AppTab = 'dashboard' | 'mileage' | 'expenses' | 'worklog' | 'tax' | 'debt' | 'settings';
 export type TripPurpose = 'Business' | 'Personal' | 'Commute';
@@ -40,6 +47,15 @@ export interface Expense {
   energyQuantity?: number;
   energyUnit?: EnergyQuantityUnit;
   liters?: number;
+  scope?: ExpenseScope;
+  businessUsePercent?: number;
+  deductibleAmount?: number;
+  nonDeductibleAmount?: number;
+  vehicleExpenseType?: VehicleExpenseType;
+  taxTreatment?: TaxTreatment;
+  linkedShiftId?: string | null;
+  sourceType?: ExpenseSourceType;
+  reviewStatus?: ExpenseReviewStatus;
   updatedAt?: string;
 }
 
@@ -137,6 +153,18 @@ export interface ManualAllowance {
   amount: number;
 }
 
+export type RecurringExpenseFrequency = 'monthly' | 'weekly' | 'annual';
+
+export interface RecurringExpense {
+  id: string;
+  description: string;
+  category: ExpenseCategory;
+  amount: number;
+  frequency: RecurringExpenseFrequency;
+  monthOfYear?: number;
+  lastLoggedDate?: string;
+}
+
 export interface Debt {
   id: string;
   name: string;
@@ -186,6 +214,7 @@ export interface Settings {
   // Manual Adjustments
   manualAllowances: ManualAllowance[];
   dayOffDates: string[];
+  recurringExpenses: RecurringExpense[];
   updatedAt?: string;
 }
 
@@ -222,6 +251,23 @@ export type SyncPullPayload = {
     description?: string | null;
     amount?: number | null;
     has_image?: number | null;
+    scope?: ExpenseScope | null;
+    businessUsePercent?: number | null;
+    business_use_percent?: number | null;
+    deductibleAmount?: number | null;
+    deductible_amount?: number | null;
+    nonDeductibleAmount?: number | null;
+    non_deductible_amount?: number | null;
+    vehicleExpenseType?: VehicleExpenseType | null;
+    vehicle_expense_type?: VehicleExpenseType | null;
+    taxTreatment?: TaxTreatment | null;
+    tax_treatment?: TaxTreatment | null;
+    linkedShiftId?: string | null;
+    linked_shift_id?: string | null;
+    sourceType?: ExpenseSourceType | null;
+    source_type?: ExpenseSourceType | null;
+    reviewStatus?: ExpenseReviewStatus | null;
+    review_status?: ExpenseReviewStatus | null;
     updated_at?: string | null;
   }>;
   shifts?: Array<{
@@ -336,5 +382,6 @@ export const DEFAULT_SETTINGS: Settings = {
   financialYearStartDate: ukTaxYearStart(),
   lastOdometerCheckDate: todayUK(),
   manualAllowances: [],
-  dayOffDates: []
+  dayOffDates: [],
+  recurringExpenses: []
 };

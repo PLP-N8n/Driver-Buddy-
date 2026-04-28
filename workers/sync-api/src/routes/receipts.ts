@@ -13,7 +13,7 @@ type ReceiptBucket = R2Bucket & {
 export interface Env {
   DB: D1Database;
   RECEIPTS: R2Bucket;
-  RECEIPT_SECRET: string;
+  SESSION_SECRET: string;
   EXTRA_ALLOWED_ORIGINS?: string;
 }
 

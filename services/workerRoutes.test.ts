@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { handleOptions, isAllowedOrigin } from '../workers/sync-api/src/lib/cors';
 import { issueSessionToken } from '../workers/sync-api/src/lib/session';
 import { handleAuthRegister, handleAuthSession } from '../workers/sync-api/src/routes/auth';
+import { handleEvents } from '../workers/sync-api/src/routes/events';
 import { handlePlaidStatus } from '../workers/sync-api/src/routes/plaid';
 import { handleRequestUpload } from '../workers/sync-api/src/routes/receipts';
 import { handleSyncPull } from '../workers/sync-api/src/routes/sync';
@@ -103,7 +104,7 @@ describe('Worker auth route', () => {
       }),
       {
         DB: makeDb({ count: 5, oldest: Date.now() - 30_000 }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
       }
     );
 
@@ -128,7 +129,7 @@ describe('Worker auth route', () => {
       }),
       {
         DB: makeDb({ devices: [] }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
       }
     );
 
@@ -152,7 +153,7 @@ describe('Worker auth route', () => {
       }),
       {
         DB: makeDb({ devices: ['d'.repeat(64)] }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
       }
     );
 
@@ -179,7 +180,7 @@ describe('Worker auth route', () => {
       }),
       {
         DB: makeDb({ devices: [registeredHash] }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
       }
     );
 
@@ -207,7 +208,7 @@ describe('Worker receipt route', () => {
       {
         DB: makeDb({ devices: ['1'.repeat(64)], firstResult: { count: 0, oldest: Date.now() } }),
         RECEIPTS: {} as R2Bucket,
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
       }
     );
 
@@ -220,6 +221,30 @@ describe('Worker receipt route', () => {
       uploadUrl: '',
     });
     expect(body.key).toMatch(/^receipts\/account-123\/\d+_fuel_receipt\.jpg$/);
+  });
+});
+
+describe('Worker events route', () => {
+  it('rate limits analytics events per device or IP', async () => {
+    const response = await handleEvents(
+      new Request('https://worker.example.test/api/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+          'CF-Connecting-IP': '203.0.113.10',
+          'X-Device-ID': 'device-123',
+        },
+        body: JSON.stringify({ event: 'app_open' }),
+      }),
+      {
+        DB: makeDb({ count: 60, oldest: Date.now() - 30_000 }),
+        ANALYTICS: { writeDataPoint: vi.fn() } as unknown as AnalyticsEngineDataset,
+      }
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: 'too many requests' });
   });
 });
 
@@ -238,7 +263,7 @@ describe('Worker actual response CORS headers', () => {
       }),
       {
         DB: makeDb({ devices: ['f'.repeat(64)] }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
     );
@@ -265,7 +290,7 @@ describe('Worker actual response CORS headers', () => {
       {
         DB: makeDb({ devices: ['2'.repeat(64)] }),
         RECEIPTS: {} as R2Bucket,
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
     );
@@ -292,7 +317,7 @@ describe('Worker actual response CORS headers', () => {
       {
         DB: makeDb({ devices: [], firstResult: { count: 0, oldest: Date.now() } }),
         RECEIPTS: {} as R2Bucket,
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
     );
@@ -313,7 +338,7 @@ describe('Worker actual response CORS headers', () => {
       }),
       {
         DB: makeDb({ devices: ['a'.repeat(64)], plaidConnection: null }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         PLAID_TOKEN_KEY: 'test-key',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
@@ -336,7 +361,7 @@ describe('Worker actual response CORS headers', () => {
       }),
       {
         DB: makeDb({ devices: [] }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
     );
@@ -357,7 +382,7 @@ describe('Worker actual response CORS headers', () => {
       }),
       {
         DB: makeDb({ devices: [], plaidConnection: null }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         PLAID_TOKEN_KEY: 'test-key',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
@@ -379,7 +404,7 @@ describe('Worker actual response CORS headers', () => {
       }),
       {
         DB: makeDb({ devices: ['b'.repeat(64)], plaidConnection: null }),
-        RECEIPT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-secret',
         PLAID_TOKEN_KEY: 'test-key',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }

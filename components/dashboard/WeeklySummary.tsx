@@ -1,5 +1,6 @@
 import React from 'react';
-import { Bell, Car, Receipt, Share2, Sparkles } from 'lucide-react';
+import { Bell, Car, Receipt, Share2, Sparkles, TriangleAlert } from 'lucide-react';
+import type { ShiftNudge } from '../../utils/expenseNudges';
 import { calcKept } from '../../shared/calculations/tax';
 import type { CompletedShiftSummary } from '../../types';
 import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses, secondaryButtonClasses } from '../../utils/ui';
@@ -16,6 +17,7 @@ type WeeklySummaryProps = {
   onAddExpense: () => void;
   onAddMiles: () => void;
   onSetReminder: () => void;
+  shiftNudges?: ShiftNudge[];
 };
 
 const summaryStatClass = 'rounded-2xl border border-surface-border bg-surface-raised px-4 py-3';
@@ -47,6 +49,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   onAddExpense,
   onAddMiles,
   onSetReminder,
+  shiftNudges = [],
 }) => {
   // Keep this aligned with the shared tax layer instead of relying on a stored snapshot value.
   const kept = calcKept(
@@ -102,6 +105,35 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
       </div>
 
       <p className="mt-5 text-center text-sm font-medium text-slate-100">{earningsSummaryLine}</p>
+
+      {shiftNudges.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+          <div className="mb-2 flex items-center gap-2">
+            <TriangleAlert className="h-3.5 w-3.5 text-amber-300" />
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Anything to claim?</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {shiftNudges.includes('fuel') && (
+              <button
+                type="button"
+                onClick={onAddExpense}
+                className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-400/20 active:scale-95"
+              >
+                Fuel or charging? → Add it
+              </button>
+            )}
+            {shiftNudges.includes('parking') && (
+              <button
+                type="button"
+                onClick={onAddExpense}
+                className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-400/20 active:scale-95"
+              >
+                Parking or tolls? → Add it
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <button

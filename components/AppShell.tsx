@@ -73,13 +73,14 @@ const BackfillSheet = lazy(() => import('./BackfillSheet').then((m) => ({ defaul
 const FaqSheet = lazy(() => import('./FaqSheet').then((m) => ({ default: m.FaqSheet })));
 
 const TAX_REMINDER_KEY_PREFIX = 'dbt_tax_reminder_shown_';
+const TAX_RULES_LABEL = `${getCurrentTaxYearLabel()} rules`;
 
 const pageMeta: Record<AppTab, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Revenue, mileage, and tax readiness at a glance.' },
   mileage: { title: 'Mileage', description: 'Keep an HMRC-ready log of every trip.' },
   expenses: { title: 'Expenses', description: 'Capture receipts and track business costs.' },
   worklog: { title: 'Work Log', description: 'Review shifts, earnings, and efficiency.' },
-  tax: { title: 'Tax', description: 'Estimate liability using 2025/26 rules.' },
+  tax: { title: 'Tax', description: `Estimate liability using ${TAX_RULES_LABEL}.` },
   debt: { title: 'Debt Manager', description: 'Plan repayments alongside driving income.' },
   settings: { title: 'Settings', description: 'Control claim method, allocations, and backups.' },
 };
@@ -717,6 +718,8 @@ export function AppShell() {
                       onOpenReminderSettings={openReminderSettings}
                       onSetPredictionReminder={setPredictionReminder}
                       onOpenBackfill={() => setIsBackfillOpen(true)}
+                      onAddExpense={addExpense}
+                      onUpdateSettings={updateSettings}
                     />
                   </div>
                 )}

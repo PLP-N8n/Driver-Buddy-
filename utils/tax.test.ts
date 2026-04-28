@@ -91,6 +91,34 @@ describe('calculateEnglishIncomeTax', () => {
   it('higher rate taxpayer: 40% on income over basic rate band', () => {
     assertCloseTo(calculateEnglishIncomeTax(47_700, 12_570), 11_540, 0);
   });
+
+  it('keeps the basic-rate band fixed at gross income 100,000', () => {
+    const result = buildProjection(100_000, 0);
+    expect(result.personalAllowance).toBe(12_570);
+    expect(result.taxableIncome).toBe(87_430);
+    assertCloseTo(result.estimatedTax, 27_432, 0);
+  });
+
+  it('keeps the basic-rate band fixed while personal allowance tapers at gross income 112,570', () => {
+    const result = buildProjection(112_570, 0);
+    expect(result.personalAllowance).toBe(6_285);
+    expect(result.taxableIncome).toBe(106_285);
+    assertCloseTo(result.estimatedTax, 34_974, 0);
+  });
+
+  it('keeps the basic-rate band fixed after personal allowance fully tapers at gross income 125,140', () => {
+    const result = buildProjection(125_140, 0);
+    expect(result.personalAllowance).toBe(0);
+    expect(result.taxableIncome).toBe(125_140);
+    assertCloseTo(result.estimatedTax, 42_516, 0);
+  });
+
+  it('uses the additional-rate band above gross income 125,140', () => {
+    const result = buildProjection(150_000, 0);
+    expect(result.personalAllowance).toBe(0);
+    expect(result.taxableIncome).toBe(150_000);
+    assertCloseTo(result.estimatedTax, 53_703, 0);
+  });
 });
 
 describe('calculateScottishIncomeTax', () => {
@@ -129,6 +157,14 @@ describe('buildProjection', () => {
     expect(result.estimatedClass2NI).toBe(0);
     expect(result.estimatedClass4NI).toBeGreaterThan(0);
     expect(result.estimatedNI).toBe(result.estimatedClass2NI + result.estimatedClass4NI);
+  });
+
+  it('uses the fixed Class 4 lower profits limit when personal allowance tapers', () => {
+    const result = buildProjection(120_000, 0);
+    expect(result.personalAllowance).toBe(2_570);
+    expect(result.class4Main).toBe(2_262);
+    expect(result.class4Upper).toBe(1_394.6);
+    expect(result.estimatedClass4NI).toBe(3_656.6);
   });
 });
 

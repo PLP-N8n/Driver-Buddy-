@@ -2,7 +2,7 @@ import { verifySessionToken } from './session';
 
 export interface AuthEnv {
   DB: D1Database;
-  RECEIPT_SECRET: string;
+  SESSION_SECRET: string;
 }
 
 async function hasRegisteredDevices(accountId: string, env: AuthEnv): Promise<boolean> {
@@ -15,7 +15,7 @@ async function hasRegisteredDevices(accountId: string, env: AuthEnv): Promise<bo
 export async function getAuthenticatedAccountId(request: Request, env: AuthEnv): Promise<string | null> {
   const sessionHeader = request.headers.get('X-Session-Token');
   if (sessionHeader) {
-    const payload = await verifySessionToken(sessionHeader, env.RECEIPT_SECRET);
+    const payload = await verifySessionToken(sessionHeader, env.SESSION_SECRET);
     if (payload?.sub && await hasRegisteredDevices(payload.sub, env)) return payload.sub;
   }
 
@@ -25,7 +25,7 @@ export async function getAuthenticatedAccountId(request: Request, env: AuthEnv):
   const token = authHeader.slice('Bearer '.length).trim();
   if (!token) return null;
 
-  const payload = await verifySessionToken(token, env.RECEIPT_SECRET);
+  const payload = await verifySessionToken(token, env.SESSION_SECRET);
   if (!payload?.sub) return null;
 
   return await hasRegisteredDevices(payload.sub, env) ? payload.sub : null;

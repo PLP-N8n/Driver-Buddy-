@@ -1,4 +1,4 @@
-import type { Expense } from '../types/expense';
+import type { Expense, TaxTreatment } from '../types/expense';
 import { calcMileageAllowance } from './mileage';
 import {
   isTaxAllowableExpenseCategory,
@@ -15,7 +15,10 @@ export interface TaxSettings {
   personalAllowance?: number;
 }
 
-type TaxAnalysisExpense = Pick<Expense, 'category' | 'amount' | 'isVatClaimable'>;
+type TaxAnalysisExpense = Pick<Expense, 'category' | 'amount' | 'isVatClaimable'> & {
+  deductibleAmount?: number;
+  taxTreatment?: TaxTreatment;
+};
 
 export interface VehicleTaxDeductions {
   otherBusinessExpenses: number;
@@ -58,13 +61,24 @@ export function calcVehicleTaxDeductions({
   manualAllowances?: number;
 }): VehicleTaxDeductions {
   const otherBusinessExpenses = expenses
-    .filter((expense) => isTaxAllowableExpenseCategory(expense.category))
     .filter((expense) => !isVehicleRunningCostCategory(expense.category))
-    .reduce((sum, expense) => sum + calcExpenseAmountNetOfVat(expense), 0);
+    .reduce((sum, expense) => {
+      if (expense.taxTreatment !== undefined) {
+        if (expense.taxTreatment === 'non_deductible' || expense.taxTreatment === 'blocked_under_simplified') return sum;
+        return sum + (expense.deductibleAmount ?? calcExpenseAmountNetOfVat(expense));
+      }
+      // Legacy: no stored classification — fall back to category filter
+      if (!isTaxAllowableExpenseCategory(expense.category)) return sum;
+      return sum + calcExpenseAmountNetOfVat(expense);
+    }, 0);
 
   const vehicleRunningCosts = expenses
     .filter((expense) => isVehicleRunningCostCategory(expense.category))
-    .reduce((sum, expense) => sum + calcExpenseAmountNetOfVat(expense), 0);
+    .reduce((sum, expense) => {
+      // Exclude expenses explicitly marked non-deductible (e.g. personal-scope fuel)
+      if (expense.taxTreatment === 'non_deductible') return sum;
+      return sum + calcExpenseAmountNetOfVat(expense);
+    }, 0);
 
   return {
     otherBusinessExpenses,

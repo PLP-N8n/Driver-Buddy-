@@ -93,7 +93,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   const taxYearLabel = getCurrentTaxYearLabel();
   const filteredLogs = useMemo(() => filterToCurrentTaxYear(dailyLogs), [dailyLogs]);
   const filteredTrips = useMemo(
-    () => filterToCurrentTaxYear(trips).filter((trip) => trip.purpose === 'Business'),
+    () => filterToCurrentTaxYear(trips),
     [trips]
   );
   const filteredExpenses = useMemo(() => filterToCurrentTaxYear(expenses), [expenses]);
