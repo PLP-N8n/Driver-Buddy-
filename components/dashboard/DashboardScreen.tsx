@@ -372,7 +372,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const providerBreakdown = useMemo(() => {
     const map = new Map<string, { revenue: number; days: number; hours: number }>();
 
-    for (const log of dailyLogs) {
+    for (const log of filterToCurrentTaxYear(dailyLogs)) {
       if (log.providerSplits?.length) {
         const totalSplitRevenue = log.providerSplits.reduce((sum, s) => sum + s.revenue, 0) || log.revenue || 0;
         for (const split of log.providerSplits) {
