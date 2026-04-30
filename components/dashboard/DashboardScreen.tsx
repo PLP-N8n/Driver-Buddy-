@@ -25,17 +25,20 @@ import {
 } from '../../types';
 import { EarningsSummary } from './EarningsSummary';
 import { HabitCard } from './HabitCard';
+import { HealthCheckCard } from './HealthCheckCard';
 import { IntelligenceFeed } from './IntelligenceFeed';
+import { MonthlySummaryCard } from './MonthlySummaryCard';
+import { PlatformBreakdownCard } from './PlatformBreakdownCard';
 import { QuickAddForm } from './QuickAddForm';
 import { TaxEstimateCard } from './TaxEstimateCard';
 import { WeeklySummary } from './WeeklySummary';
 import { getHabitState } from '../../utils/habitEngine';
 import { useRecurringExpensesDue } from '../../hooks/useRecurringExpensesDue';
-import { getNudgesForShift } from '../../utils/expenseNudges';
 import { generateInsights } from '../../utils/insights';
 import { getMissedDays } from '../../utils/missedDays';
 import { DriverPrediction, generatePredictions } from '../../utils/predictions';
 import { predictNextShift } from '../../utils/shiftPredictor';
+import { calculateExpenseTaxClassification } from '../../shared/calculations/expenses';
 import { calcMileageAllowance } from '../../shared/calculations/mileage';
 import { filterToCurrentTaxYear, todayUK, toUKDateString, ukWeekStart } from '../../utils/ukDate';
 import {
@@ -215,7 +218,26 @@ const getLastFuelExpense = (expenses: Expense[], targetDate: string) =>
       return diffDays <= 7;
     });
 
-const getMostRecentShift = (logs: DailyWorkLog[]) => [...logs].sort((left, right) => right.date.localeCompare(left.date))[0] ?? null;
+const getShiftTimestamp = (log: DailyWorkLog) => {
+  const timestamp = new Date(log.endedAt ?? log.updatedAt ?? `${log.date}T12:00:00Z`).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const getMostRecentShift = (logs: DailyWorkLog[]) =>
+  [...logs].sort((left, right) => {
+    const dateOrder = right.date.localeCompare(left.date);
+    return dateOrder || getShiftTimestamp(right) - getShiftTimestamp(left);
+  })[0] ?? null;
+
+const getCompletedShiftLog = (logs: DailyWorkLog[], summary: CompletedShiftSummary) => {
+  if (summary.shiftId) {
+    const matchingLog = logs.find((log) => log.id === summary.shiftId);
+    if (matchingLog) return matchingLog;
+  }
+
+  const sameDateLogs = logs.filter((log) => log.date === summary.date);
+  return getMostRecentShift(sameDateLogs.length > 0 ? sameDateLogs : logs);
+};
 
 const getOdometerTemplate = (trips: Trip[], settings: Settings, targetDate: string) => {
   const previousTrip = [...trips]
@@ -285,16 +307,32 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const todayLogs = useMemo(() => dailyLogs.filter((log) => log.date === todayKey), [dailyLogs, todayKey]);
   const recentLogs = useMemo(() => [...dailyLogs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [dailyLogs]);
   const mostRecentShift = useMemo(() => getMostRecentShift(dailyLogs), [dailyLogs]);
+  const completedShiftLog = useMemo(
+    () => (completedShiftSummary ? getCompletedShiftLog(dailyLogs, completedShiftSummary) : null),
+    [completedShiftSummary, dailyLogs]
+  );
   const missedDays = useMemo(() => getMissedDays(dailyLogs, settings.dayOffDates), [dailyLogs, settings.dayOffDates]);
   const visibleMissedDays = dailyLogs.length > 0 ? missedDays : [];
   const dueRecurringExpenses = useRecurringExpensesDue(settings.recurringExpenses, todayKey, settings.workWeekStartDay);
   const handleLogRecurring = (item: RecurringExpense) => {
+    const taxClassification = calculateExpenseTaxClassification({
+      amount: item.amount,
+      category: item.category,
+      claimMethod: settings.claimMethod,
+      isVatClaimable: false,
+      scope: 'business',
+    });
+
     onAddExpense({
       id: Date.now().toString(),
       date: todayKey,
       category: item.category,
       amount: item.amount,
       description: item.description,
+      isVatClaimable: false,
+      ...taxClassification,
+      sourceType: 'manual',
+      reviewStatus: 'confirmed',
       updatedAt: new Date().toISOString(),
     });
     onUpdateSettings({
@@ -369,38 +407,6 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       }),
     [dailyLogs, manualShiftDate, storedLastEndOdometer]
   );
-  const providerBreakdown = useMemo(() => {
-    const map = new Map<string, { revenue: number; days: number; hours: number }>();
-
-    for (const log of filterToCurrentTaxYear(dailyLogs)) {
-      if (log.providerSplits?.length) {
-        const totalSplitRevenue = log.providerSplits.reduce((sum, s) => sum + s.revenue, 0) || log.revenue || 0;
-        for (const split of log.providerSplits) {
-          const key = split.provider || 'Other';
-          const share = totalSplitRevenue > 0 ? split.revenue / totalSplitRevenue : 1 / log.providerSplits.length;
-          const existing = map.get(key) ?? { revenue: 0, days: 0, hours: 0 };
-          map.set(key, {
-            revenue: existing.revenue + split.revenue,
-            days: existing.days + 1,
-            hours: existing.hours + log.hoursWorked * share,
-          });
-        }
-      } else {
-        const key = log.provider || 'Other';
-        const existing = map.get(key) ?? { revenue: 0, days: 0, hours: 0 };
-        map.set(key, {
-          revenue: existing.revenue + log.revenue,
-          days: existing.days + 1,
-          hours: existing.hours + log.hoursWorked,
-        });
-      }
-    }
-
-    return [...map.entries()]
-      .map(([name, values]) => ({ name, ...values }))
-      .sort((left, right) => right.revenue - left.revenue);
-  }, [dailyLogs]);
-
   const taxYearTotals = useMemo(() => {
     const currentYearLogs = filterToCurrentTaxYear(dailyLogs);
     const currentYearTrips = filterToCurrentTaxYear(trips);
@@ -486,7 +492,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           {
             id: completedShiftSummary.id,
             date: completedShiftSummary.date,
-            provider: mostRecentShift?.provider || 'Work Day',
+            provider: completedShiftLog?.provider || mostRecentShift?.provider || 'Work Day',
             hoursWorked: completedShiftSummary.hoursWorked ?? getDurationHours(completedShiftSummary.startedAt, completedShiftSummary.endedAt),
             revenue: completedShiftSummary.revenue,
             fuelLiters: completedShiftSummary.fuelLiters || undefined,
@@ -777,13 +783,14 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const summaryProgressPercent = completedShiftSummary
     ? getProgressPercent(completedShiftSummary.weekRevenue, settings.weeklyRevenueTarget)
     : 0;
-  const shiftNudges = completedShiftSummary ? getNudgesForShift(completedShiftSummary, expenses) : [];
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 pb-4 pt-2">
       {completedShiftSummary ? (
         <WeeklySummary
           completedShiftSummary={completedShiftSummary}
+          completedLog={completedShiftLog}
+          expenses={expenses}
           summaryHoursWorked={summaryHoursWorked}
           summaryHourlyRate={summaryHourlyRate}
           summaryInsight={summaryInsight ?? null}
@@ -794,7 +801,6 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           onAddExpense={() => onAddCompletedShiftExpense(completedShiftSummary)}
           onAddMiles={() => onAddCompletedShiftMiles(completedShiftSummary)}
           onSetReminder={onOpenReminderSettings}
-          shiftNudges={shiftNudges}
         />
       ) : (
         <>
@@ -814,6 +820,23 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
             liveMiles={liveMiles}
             liveTax={liveTax}
             formatTime={formatTime}
+          />
+
+          <HealthCheckCard
+            logs={dailyLogs}
+            trips={trips}
+            expenses={expenses}
+            settings={settings}
+            today={todayKey}
+          />
+
+          <PlatformBreakdownCard logs={dailyLogs} />
+
+          <MonthlySummaryCard
+            logs={dailyLogs}
+            trips={trips}
+            expenses={expenses}
+            settings={settings}
           />
 
           <section className={`${panelClasses} overflow-hidden p-5`}>
@@ -846,28 +869,6 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           {taxYearTotals.workDays > 0 ? (
             <>
               <TaxEstimateCard totals={taxYearTotals} />
-
-              {providerBreakdown.length > 0 && (
-                <section className={`${panelClasses} p-5`}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">By platform</p>
-                  <div className="mt-3 space-y-2">
-                    {providerBreakdown.map((provider) => (
-                      <div key={provider.name} className={`${subtlePanelClasses} flex items-center justify-between px-4 py-3`}>
-                        <div>
-                          <p className="text-sm font-medium text-white">{provider.name}</p>
-                          <p className="text-xs text-slate-500">{provider.days} day{provider.days !== 1 ? 's' : ''} · {formatNumber(provider.hours, 1)} hrs</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono text-sm font-semibold tracking-tight text-white">{formatCurrency(provider.revenue)}</p>
-                          {provider.hours > 0 && (
-                            <p className="font-mono text-xs tracking-tight text-slate-500">{formatCurrency(provider.revenue / provider.hours)}/hr</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
 
               {recentLogs.length > 0 && (
                 <section className={`${panelClasses} p-5`}>

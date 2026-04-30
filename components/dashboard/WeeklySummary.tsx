@@ -1,12 +1,13 @@
 import React from 'react';
-import { Bell, Car, Receipt, Share2, Sparkles, TriangleAlert } from 'lucide-react';
-import type { ShiftNudge } from '../../utils/expenseNudges';
+import { Bell, Car, Receipt, Share2, Sparkles } from 'lucide-react';
 import { calcKept } from '../../shared/calculations/tax';
-import type { CompletedShiftSummary } from '../../types';
+import type { CompletedShiftSummary, DailyWorkLog, Expense } from '../../types';
 import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses, secondaryButtonClasses } from '../../utils/ui';
 
 type WeeklySummaryProps = {
   completedShiftSummary: CompletedShiftSummary;
+  completedLog?: DailyWorkLog | null;
+  expenses?: Expense[];
   summaryHoursWorked: number;
   summaryHourlyRate: number;
   summaryInsight: string | null;
@@ -17,10 +18,12 @@ type WeeklySummaryProps = {
   onAddExpense: () => void;
   onAddMiles: () => void;
   onSetReminder: () => void;
-  shiftNudges?: ShiftNudge[];
 };
 
+type PostShiftNudge = 'mileage' | 'expense';
+
 const summaryStatClass = 'rounded-2xl border border-surface-border bg-surface-raised px-4 py-3';
+const highlightedActionClasses = 'border-amber-400/50 bg-amber-400/15 text-amber-50 hover:bg-amber-400/25';
 
 const buildEarningsSummaryLine = (summary: CompletedShiftSummary) => {
   const parts = [`You kept ${formatCurrency(summary.realProfit)}`];
@@ -39,6 +42,8 @@ const buildEarningsSummaryLine = (summary: CompletedShiftSummary) => {
 
 export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   completedShiftSummary,
+  completedLog,
+  expenses = [],
   summaryHoursWorked,
   summaryHourlyRate,
   summaryInsight,
@@ -49,8 +54,13 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   onAddExpense,
   onAddMiles,
   onSetReminder,
-  shiftNudges = [],
 }) => {
+  const [dismissedNudgeSummaryId, setDismissedNudgeSummaryId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setDismissedNudgeSummaryId(null);
+  }, [completedShiftSummary.id]);
+
   // Keep this aligned with the shared tax layer instead of relying on a stored snapshot value.
   const kept = calcKept(
     completedShiftSummary.revenue,
@@ -58,6 +68,17 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
     completedShiftSummary.taxToSetAside
   );
   const earningsSummaryLine = buildEarningsSummaryLine(completedShiftSummary);
+  const shiftDate = completedLog?.date ?? completedShiftSummary.date;
+  const noMileageLoggedForShift = Boolean(completedLog) && !completedLog?.linkedTripId;
+  const hasExpenseOnShiftDate = expenses.some((expense) => expense.date === shiftDate);
+  const nudgeDismissedForSummary = dismissedNudgeSummaryId === completedShiftSummary.id;
+  const activePostShiftNudge: PostShiftNudge | null = nudgeDismissedForSummary
+    ? null
+    : noMileageLoggedForShift
+      ? 'mileage'
+      : !hasExpenseOnShiftDate
+        ? 'expense'
+        : null;
 
   return (
     <section data-testid="shift-summary-card" className={`${panelClasses} p-6`}>
@@ -69,7 +90,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
       <div className="mt-5 text-center">
         <p className="text-4xl font-semibold tracking-tight text-white">{formatCurrency(completedShiftSummary.revenue)}</p>
         <p className="mt-2 text-sm text-slate-300">
-          {formatNumber(summaryHoursWorked, 2)}h · {formatCurrency(summaryHourlyRate)}/hr
+          {formatNumber(summaryHoursWorked, 2)}h &middot; {formatCurrency(summaryHourlyRate)}/hr
         </p>
       </div>
 
@@ -106,31 +127,24 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
 
       <p className="mt-5 text-center text-sm font-medium text-slate-100">{earningsSummaryLine}</p>
 
-      {shiftNudges.length > 0 && (
+      {activePostShiftNudge && (
         <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
-          <div className="mb-2 flex items-center gap-2">
-            <TriangleAlert className="h-3.5 w-3.5 text-amber-300" />
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Anything to claim?</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {shiftNudges.includes('fuel') && (
-              <button
-                type="button"
-                onClick={onAddExpense}
-                className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-400/20 active:scale-95"
-              >
-                Fuel or charging? → Add it
-              </button>
-            )}
-            {shiftNudges.includes('parking') && (
-              <button
-                type="button"
-                onClick={onAddExpense}
-                className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-400/20 active:scale-95"
-              >
-                Parking or tolls? → Add it
-              </button>
-            )}
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-full bg-amber-400/15 p-2 text-amber-200">
+              {activePostShiftNudge === 'mileage' ? <Car className="h-4 w-4" /> : <Receipt className="h-4 w-4" />}
+            </div>
+            <p className="min-w-0 flex-1 text-sm font-medium leading-5 text-amber-50">
+              {activePostShiftNudge === 'mileage'
+                ? 'No mileage logged for this shift -- claiming miles adds up over the year.'
+                : 'Did you have any costs today? Fuel, parking, or phone use all count.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setDismissedNudgeSummaryId(completedShiftSummary.id)}
+              className="rounded-full px-3 py-1.5 text-xs font-medium text-amber-100 transition-colors hover:bg-amber-400/10 active:scale-95"
+            >
+              Skip
+            </button>
           </div>
         </div>
       )}
@@ -147,7 +161,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
         <button
           type="button"
           onClick={onAddExpense}
-          className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
+          className={`${secondaryButtonClasses} px-3 py-2 text-xs ${activePostShiftNudge === 'expense' ? highlightedActionClasses : ''}`}
         >
           <Receipt className="h-4 w-4" />
           <span>Add expense</span>
@@ -155,10 +169,10 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
         <button
           type="button"
           onClick={onAddMiles}
-          className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
+          className={`${secondaryButtonClasses} px-3 py-2 text-xs ${activePostShiftNudge === 'mileage' ? highlightedActionClasses : ''}`}
         >
           <Car className="h-4 w-4" />
-          <span>Add miles</span>
+          <span>{activePostShiftNudge === 'mileage' ? 'Log mileage' : 'Add miles'}</span>
         </button>
         <button
           type="button"

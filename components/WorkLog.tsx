@@ -640,7 +640,22 @@ export const WorkLog: React.FC<WorkLogProps> = ({
   const [pendingDelete, setPendingDelete] = useState<DailyWorkLog | null>(null);
   const handledOpenFormSignalRef = useRef<number | undefined>(undefined);
 
-  const sortedLogs = useMemo(() => [...logs].sort((left, right) => right.date.localeCompare(left.date)), [logs]);
+  const sortedLogs = useMemo(() => {
+    const sorted = [...logs].sort((left, right) => right.date.localeCompare(left.date));
+    // Hide individual entries already captured inside a combined (providerSplits) entry for the same date.
+    // This prevents double-display when sync re-adds tombstoned individual logs.
+    return sorted.filter((log) => {
+      if (log.providerSplits?.length) return true;
+      return !sorted.some(
+        (other) =>
+          other.id !== log.id &&
+          other.date === log.date &&
+          other.providerSplits?.some(
+            (split) => split.provider === log.provider && Math.abs(split.revenue - log.revenue) < 0.01,
+          ),
+      );
+    });
+  }, [logs]);
   const jobLabel = getJobLabel(settings.driverRoles ?? ['COURIER']);
 
   useEffect(() => {
