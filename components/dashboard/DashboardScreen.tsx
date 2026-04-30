@@ -15,7 +15,6 @@ import {
   ActiveWorkSessionExpenseDraft,
   CompletedShiftSummary,
   DailyWorkLog,
-  DriverRole,
   Expense,
   ExpenseCategory,
   ProviderSplit,
@@ -36,7 +35,9 @@ import { getHabitState } from '../../utils/habitEngine';
 import { useRecurringExpensesDue } from '../../hooks/useRecurringExpensesDue';
 import { generateInsights } from '../../utils/insights';
 import { getMissedDays } from '../../utils/missedDays';
+import { getProviderOptions } from '../../utils/providers';
 import { DriverPrediction, generatePredictions } from '../../utils/predictions';
+import { calculateTimestampShiftDurationHours } from '../../utils/shiftDuration';
 import { predictNextShift } from '../../utils/shiftPredictor';
 import { calculateExpenseTaxClassification } from '../../shared/calculations/expenses';
 import { calcMileageAllowance } from '../../shared/calculations/mileage';
@@ -65,31 +66,6 @@ const DRAFT_STORAGE_KEY = 'dbt_draftEndShift';
 const LAST_END_ODOMETER_KEY = 'dbt_lastEndOdometer';
 const PREDICTION_DISMISS_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 
-const getProvidersByRole = (role: DriverRole): string[] => {
-  switch (role) {
-    case 'COURIER':
-      return ['Amazon Flex', 'DPD', 'Evri', 'Yodel', 'CitySprint', 'Royal Mail', 'Gophr'];
-    case 'FOOD_DELIVERY':
-      return ['Uber Eats', 'Deliveroo', 'Just Eat', 'Stuart', 'Beelivery', 'Gopuff'];
-    case 'TAXI':
-      return ['Uber', 'Bolt', 'FREENOW', 'Ola', 'Gett', 'Local Firm', 'Private Clients'];
-    case 'LOGISTICS':
-      return ['BCA Logistics', 'Engineius', 'Manheim', 'Drascombe', 'Auto Trader', 'Private Trade'];
-    default:
-      return ['Private client', 'Agency', 'Other'];
-  }
-};
-
-const getProviderOptions = (roles: DriverRole[], ...selectedProviders: Array<string | undefined>) => {
-  const providers = Array.from(new Set(roles.flatMap(getProvidersByRole)));
-  const missingSelectedProviders = selectedProviders
-    .map((provider) => provider?.trim())
-    .filter((provider): provider is string => Boolean(provider))
-    .filter((provider) => !providers.includes(provider));
-
-  return Array.from(new Set([...missingSelectedProviders, ...providers]));
-};
-
 const hashPrediction = (value: string) => {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -108,6 +84,7 @@ export interface ManualShiftPayload {
   provider: string;
   hoursWorked: number;
   revenue: number;
+  markedNoEarnings?: boolean;
   expenses: ActiveWorkSessionExpenseDraft[];
   startOdometer?: number;
   endOdometer?: number;
@@ -137,7 +114,9 @@ interface DashboardProps {
   onAddCompletedShiftMiles: (summary: CompletedShiftSummary) => void;
   onOpenReminderSettings: () => void;
   onSetPredictionReminder: () => void;
+  onNavigateToTax: () => void;
   onOpenBackfill: () => void;
+  onOpenWorkLog: () => void;
   onAddExpense: (expense: Expense) => void;
   onUpdateSettings: (settings: Settings) => void;
 }
@@ -163,6 +142,10 @@ interface EndShiftDraft {
   extraExpenseDescriptionValue: string;
   optionalExpanded: boolean;
 }
+
+type SaveShiftOptions = {
+  markedNoEarnings?: boolean;
+};
 
 const createEmptyDraft = (defaultProvider = 'Work Day'): EndShiftDraft => ({
   providers: [{ id: '1', provider: defaultProvider, revenue: '', jobCount: '' }],
@@ -203,8 +186,7 @@ const getWeekSnapshot = (dailyLogs: DailyWorkLog[], settings: Settings, dateValu
 };
 
 const getDurationHours = (startedAt: string, endedAt = new Date(Date.now()).toISOString()) => {
-  const durationMs = Math.max(new Date(endedAt).getTime() - new Date(startedAt).getTime(), 0);
-  return Math.max(0.1, durationMs / (1000 * 60 * 60));
+  return Math.max(0.1, calculateTimestampShiftDurationHours(startedAt, endedAt));
 };
 
 const getLastFuelExpense = (expenses: Expense[], targetDate: string) =>
@@ -282,7 +264,9 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   onAddCompletedShiftMiles,
   onOpenReminderSettings,
   onSetPredictionReminder,
+  onNavigateToTax,
   onOpenBackfill,
+  onOpenWorkLog,
   onAddExpense,
   onUpdateSettings,
 }) => {
@@ -358,8 +342,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     .reduce((sum, expense) => sum + (expense.liters ?? 0), 0);
   const liveRevenue = activeSession?.revenue ?? 0;
   const liveMiles = activeSession?.miles ?? trackedMilesForSession;
-  const liveTax = liveRevenue * (settings.taxSetAsidePercent / 100);
-  const liveKept = liveRevenue - liveTax - activeExpenseTotal;
+  const liveSetAside = liveRevenue * (settings.taxSetAsidePercent / 100);
+  const liveKept = liveRevenue - liveSetAside - activeExpenseTotal;
   const habitState = useMemo(() => getHabitState(dailyLogs, settings), [dailyLogs, settings]);
   const hasHabitCard =
     habitState.currentStreak >= 3 ||
@@ -368,12 +352,12 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
 
   const todayRevenue = todayLogs.reduce((sum, log) => sum + log.revenue, 0);
   const todayExpenses = todayLogs.reduce((sum, log) => sum + (log.expensesTotal ?? 0), 0);
-  const todayTax = todayRevenue * (settings.taxSetAsidePercent / 100);
-  const todayKept = todayRevenue - todayTax - todayExpenses;
+  const todaySetAside = todayRevenue * (settings.taxSetAsidePercent / 100);
+  const todayKept = todayRevenue - todaySetAside - todayExpenses;
 
   const outcomeStats = activeSession
-    ? { earned: liveRevenue, kept: liveKept, setAside: liveTax }
-    : { earned: todayRevenue, kept: todayKept, setAside: todayTax };
+    ? { earned: liveRevenue, kept: liveKept, setAside: liveSetAside }
+    : { earned: todayRevenue, kept: todayKept, setAside: todaySetAside };
 
   const weekSnapshot = useMemo(() => getWeekSnapshot(dailyLogs, settings), [dailyLogs, settings]);
   const weekRevenue = weekSnapshot.revenue + (activeSession?.date === todayKey ? liveRevenue : 0);
@@ -674,21 +658,43 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     setEndShiftDraft((current) => ({ ...current, ...patch }));
   };
 
-  const saveShift = () => {
-    const validProviders = endShiftDraft.providers.filter((row) => {
-      const rev = Number.parseFloat(row.revenue);
-      return Number.isFinite(rev) && rev > 0;
-    });
-    const revenue = validProviders.reduce((sum, row) => sum + Number.parseFloat(row.revenue), 0);
-    if (revenue <= 0) {
+  const saveShift = (options: SaveShiftOptions = {}) => {
+    const parsedProviders = endShiftDraft.providers.map((row) => ({
+      ...row,
+      provider: row.provider.trim(),
+      parsedRevenue: Number.parseFloat(row.revenue),
+    }));
+    const earningProviders = parsedProviders.filter((row) => Number.isFinite(row.parsedRevenue) && row.parsedRevenue > 0);
+    const fallbackProvider = parsedProviders[0] ?? {
+      id: 'manual',
+      provider: manualProvider || activeSession?.provider || 'Work Day',
+      revenue: '',
+      jobCount: '',
+      parsedRevenue: 0,
+    };
+    const providersToSave = earningProviders.length > 0
+      ? earningProviders
+      : options.markedNoEarnings
+        ? [fallbackProvider]
+        : [];
+    const revenue = providersToSave.reduce(
+      (sum, row) => sum + (Number.isFinite(row.parsedRevenue) && row.parsedRevenue > 0 ? row.parsedRevenue : 0),
+      0
+    );
+    if (revenue <= 0 && !options.markedNoEarnings) {
       return;
     }
-    const providerSplits: ProviderSplit[] = validProviders.map((row) => ({
-      provider: row.provider,
-      revenue: Number.parseFloat(row.revenue),
-      ...(Number.parseInt(row.jobCount) > 0 && { jobCount: Number.parseInt(row.jobCount) }),
-    }));
-    const primaryProvider = validProviders[0]?.provider ?? manualProvider;
+    const markedNoEarnings = revenue === 0 && Boolean(options.markedNoEarnings);
+    const providerSplits: ProviderSplit[] = providersToSave.map((row) => {
+      const jobCount = Number.parseInt(row.jobCount, 10);
+      return {
+        provider: row.provider || manualProvider || 'Work Day',
+        revenue: Number.isFinite(row.parsedRevenue) && row.parsedRevenue > 0 ? row.parsedRevenue : 0,
+        ...(Number.isFinite(jobCount) && jobCount > 0 && { jobCount }),
+      };
+    });
+    const savedProviderSplits = markedNoEarnings ? [] : providerSplits;
+    const primaryProvider = providerSplits[0]?.provider ?? (manualProvider || 'Work Day');
 
     const manualHoursValue = Number.parseFloat(manualHoursWorked || '0');
     if (endSheetMode === 'manual' && (!Number.isFinite(manualHoursValue) || manualHoursValue <= 0)) {
@@ -732,24 +738,27 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         endSheetMode === 'active' && activeSession
           ? onCompleteSession({
               ...activeSession,
+              provider: primaryProvider,
               revenue,
+              markedNoEarnings,
               miles:
                 Number.isFinite(endOdometer) && activeSession.startOdometer != null
                   ? Math.max(0, endOdometer - activeSession.startOdometer)
                   : activeSession.miles ?? trackedMilesForSession,
               expenses: expenseItems,
-              providerSplits,
+              providerSplits: savedProviderSplits,
             })
           : onSaveManualShift({
               date: manualShiftDate,
               provider: primaryProvider,
               hoursWorked: manualHoursValue,
               revenue,
+              markedNoEarnings,
               expenses: expenseItems,
               startOdometer: manualStartOdometer,
               endOdometer: Number.isFinite(endOdometer) ? endOdometer : undefined,
               notes: endShiftDraft.notesValue || undefined,
-              providerSplits,
+              providerSplits: savedProviderSplits,
             });
 
       if (Number.isFinite(endOdometer)) {
@@ -790,6 +799,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         <WeeklySummary
           completedShiftSummary={completedShiftSummary}
           completedLog={completedShiftLog}
+          trips={trips}
           expenses={expenses}
           summaryHoursWorked={summaryHoursWorked}
           summaryHourlyRate={summaryHourlyRate}
@@ -807,6 +817,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           <EarningsSummary
             activeSession={activeSession ? { startedAt: activeSession.startedAt } : null}
             todayLogsCount={todayLogs.length}
+            hasAnyLoggedShifts={dailyLogs.length > 0}
             outcomeStats={outcomeStats}
             activeDurationHours={activeDurationHours}
             weekRevenue={weekRevenue}
@@ -815,10 +826,12 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
             onEndShift={openActiveEndSheet}
             onQuickAddRevenue={() => onUpdateSession({ revenue: liveRevenue + 10 })}
             onStartShift={openStartSheet}
-            onAddShift={() => openManualEntry()}
+            onAddShift={dailyLogs.length === 0 ? onOpenWorkLog : () => openManualEntry()}
             liveRevenue={liveRevenue}
             liveMiles={liveMiles}
-            liveTax={liveTax}
+            liveSetAside={liveSetAside}
+            taxSetAsidePercent={settings.taxSetAsidePercent}
+            onViewTaxEstimate={onNavigateToTax}
             formatTime={formatTime}
           />
 
@@ -922,7 +935,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
                   <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
                   <div>
                     <p className="text-sm font-medium text-white">See your real take-home</p>
-                    <p className="mt-0.5 text-xs text-slate-400">Tax set-aside, expenses, and weekly pace are all kept in view.</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Your set-aside rule, expenses, and weekly pace are all kept in view.</p>
                   </div>
                 </div>
               </div>

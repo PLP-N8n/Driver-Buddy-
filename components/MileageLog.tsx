@@ -37,6 +37,7 @@ interface MileageLogProps {
   onAddTrip: (trip: Trip) => void;
   onDeleteTrip: (id: string) => void;
   onUpdateTrip: (id: string, updates: Partial<Trip>) => void;
+  onLinkTripToShift?: (shiftId: string, tripId: string) => void;
   settings: Settings;
   openFormSignal?: number;
   openFormDefaults?: {
@@ -148,6 +149,7 @@ export const MileageLog: React.FC<MileageLogProps> = ({
   onAddTrip,
   onDeleteTrip,
   onUpdateTrip,
+  onLinkTripToShift,
   settings,
   openFormSignal,
   openFormDefaults,
@@ -203,6 +205,7 @@ export const MileageLog: React.FC<MileageLogProps> = ({
       endOdometer: 0,
       totalMiles: 0,
       notes: openFormDefaults?.linkedShiftId ? 'For completed shift' : '',
+      linkedShiftId: openFormDefaults?.linkedShiftId,
     });
     setStartOdometerInput(startValue.toString());
     setEndOdometerInput('');
@@ -293,8 +296,10 @@ export const MileageLog: React.FC<MileageLogProps> = ({
         notes: newTrip.notes || '',
       });
     } else {
+      const tripId = Date.now().toString();
+      const linkedShiftId = newTrip.linkedShiftId ?? openFormDefaults?.linkedShiftId;
       onAddTrip({
-        id: Date.now().toString(),
+        id: tripId,
         date: newTrip.date || todayUK(),
         startLocation: newTrip.startLocation || 'Unknown start',
         endLocation: newTrip.endLocation || 'Unknown end',
@@ -303,7 +308,9 @@ export const MileageLog: React.FC<MileageLogProps> = ({
         totalMiles: newTrip.totalMiles,
         purpose: (newTrip.purpose as TripPurpose) || 'Business',
         notes: newTrip.notes || '',
+        ...(linkedShiftId ? { linkedShiftId } : {}),
       });
+      if (linkedShiftId) onLinkTripToShift?.(linkedShiftId, tripId);
     }
 
     closeForm();

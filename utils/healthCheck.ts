@@ -1,4 +1,5 @@
 import type { DailyWorkLog, Expense, Settings, Trip } from '../types';
+import { getMileageCoverage, type MileageCoverage } from './mileageLinkage';
 
 export type HealthStatus = 'good' | 'attention' | 'warning';
 
@@ -43,9 +44,9 @@ const getTaxSignal = (
     return 'good';
   }
 
-  const actualSetAsideEstimate = recentEarnings * (settings.taxSetAsidePercent / 100);
+  const savedByRule = recentEarnings * (settings.taxSetAsidePercent / 100);
   const hasRecentExpense = expenses.some((expense) => isInDateWindow(expense.date, start, today));
-  return hasRecentExpense || actualSetAsideEstimate > 0 ? 'good' : 'attention';
+  return hasRecentExpense || savedByRule > 0 ? 'good' : 'attention';
 };
 
 const getExpenseSignal = (
@@ -61,13 +62,22 @@ const getExpenseSignal = (
   return expenses.some((expense) => isInDateWindow(expense.date, start, today)) ? 'good' : 'attention';
 };
 
-const getMileageSignal = (shifts: DailyWorkLog[]): HealthStatus => {
+const getMileageCoverageCounts = (shifts: DailyWorkLog[], trips: Trip[]) =>
+  shifts.reduce(
+    (counts, shift) => {
+      const coverage = getMileageCoverage(shift, trips);
+      counts[coverage] += 1;
+      return counts;
+    },
+    { linked: 0, unlinked: 0, missing: 0 } satisfies Record<MileageCoverage, number>
+  );
+
+const getMileageSignal = (shifts: DailyWorkLog[], trips: Trip[]): HealthStatus => {
   if (shifts.length === 0) {
     return 'good';
   }
 
-  const linkedShiftCount = shifts.filter((shift) => Boolean(shift.linkedTripId)).length;
-  const missingShiftCount = shifts.length - linkedShiftCount;
+  const { missing: missingShiftCount } = getMileageCoverageCounts(shifts, trips);
 
   if (missingShiftCount === 0) {
     return 'good';
@@ -95,19 +105,20 @@ export function buildHealthCheck(
   settings: Settings,
   today: string
 ): HealthCheck {
-  // Product rule treats a set linkedTripId as the mileage coverage signal.
-  void trips;
-
   const sevenDaysAgo = getDateDaysAgo(today, 7);
   const recentShifts = logs.filter((log) => isInDateWindow(log.date, sevenDaysAgo, today));
   const taxSignal = getTaxSignal(logs, expenses, settings, today);
   const expenseSignal = getExpenseSignal(recentShifts, expenses, today);
-  const mileageSignal = getMileageSignal(recentShifts);
+  const mileageSignal = getMileageSignal(recentShifts, trips);
+  const mileageCoverageCounts = getMileageCoverageCounts(recentShifts, trips);
   const status = getWorstStatus(taxSignal, expenseSignal, mileageSignal);
   const details = [
     expenseSignal !== 'good' ? 'No expenses logged this week -- did you have fuel or parking costs?' : null,
     mileageSignal !== 'good' ? 'Some shifts are missing mileage -- tap a shift to add it.' : null,
-    taxSignal !== 'good' ? `Make sure you are setting aside ${settings.taxSetAsidePercent}% of earnings for tax.` : null,
+    mileageCoverageCounts.unlinked > 0
+      ? 'Mileage is logged on the same date for a shift -- confirm the shift link when you can.'
+      : null,
+    taxSignal !== 'good' ? `Check your ${settings.taxSetAsidePercent}% set-aside rule against the Tax tab estimate.` : null,
   ].filter((detail): detail is string => Boolean(detail)).slice(0, 3);
 
   return {

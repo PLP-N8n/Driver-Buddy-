@@ -62,7 +62,7 @@ type QuickAddFormProps = {
   onManualHoursWorkedChange: (value: string) => void;
   endShiftDraft: EndShiftDraft;
   onUpdateEndShiftDraft: (patch: Partial<EndShiftDraft>) => void;
-  onSaveShift: () => void;
+  onSaveShift: (options?: { markedNoEarnings?: boolean }) => void;
   activeSessionEstimatedRevenue: ShiftPrediction;
   settings: Settings;
 };
@@ -113,6 +113,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
   settings,
 }) => {
   const [showZeroEarningsWarning, setShowZeroEarningsWarning] = React.useState(false);
+  const [manualHoursError, setManualHoursError] = React.useState<string | null>(null);
 
   const totalEarnings = getProviderRevenueTotal(endShiftDraft.providers);
   const energyExpenseLabel = getVehicleEnergyExpenseLabel(settings);
@@ -122,12 +123,31 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
   React.useEffect(() => {
     if (!showEndSheet) {
       setShowZeroEarningsWarning(false);
+      setManualHoursError(null);
     }
   }, [showEndSheet]);
 
+  React.useEffect(() => {
+    if (totalEarnings > 0) {
+      setShowZeroEarningsWarning(false);
+    }
+  }, [totalEarnings]);
+
   const handleSaveShift = () => {
-    setShowZeroEarningsWarning(totalEarnings === 0);
-    onSaveShift();
+    const manualHoursValue = Number.parseFloat(manualHoursWorked || '0');
+    if (endSheetMode === 'manual' && (!Number.isFinite(manualHoursValue) || manualHoursValue <= 0)) {
+      setManualHoursError('Required: enter a value greater than 0');
+      return;
+    }
+
+    setManualHoursError(null);
+
+    if (totalEarnings === 0 && !showZeroEarningsWarning) {
+      setShowZeroEarningsWarning(true);
+      return;
+    }
+
+    onSaveShift({ markedNoEarnings: totalEarnings === 0 });
   };
 
   return (
@@ -254,6 +274,9 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
                   />
                   {manualPrediction.estimatedHours > 0 && (
                     <p className="mt-2 text-xs text-slate-400">Typical for this day: ~{formatNumber(manualPrediction.estimatedHours, 1)} hrs</p>
+                  )}
+                  {manualHoursError && (
+                    <p className="mt-1 text-xs text-red-400">{manualHoursError}</p>
                   )}
                 </div>
               </div>

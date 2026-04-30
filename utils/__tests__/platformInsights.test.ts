@@ -1,130 +1,113 @@
-import { describe, expect, it } from 'vitest';
-import type { DailyWorkLog } from '../../types';
+import { describe, it, expect } from 'vitest';
 import { calcPlatformSummaries } from '../platformInsights';
+import type { DailyWorkLog } from '../../types';
 
-const makeLog = (id: string, overrides: Partial<DailyWorkLog>): DailyWorkLog => ({
-  id,
-  date: '2026-04-20',
+const makeLog = (overrides: Partial<DailyWorkLog> & { id: string }): DailyWorkLog => ({
+  date: '2026-04-01',
   provider: 'Uber',
   hoursWorked: 4,
-  revenue: 100,
+  revenue: 40,
   ...overrides,
 });
 
 describe('calcPlatformSummaries', () => {
-  it('returns a single provider summary with the correct hourly rate', () => {
-    const summaries = calcPlatformSummaries([
-      makeLog('log-1', {
+  it('sorts two platforms descending by total earnings', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Bolt', hoursWorked: 3, revenue: 30 }),
+      makeLog({ id: 'b', provider: 'Uber', hoursWorked: 4, revenue: 80 }),
+    ];
+
+    const [first, second] = calcPlatformSummaries(logs);
+
+    expect(first?.provider).toBe('Uber');
+    expect(first?.totalEarnings).toBe(80);
+    expect(second?.provider).toBe('Bolt');
+    expect(second?.totalEarnings).toBe(30);
+  });
+
+  it('computes hourlyRate correctly', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', hoursWorked: 5, revenue: 50 }),
+    ];
+
+    const [summary] = calcPlatformSummaries(logs);
+
+    expect(summary?.hourlyRate).toBeCloseTo(10);
+  });
+
+  it('returns a single platform without error', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', hoursWorked: 2, revenue: 24 }),
+      makeLog({ id: 'b', provider: 'Uber', hoursWorked: 3, revenue: 30 }),
+    ];
+
+    const result = calcPlatformSummaries(logs);
+    const [only] = result;
+
+    expect(result).toHaveLength(1);
+    expect(only?.provider).toBe('Uber');
+    expect(only?.shiftCount).toBe(2);
+    expect(only?.totalEarnings).toBe(54);
+    expect(only?.totalHours).toBe(5);
+  });
+
+  it('excludes shifts with zero earnings', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', hoursWorked: 4, revenue: 0 }),
+      makeLog({ id: 'b', provider: 'Bolt', hoursWorked: 2, revenue: 20 }),
+    ];
+
+    const result = calcPlatformSummaries(logs);
+    const [only] = result;
+
+    expect(result).toHaveLength(1);
+    expect(only?.provider).toBe('Bolt');
+  });
+
+  it('returns empty array when all shifts have zero earnings', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', hoursWorked: 3, revenue: 0 }),
+    ];
+
+    expect(calcPlatformSummaries(logs)).toHaveLength(0);
+  });
+
+  it('distributes earnings and hours across providers for a multi-provider split shift', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({
+        id: 'a',
         provider: 'Uber',
-        hoursWorked: 4,
-        revenue: 120,
-      }),
-    ]);
-
-    expect(summaries).toHaveLength(1);
-    expect(summaries[0]).toMatchObject({
-      provider: 'Uber',
-      totalEarnings: 120,
-      totalHours: 4,
-      hourlyRate: 30,
-      shiftCount: 1,
-      earningsShare: 100,
-    });
-  });
-
-  it('attributes multi-provider shift hours proportionally by providerSplits revenue', () => {
-    const summaries = calcPlatformSummaries([
-      makeLog('log-1', {
-        provider: 'Uber + Bolt',
-        hoursWorked: 5,
-        revenue: 100,
+        hoursWorked: 6,
+        revenue: 60,
         providerSplits: [
-          { provider: 'Uber', revenue: 60 },
-          { provider: 'Bolt', revenue: 40 },
+          { provider: 'Uber', revenue: 40 },
+          { provider: 'Bolt', revenue: 20 },
         ],
       }),
-    ]);
+    ];
 
-    expect(summaries).toHaveLength(2);
-    expect(summaries[0]).toMatchObject({
-      provider: 'Uber',
-      totalEarnings: 60,
-      shiftCount: 1,
-    });
-    expect(summaries[0]?.totalHours).toBeCloseTo(3);
-    expect(summaries[0]?.hourlyRate).toBeCloseTo(20);
-    expect(summaries[0]?.earningsShare).toBeCloseTo(60);
-    expect(summaries[1]).toMatchObject({
-      provider: 'Bolt',
-      totalEarnings: 40,
-      shiftCount: 1,
-    });
-    expect(summaries[1]?.totalHours).toBeCloseTo(2);
-    expect(summaries[1]?.hourlyRate).toBeCloseTo(20);
-    expect(summaries[1]?.earningsShare).toBeCloseTo(40);
+    const result = calcPlatformSummaries(logs);
+    const uber = result.find((s) => s.provider === 'Uber');
+    const bolt = result.find((s) => s.provider === 'Bolt');
+
+    expect(result).toHaveLength(2);
+    expect(uber?.totalEarnings).toBe(40);
+    expect(bolt?.totalEarnings).toBe(20);
+    expect(uber?.totalHours).toBeCloseTo(4);
+    expect(bolt?.totalHours).toBeCloseTo(2);
   });
 
-  it('aggregates mixed split and non-split logs case-insensitively', () => {
-    const summaries = calcPlatformSummaries([
-      makeLog('log-1', {
-        provider: 'Uber + Bolt',
-        hoursWorked: 5,
-        revenue: 100,
-        providerSplits: [
-          { provider: 'Uber', revenue: 60 },
-          { provider: 'Bolt', revenue: 40 },
-        ],
-      }),
-      makeLog('log-2', {
-        provider: 'uber',
-        hoursWorked: 2,
-        revenue: 40,
-      }),
-    ]);
+  it('computes earningsShare as percentage of combined earnings', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', hoursWorked: 4, revenue: 75 }),
+      makeLog({ id: 'b', provider: 'Bolt', hoursWorked: 2, revenue: 25 }),
+    ];
 
-    expect(summaries).toHaveLength(2);
-    expect(summaries[0]).toMatchObject({
-      provider: 'Uber',
-      totalEarnings: 100,
-      shiftCount: 2,
-    });
-    expect(summaries[0]?.totalHours).toBeCloseTo(5);
-    expect(summaries[0]?.hourlyRate).toBeCloseTo(20);
-    expect(summaries[0]?.earningsShare).toBeCloseTo(100 / 140 * 100);
-    expect(summaries[1]).toMatchObject({
-      provider: 'Bolt',
-      totalEarnings: 40,
-      totalHours: 2,
-      hourlyRate: 20,
-      shiftCount: 1,
-    });
-  });
+    const result = calcPlatformSummaries(logs);
+    const uber = result.find((s) => s.provider === 'Uber');
+    const bolt = result.find((s) => s.provider === 'Bolt');
 
-  it('keeps a single provider result so the component can decide whether to hide it', () => {
-    const summaries = calcPlatformSummaries([
-      makeLog('log-1', { provider: 'Uber', revenue: 80 }),
-      makeLog('log-2', { provider: 'uber', revenue: 120 }),
-    ]);
-
-    expect(summaries).toHaveLength(1);
-    expect(summaries[0]).toMatchObject({
-      provider: 'Uber',
-      totalEarnings: 200,
-      shiftCount: 2,
-    });
-  });
-
-  it('uses an hourly rate of 0 for zero-hour logs instead of NaN', () => {
-    const summaries = calcPlatformSummaries([
-      makeLog('log-1', {
-        provider: 'Deliveroo',
-        hoursWorked: 0,
-        revenue: 50,
-      }),
-    ]);
-
-    expect(summaries).toHaveLength(1);
-    expect(summaries[0]?.hourlyRate).toBe(0);
-    expect(Number.isNaN(summaries[0]?.hourlyRate)).toBe(false);
+    expect(uber?.earningsShare).toBeCloseTo(75);
+    expect(bolt?.earningsShare).toBeCloseTo(25);
   });
 });

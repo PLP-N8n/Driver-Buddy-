@@ -102,6 +102,23 @@ describe('buildHealthCheck', () => {
     expect(result.details).toContain('Some shifts are missing mileage -- tap a shift to add it.');
   });
 
+  it('treats same-date business trips as covered unlinked mileage', () => {
+    const result = buildHealthCheck([
+      makeLog('log-1', { linkedTripId: undefined }),
+    ], [{
+      ...trips[0]!,
+      id: 'same-day-business-trip',
+      date: today,
+    }], [
+      makeExpense('expense-1'),
+    ], settings, today);
+
+    expect(result.mileageSignal).toBe('good');
+    expect(result.status).toBe('good');
+    expect(result.details).toContain('Mileage is logged on the same date for a shift -- confirm the shift link when you can.');
+    expect(result.details).not.toContain('Some shifts are missing mileage -- tap a shift to add it.');
+  });
+
   it('uses the worst signal as the overall status', () => {
     const result = buildHealthCheck([
       makeLog('log-1', { date: '2026-04-28', linkedTripId: undefined }),

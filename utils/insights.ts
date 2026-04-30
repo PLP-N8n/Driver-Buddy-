@@ -115,7 +115,7 @@ const getTaxProjection = (logs: DailyWorkLog[], settings: Settings, trips: Trip[
     estimatedLiability: buildProjection(totalRevenue, deductionUsed, {
       isScottishTaxpayer: settings.isScottishTaxpayer,
     }).estimatedLiability,
-    taxSaved: totalRevenue * (settings.taxSetAsidePercent / 100),
+    setAsideByRule: totalRevenue * (settings.taxSetAsidePercent / 100),
   };
 };
 
@@ -146,8 +146,8 @@ export function generateInsights(
   // canonical mileage used in tax and allowance calculations.
   const miles = today.milesDriven ?? 0;
   const fuelLiters = today.fuelLiters ?? 0;
-  const taxToSetAside = revenue * (settings.taxSetAsidePercent / 100);
-  const kept = revenue - taxToSetAside - expenses;
+  const setAsideByRule = revenue * (settings.taxSetAsidePercent / 100);
+  const kept = revenue - setAsideByRule - expenses;
   const profitPercent = revenue > 0 ? (kept / revenue) * 100 : 0;
   const costPerMile = miles > 0 ? expenses / miles : 0;
   const previousDays = history
@@ -244,9 +244,9 @@ export function generateInsights(
 
   const taxProjection = getTaxProjection(history, settings, trips);
 
-  if (taxProjection.estimatedLiability > 0 && taxProjection.taxSaved < taxProjection.estimatedLiability * 0.9) {
+  if (taxProjection.estimatedLiability > 0 && taxProjection.setAsideByRule < taxProjection.estimatedLiability * 0.9) {
     candidates.push({
-      message: `You're ${formatCurrency(taxProjection.estimatedLiability - taxProjection.taxSaved)} short of your tax pot target`,
+      message: `Your set-aside rule is ${formatCurrency(taxProjection.estimatedLiability - taxProjection.setAsideByRule)} short of the Tax tab estimate`,
       weight: 88,
     });
   }

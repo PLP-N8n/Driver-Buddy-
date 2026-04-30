@@ -1,24 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, X } from 'lucide-react';
 import { DailyWorkLog, Settings, Trip } from '../types';
-import { buildProjection, calculateMileageClaim } from '../utils/tax';
 import { todayUK, ukWeekStart } from '../utils/ukDate';
 import { formatCurrency, formatNumber, panelClasses, secondaryButtonClasses, subtlePanelClasses } from '../utils/ui';
 
 const STORAGE_KEY = 'dbt_lastWeeklyReview';
 
-const getTaxPotStatus = (revenue: number, weeklyMiles: number, settings: Settings) => {
-  const manualAllowances = settings.manualAllowances.reduce((sum, allowance) => sum + allowance.amount, 0);
-  const mileageDeduction =
-    calculateMileageClaim(weeklyMiles, settings.businessRateFirst10k, settings.businessRateAfter10k) + manualAllowances;
-
-  return {
-    saved: revenue * (settings.taxSetAsidePercent / 100),
-    estimatedLiability: buildProjection(revenue, mileageDeduction, {
-      isScottishTaxpayer: settings.isScottishTaxpayer,
-    }).estimatedLiability,
-  };
-};
+const getSetAsideStatus = (revenue: number, settings: Settings) => ({
+  savedByRule: revenue * (settings.taxSetAsidePercent / 100),
+});
 
 interface WeeklyReviewCardProps {
   dailyLogs: DailyWorkLog[];
@@ -85,7 +75,7 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ dailyLogs, t
     }
 
     const [topPlatform = 'Your main platform'] = [...platformRevenue.entries()].sort((left, right) => right[1] - left[1])[0] ?? [];
-    const taxPot = getTaxPotStatus(totalEarned, reviewMiles, settings);
+    const setAsideStatus = getSetAsideStatus(totalEarned, settings);
     const shortfall = Math.max(0, settings.weeklyRevenueTarget - totalEarned);
     const recommendation =
       shortfall > 0
@@ -96,7 +86,7 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ dailyLogs, t
       totalEarned,
       totalKept,
       topPlatform,
-      taxPot,
+      setAsideStatus,
       recommendation,
     };
   }, [reviewLogs, reviewMiles, settings]);
@@ -157,9 +147,9 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ dailyLogs, t
       </div>
 
       <div className="mt-4 rounded-2xl border border-surface-border bg-surface-raised px-4 py-3">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tax pot status</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Set-aside rule</p>
         <p className="mt-2 text-sm text-slate-200">
-          {formatCurrency(reviewSummary.taxPot.saved)} saved / {formatCurrency(reviewSummary.taxPot.estimatedLiability)} est. liability
+          {formatCurrency(reviewSummary.setAsideStatus.savedByRule)} saved by your rule. See Tax tab for the actual estimate.
         </p>
       </div>
 

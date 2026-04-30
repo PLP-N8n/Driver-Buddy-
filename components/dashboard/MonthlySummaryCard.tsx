@@ -66,6 +66,12 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
                   </p>
                 </div>
                 <div>
+                  <p className="text-xs text-slate-500">Set aside</p>
+                  <p className="font-mono text-sm font-semibold tracking-tight text-slate-200">
+                    {formatCurrency(summary.estimatedTax)}
+                  </p>
+                </div>
+                <div>
                   <p className="text-xs text-slate-500">Mileage</p>
                   <p className="font-mono text-sm font-semibold tracking-tight text-slate-200">
                     {formatCurrency(summary.mileageClaimValue)} claimed
@@ -78,7 +84,7 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
       </div>
 
       <p className="mt-4 text-xs text-slate-500">
-        Estimated. Based on your set-aside rate of {formatNumber(settings.taxSetAsidePercent, 1)}%.
+        Based on your {formatNumber(settings.taxSetAsidePercent, 1)}% set-aside rule.
       </p>
     </section>
   );

@@ -5,6 +5,7 @@ import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses, secon
 type EarningsSummaryProps = {
   activeSession: { startedAt: string } | null;
   todayLogsCount: number;
+  hasAnyLoggedShifts: boolean;
   outcomeStats: {
     earned: number;
     kept: number;
@@ -20,7 +21,9 @@ type EarningsSummaryProps = {
   onAddShift: () => void;
   liveRevenue: number;
   liveMiles: number;
-  liveTax: number;
+  liveSetAside: number;
+  taxSetAsidePercent: number;
+  onViewTaxEstimate: () => void;
   formatTime: (value: string) => string;
 };
 
@@ -29,6 +32,7 @@ const summaryStatClass = 'rounded-2xl border border-surface-border bg-surface-ra
 export const EarningsSummary: React.FC<EarningsSummaryProps> = ({
   activeSession,
   todayLogsCount,
+  hasAnyLoggedShifts,
   outcomeStats,
   activeDurationHours,
   weekRevenue,
@@ -40,10 +44,15 @@ export const EarningsSummary: React.FC<EarningsSummaryProps> = ({
   onAddShift,
   liveRevenue,
   liveMiles,
-  liveTax,
+  liveSetAside,
+  taxSetAsidePercent,
+  onViewTaxEstimate,
   formatTime,
-}) => (
-  <>
+}) => {
+  const isEmptyShiftState = !activeSession && !hasAnyLoggedShifts;
+
+  return (
+    <>
     <section className={`${panelClasses} overflow-hidden p-5`}>
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -51,7 +60,13 @@ export const EarningsSummary: React.FC<EarningsSummaryProps> = ({
             {activeSession ? 'Shift active' : todayLogsCount > 0 ? 'Today' : 'Ready for today?'}
           </p>
           <h1 className="mt-2 font-mono text-3xl font-semibold tracking-tight text-white">{formatCurrency(outcomeStats.earned)}</h1>
-          <p className="mt-1 text-sm text-slate-400">{activeSession ? 'Live outcome from your current session.' : 'What today looks like so far.'}</p>
+          <p className="mt-1 text-sm text-slate-400">
+            {activeSession
+              ? 'Live outcome from your current session.'
+              : isEmptyShiftState
+                ? 'See what you keep from your driving.'
+                : 'What today looks like so far.'}
+          </p>
         </div>
         {activeSession && (
           <div className="rounded-full border border-positive/30 bg-positive-muted px-3 py-2 text-xs font-semibold text-positive">
@@ -70,10 +85,20 @@ export const EarningsSummary: React.FC<EarningsSummaryProps> = ({
           <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-white">{formatCurrency(outcomeStats.kept)}</p>
         </div>
         <div className={summaryStatClass}>
-          <p className="text-xs text-slate-500">Set aside</p>
+          <p className="text-xs text-slate-500">Your set-aside rule</p>
           <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-white">{formatCurrency(outcomeStats.setAside)}</p>
         </div>
       </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Based on your {formatNumber(taxSetAsidePercent, 1)}% rule.{' '}
+        <button
+          type="button"
+          onClick={onViewTaxEstimate}
+          className="font-medium text-slate-300 underline decoration-slate-600 underline-offset-2 hover:text-white"
+        >
+          See Tax tab for your actual estimate
+        </button>
+      </p>
 
       <div className="mt-5">
         <div className="flex items-center justify-between text-sm text-slate-300">
@@ -97,12 +122,25 @@ export const EarningsSummary: React.FC<EarningsSummaryProps> = ({
           </>
         ) : (
           <>
-            <button type="button" onClick={onStartShift} className={`${primaryButtonClasses} justify-center`}>
-              Start Shift
-            </button>
-            <button type="button" onClick={onAddShift} className={`${secondaryButtonClasses} justify-center`}>
-              Add shift
-            </button>
+            {isEmptyShiftState ? (
+              <>
+                <button type="button" onClick={onAddShift} className={`${primaryButtonClasses} justify-center`}>
+                  Log a past shift
+                </button>
+                <button type="button" onClick={onStartShift} className={`${secondaryButtonClasses} justify-center`}>
+                  Start Shift
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={onStartShift} className={`${primaryButtonClasses} justify-center`}>
+                  Start Shift
+                </button>
+                <button type="button" onClick={onAddShift} className={`${secondaryButtonClasses} justify-center`}>
+                  Add shift
+                </button>
+              </>
+            )}
           </>
         )}
       </div>
@@ -125,11 +163,12 @@ export const EarningsSummary: React.FC<EarningsSummaryProps> = ({
             <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-white">{formatNumber(liveMiles, 1)} mi</p>
           </div>
           <div className={`${subtlePanelClasses} p-4`}>
-            <p className="text-xs text-slate-500">Tax so far</p>
-            <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-white">{formatCurrency(liveTax)}</p>
+            <p className="text-xs text-slate-500">Saved by your rule</p>
+            <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-white">{formatCurrency(liveSetAside)}</p>
           </div>
         </div>
       </section>
     )}
-  </>
-);
+    </>
+  );
+};

@@ -30,7 +30,7 @@ export const TaxEstimateCard: React.FC<TaxEstimateCardProps> = ({ totals }) => {
           <p className="mt-1 text-xl font-semibold text-white">{formatCurrency(totals.totalRevenue)}</p>
         </div>
         <div className={`${subtlePanelClasses} p-4`}>
-          <p className="text-xs text-slate-500">Tax to set aside</p>
+          <p className="text-xs text-slate-500">Saved by your rule</p>
           <p className="mt-1 text-xl font-semibold text-white">{formatCurrency(taxSetAside)}</p>
         </div>
         <div className={`${subtlePanelClasses} p-4`}>

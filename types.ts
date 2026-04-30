@@ -30,6 +30,11 @@ export interface Trip {
   totalMiles: number;
   purpose: TripPurpose;
   notes: string;
+  /**
+   * Reverse pointer to the shift that originated or owns this mileage entry.
+   * DailyWorkLog.linkedTripId remains the shift-side association.
+   */
+  linkedShiftId?: string;
   path?: Coordinate[];
   updatedAt?: string;
 }
@@ -85,6 +90,11 @@ export interface DailyWorkLog {
    * sum of those split rows and is the authoritative total for the whole shift.
    */
   revenue: number;
+  /**
+   * Explicit marker for a saved zero-revenue shift, so it is not treated as an
+   * accidental missing earnings value.
+   */
+  markedNoEarnings?: boolean;
   fuelLiters?: number;
   expensesTotal?: number;
   notes?: string;
@@ -241,6 +251,7 @@ export type SyncPullPayload = {
     description?: string | null;
     miles?: number | null;
     trip_type?: string | null;
+    linkedWorkId?: string | null;
     linked_work_id?: string | null;
     updated_at?: string | null;
   }>;
@@ -321,6 +332,7 @@ export interface ActiveWorkSession {
   provider?: string;
   startOdometer?: number;
   revenue?: number;
+  markedNoEarnings?: boolean;
   miles?: number;
   expenses: ActiveWorkSessionExpenseDraft[];
   providerSplits?: ProviderSplit[];
@@ -334,6 +346,7 @@ export interface CompletedShiftSummary {
   endedAt: string;
   hoursWorked?: number;
   revenue: number;
+  markedNoEarnings?: boolean;
   taxToSetAside: number;
   mileageClaim: number;
   expensesTotal: number;

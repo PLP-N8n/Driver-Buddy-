@@ -1,12 +1,14 @@
 import React from 'react';
 import { Bell, Car, Receipt, Share2, Sparkles } from 'lucide-react';
 import { calcKept } from '../../shared/calculations/tax';
-import type { CompletedShiftSummary, DailyWorkLog, Expense } from '../../types';
+import type { CompletedShiftSummary, DailyWorkLog, Expense, Trip } from '../../types';
+import { shouldPromptForShiftMileage } from '../../utils/mileageLinkage';
 import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses, secondaryButtonClasses } from '../../utils/ui';
 
 type WeeklySummaryProps = {
   completedShiftSummary: CompletedShiftSummary;
   completedLog?: DailyWorkLog | null;
+  trips?: Trip[];
   expenses?: Expense[];
   summaryHoursWorked: number;
   summaryHourlyRate: number;
@@ -27,10 +29,10 @@ const highlightedActionClasses = 'border-amber-400/50 bg-amber-400/15 text-amber
 
 const buildEarningsSummaryLine = (summary: CompletedShiftSummary) => {
   const parts = [`You kept ${formatCurrency(summary.realProfit)}`];
-  const taxSaved = Math.max(0, summary.mileageClaim + summary.expensesTotal);
+  const deductionsClaimed = Math.max(0, summary.mileageClaim + summary.expensesTotal);
 
-  if (taxSaved > 0) {
-    parts.push(`saved ${formatCurrency(taxSaved)} tax`);
+  if (deductionsClaimed > 0) {
+    parts.push(`${formatCurrency(deductionsClaimed)} deductions claimed`);
   }
 
   if (summary.mileageClaim > 0) {
@@ -43,6 +45,7 @@ const buildEarningsSummaryLine = (summary: CompletedShiftSummary) => {
 export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   completedShiftSummary,
   completedLog,
+  trips = [],
   expenses = [],
   summaryHoursWorked,
   summaryHourlyRate,
@@ -69,7 +72,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   );
   const earningsSummaryLine = buildEarningsSummaryLine(completedShiftSummary);
   const shiftDate = completedLog?.date ?? completedShiftSummary.date;
-  const noMileageLoggedForShift = Boolean(completedLog) && !completedLog?.linkedTripId;
+  const noMileageLoggedForShift = shouldPromptForShiftMileage(completedLog, trips);
   const hasExpenseOnShiftDate = expenses.some((expense) => expense.date === shiftDate);
   const nudgeDismissedForSummary = dismissedNudgeSummaryId === completedShiftSummary.id;
   const activePostShiftNudge: PostShiftNudge | null = nudgeDismissedForSummary
@@ -100,7 +103,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
           <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(kept)}</p>
         </div>
         <div className={summaryStatClass}>
-          <p className="text-xs text-slate-500">Set aside</p>
+          <p className="text-xs text-slate-500">Saved by rule</p>
           <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(completedShiftSummary.taxToSetAside)}</p>
         </div>
         <div className={summaryStatClass}>

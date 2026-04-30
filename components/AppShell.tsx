@@ -39,6 +39,7 @@ import { Toast } from './Toast';
 import { getAnimationClass, useReducedMotion } from '../utils/animations';
 import { escapeCsvCell } from '../utils/csv';
 import { todayUK } from '../utils/ukDate';
+import { computeReceiptStats } from '../utils/receiptStats';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { useAppState, type ToastState } from '../hooks/useAppState';
 import { useDriverLedger } from '../hooks/useDriverLedger';
@@ -48,6 +49,7 @@ import { useHydration } from '../hooks/useHydration';
 import { usePersistence } from '../hooks/usePersistence';
 import { useReceiptMigration } from '../hooks/useReceiptMigration';
 import { useSyncOrchestrator } from '../hooks/useSyncOrchestrator';
+import { useReceiptUpload } from '../hooks/useReceiptUpload';
 import { setAnalyticsConsent, trackEvent } from '../services/analyticsService';
 import { cancelDailyReminder, ensureReminderPermission, scheduleDailyReminder } from '../services/reminderService';
 import { stampSettings } from '../services/settingsService';
@@ -206,8 +208,10 @@ export function AppShell() {
     addTrip,
     deleteTrip,
     updateTrip,
+    linkTripToShift,
     addExpense,
     deleteExpense,
+    reclassifyExpensesForMethod,
     updateExpense,
     addDailyLog,
     deleteDailyLog,
@@ -219,7 +223,7 @@ export function AppShell() {
   } = ledger;
   useFocusTrap(moreMenuRef, showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(exportModalRef, showExportModal, () => setShowExportModal(false));
-  const { isOnline, connectivityBanner } = useSyncOrchestrator({
+  const { isOnline, connectivityBanner, syncStatus } = useSyncOrchestrator({
     trips,
     setTrips,
     expenses,
@@ -232,6 +236,9 @@ export function AppShell() {
     hasHydrated,
     onPushSuccess: clearDeletedIds,
   });
+
+  const { rows: receiptRows } = useReceiptUpload();
+  const receiptStats = useMemo(() => computeReceiptStats(receiptRows), [receiptRows]);
 
   const showToast = (message: string, type: ToastState['type'] = 'success', duration = 3000) => {
     setToast({ id: Date.now(), message, type, duration });
@@ -717,7 +724,9 @@ export function AppShell() {
                       onAddCompletedShiftMiles={openCompletedShiftMiles}
                       onOpenReminderSettings={openReminderSettings}
                       onSetPredictionReminder={setPredictionReminder}
+                      onNavigateToTax={() => navigateToTab('tax')}
                       onOpenBackfill={() => setIsBackfillOpen(true)}
+                      onOpenWorkLog={() => openQuickLog('worklog')}
                       onAddExpense={addExpense}
                       onUpdateSettings={updateSettings}
                     />
@@ -729,6 +738,7 @@ export function AppShell() {
                     onAddTrip={addTrip}
                     onDeleteTrip={deleteTrip}
                     onUpdateTrip={updateTrip}
+                    onLinkTripToShift={linkTripToShift}
                     settings={settings}
                     openFormSignal={quickLogRequest?.tab === 'mileage' ? quickLogRequest.token : undefined}
                     openFormDefaults={quickLogRequest?.tab === 'mileage' ? {
@@ -757,6 +767,7 @@ export function AppShell() {
                 {activeTab === 'worklog' && (
                   <WorkLog
                     logs={dailyLogs}
+                    trips={trips}
                     settings={settings}
                     onAddLog={handleAddDailyLog}
                     onUpdateLog={handleUpdateDailyLog}
@@ -787,6 +798,8 @@ export function AppShell() {
                   <SettingsPanel
                     settings={settings}
                     onUpdateSettings={updateSettings}
+                    expenses={expenses}
+                    reclassifyExpensesForMethod={reclassifyExpensesForMethod}
                     onBackup={handleBackup}
                     onExportCSV={() => setShowExportModal(true)}
                     onExportHmrcSummary={handleHmrcSummaryExport}
@@ -799,6 +812,8 @@ export function AppShell() {
                     restoreStatusMessage={restoreStatusMessage}
                     reminderFocusSignal={reminderSettingsFocusRequest ?? undefined}
                     onReminderFocusHandled={() => setReminderSettingsFocusRequest(null)}
+                    syncStatus={syncStatus}
+                    receiptStats={receiptStats}
                   />
                 )}
               </div>
@@ -985,7 +1000,7 @@ export function AppShell() {
 
       {totalTaxSetAside > 0 && activeTab !== 'settings' && activeTab !== 'dashboard' && (
         <div className="pointer-events-none fixed right-4 top-20 z-30 hidden rounded-full border border-brand/20 bg-brand/10 px-3 py-2 text-xs text-brand lg:block">
-          Tax pot <span className="ml-1 font-mono text-white">{formatCurrency(totalTaxSetAside)}</span>
+          Set-aside pot <span className="ml-1 font-mono text-white">{formatCurrency(totalTaxSetAside)}</span>
         </div>
       )}
 
@@ -1006,13 +1021,14 @@ export function AppShell() {
       {showOnboarding && (
         <OnboardingModal
           settings={settings}
+          onAddLog={handleAddDailyLog}
           onSkip={() => setShowOnboarding(false)}
           onComplete={(updates, options) => {
             updateSettings((s) => ({ ...s, ...updates }));
             setShowOnboarding(false);
             showToast('Onboarding completed.');
-            if (options?.startWorkDay) {
-              navigateToTab('dashboard');
+            navigateToTab('dashboard');
+            if (options?.startWorkDay && !options.hasLoggedShift) {
               setStartWorkDayRequest(Date.now());
             }
           }}
