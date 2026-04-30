@@ -213,6 +213,64 @@ Verification note: this pass made no source-code changes. The current dirty work
 - Prediction quality is limited by primary-provider attribution. PlatformBreakdown handles provider splits (`utils/platformInsights.ts:53-80`), but `generatePredictions` uses `log.provider` and whole-shift revenue/hours for provider/day insights (`utils/predictions.ts:125-160`). Multi-app drivers can get misleading "prioritise platform" advice.
 - Several "future" settings/features are hidden, not clearly unavailable. `linkedDevices`, `receiptSync`, and `bankSync` are imported but disabled (`components/Settings.tsx:76-80`). This is fine during development, but once users depend on tax records, hidden reliability controls create support issues.
 
+## In-progress fixes (2026-04-30)
+
+Codex queue is working through these in order. Each runs typecheck + unit tests before marking done.
+
+| Task | File(s) | Status |
+|---|---|---|
+| 002 — Mileage linkage integrity (5 fixes: deleteTrip unlink, edit clear, post-shift CTA link, HealthCheck fallback, WeeklySummary nudge) | `hooks/useDriverLedger.ts`, `components/WorkLog.tsx`, `components/MileageLog.tsx`, `utils/healthCheck.ts`, `components/dashboard/WeeklySummary.tsx` | Running |
+| 003 — Dashboard language and validation (flat % vs real tax engine, overnight shift hours, field validation) | `components/dashboard/DashboardScreen.tsx`, `components/WorkLog.tsx` | Queued |
+| 004 — Onboarding quick win (log last shift as first-value path) | `components/OnboardingModal.tsx`, `components/AppShell.tsx` | Queued |
+| 005 — Expense reclassification on claim method change | `hooks/useDriverLedger.ts`, `components/Settings.tsx` | Queued |
+| 006 — Receipt/sync trust status visible in Settings | `components/Settings.tsx`, `components/AppShell.tsx` | Queued |
+
+## Additional findings (peer review 2026-04-30)
+
+Three genuine issues surfaced from a second-pass code review not covered by the Codex queue above.
+
+### Overnight shifts silently produce 0 hours
+
+Location: `components/WorkLog.tsx:278-287`
+
+When end time is earlier than start time (e.g. 11pm to 7am), the duration is clamped to zero rather
+than rolling into the next day. The shift saves with 0 hours and no error is shown. This affects
+hourly rate calculations and any insight that reasons about time worked.
+
+Fix: when end < start, add 24 hours to end before computing duration. Add a unit test: a shift from
+23:00 to 07:00 should produce 8 hours, not 0.
+
+Priority: P1 — silent data error affecting every overnight driver.
+
+### Stale expensesTotal on shift records after expense edits
+
+Location: `hooks/useDriverLedger.ts:182-195`
+
+`deleteExpense` and `updateExpense` only mutate the expenses array. They do not update
+`expensesTotal` on any `DailyWorkLog` that snapshots that value at save time
+(`hooks/useDriverLedger.ts:384-435`, `components/dashboard/DashboardScreen.tsx:704-752`).
+Dashboard shift cards that read the snapshot show the wrong total; TaxLogic reads expenses
+directly and shows the correct total. This produces a visible mismatch between the dashboard
+and the tax tab.
+
+Fix: after any expense delete or update, recalculate and update `expensesTotal` on any
+`DailyWorkLog` whose `id` matches `expense.linkedShiftId`. Keep it in one state update.
+
+Priority: P2 — visible inconsistency, not a tax calculation error (TaxLogic reads live expenses).
+
+### Unbounded deletedIds tombstone list
+
+Location: `hooks/useDriverLedger.ts` (appendDeletedId / deletedIds state)
+
+Deleted record IDs are appended to `driver_deleted_ids` in localStorage and never pruned.
+A driver who adds and deletes records over months will accumulate thousands of tombstone IDs,
+bloating every sync payload and slowing JSON serialisation.
+
+Fix: prune tombstones older than 90 days on hydration, or cap the list at a fixed size (e.g. 500)
+keeping only the most recent. Tombstones older than the sync window are safe to drop.
+
+Priority: P3 — no immediate impact at current user scale, will matter at growth.
+
 Tax source notes checked for this audit:
 
 - GOV.UK Income Tax rates and allowances, updated for 2026 to 2027: <https://www.gov.uk/government/publications/rates-and-allowances-income-tax/income-tax-rates-and-allowances-current-and-past>
