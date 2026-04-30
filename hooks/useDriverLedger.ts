@@ -16,6 +16,7 @@ import { calculateExpenseTaxClassification } from '../shared/calculations/expens
 import { calcMileageAllowanceForMiles } from '../shared/calculations/mileage';
 import { sanitizeExpenseForStorage } from '../services/syncTransforms';
 import { generateInsights } from '../utils/insights';
+import { calculateTimestampShiftDurationHours } from '../utils/shiftDuration';
 import { getTaxYearForDate, todayUK, ukTaxYearEnd, ukTaxYearStart, ukWeekStart } from '../utils/ukDate';
 
 const nowIso = () => new Date(Date.now()).toISOString();
@@ -46,6 +47,7 @@ type LedgerManualShiftPayload = {
   provider: string;
   hoursWorked: number;
   revenue: number;
+  markedNoEarnings?: boolean;
   expenses: ActiveWorkSessionExpenseDraft[];
   startOdometer?: number;
   endOdometer?: number;
@@ -147,13 +149,43 @@ export function useDriverLedger({
   };
 
   const deleteTrip = (id: string) => {
+    const updatedAt = nowIso();
     setTrips((current) => current.filter((trip) => trip.id !== id));
+    setDailyLogs((current) => {
+      let changed = false;
+      const next = current.map((log) => {
+        if (log.linkedTripId !== id) return log;
+
+        changed = true;
+        return { ...log, linkedTripId: undefined, updatedAt };
+      });
+
+      return changed ? next : current;
+    });
     appendDeletedId('mileageLogs', id);
     trackEvent('trip_deleted');
   };
 
   const updateTrip = (id: string, updates: Partial<Trip>) =>
     setTrips((current) => current.map((trip) => (trip.id === id ? { ...trip, ...updates, updatedAt: nowIso() } : trip)));
+
+  const linkTripToShift = (shiftId: string, tripId: string) => {
+    const updatedAt = nowIso();
+    setTrips((current) =>
+      current.map((trip) => (trip.id === tripId ? { ...trip, linkedShiftId: shiftId, updatedAt } : trip))
+    );
+    setDailyLogs((current) => {
+      let changed = false;
+      const next = current.map((log) => {
+        if (log.id !== shiftId) return log;
+
+        changed = true;
+        return { ...log, linkedTripId: tripId, updatedAt };
+      });
+
+      return changed ? next : current;
+    });
+  };
 
   const ensureExpenseTaxClassification = (expense: Expense): Expense => ({
     ...expense,
@@ -187,6 +219,37 @@ export function useDriverLedger({
     });
     appendDeletedId('expenses', id);
     trackEvent('expense_deleted');
+  };
+
+  const reclassifyExpensesForMethod = (newMethod: 'SIMPLIFIED' | 'ACTUAL') => {
+    let changedCount = 0;
+    const updatedAt = nowIso();
+    const next = expenses.map((expense) => {
+      const taxClassification = calculateExpenseTaxClassification({
+        amount: expense.amount,
+        businessUsePercent: expense.businessUsePercent,
+        category: expense.category,
+        claimMethod: newMethod,
+        isVatClaimable: expense.isVatClaimable,
+        scope: expense.scope ?? 'business',
+      });
+      const taxTreatmentChanged = expense.taxTreatment !== taxClassification.taxTreatment;
+      if (taxTreatmentChanged) {
+        changedCount += 1;
+      }
+
+      return {
+        ...expense,
+        ...taxClassification,
+        sourceType: expense.sourceType ?? 'manual',
+        reviewStatus: expense.reviewStatus ?? 'confirmed',
+        ...(taxTreatmentChanged ? { updatedAt } : {}),
+      };
+    });
+
+    setExpenses(next);
+    localStorage.setItem('driver_expenses', JSON.stringify(next.map(sanitizeExpenseForStorage)));
+    return changedCount;
   };
 
   const updateExpense = (expense: Expense) =>
@@ -270,8 +333,7 @@ export function useDriverLedger({
     const taxToSetAside = revenue * (settings.taxSetAsidePercent / 100);
     const mileageClaim = calculateMileageClaim(miles, session.date);
     const realProfit = revenue - taxToSetAside - expensesTotal;
-    const durationMs = Math.max(new Date(endedAt).getTime() - new Date(session.startedAt).getTime(), 0);
-    const hoursWorked = Math.max(0.1, durationMs / (1000 * 60 * 60));
+    const hoursWorked = Math.max(0.1, calculateTimestampShiftDurationHours(session.startedAt, endedAt));
     const logId = `${Date.now()}_log`;
 
     let linkedTripId: string | undefined;
@@ -294,6 +356,7 @@ export function useDriverLedger({
         totalMiles: miles,
         purpose: 'Business',
         notes: 'Auto-created from Work Day',
+        linkedShiftId: logId,
         updatedAt,
       };
       addTrip(linkedTripForInsights);
@@ -318,6 +381,7 @@ export function useDriverLedger({
       provider: session.provider || 'Work Day',
       hoursWorked: Number(hoursWorked.toFixed(2)),
       revenue,
+      ...(session.markedNoEarnings ? { markedNoEarnings: true } : {}),
       fuelLiters: fuelLiters > 0 ? Number(fuelLiters.toFixed(2)) : undefined,
       expensesTotal: expensesTotal > 0 ? Number(expensesTotal.toFixed(2)) : 0,
       notes: 'Captured from the Driver Buddy shift flow',
@@ -352,6 +416,7 @@ export function useDriverLedger({
       endedAt,
       hoursWorked: Number(hoursWorked.toFixed(2)),
       revenue,
+      ...(session.markedNoEarnings ? { markedNoEarnings: true } : {}),
       taxToSetAside,
       mileageClaim,
       expensesTotal,
@@ -391,6 +456,7 @@ export function useDriverLedger({
     const mileageClaim = calculateMileageClaim(miles, payload.date);
     const realProfit = payload.revenue - taxToSetAside - expensesTotal;
 
+    const logId = `${Date.now()}_manual_log`;
     let linkedTripId: string | undefined;
     let linkedTripForInsights: Trip | null = null;
     if (miles > 0) {
@@ -405,12 +471,11 @@ export function useDriverLedger({
         totalMiles: miles,
         purpose: 'Business',
         notes: 'Auto-created from quick add shift',
+        linkedShiftId: logId,
         updatedAt,
       };
       addTrip(linkedTripForInsights);
     }
-
-    const logId = `${Date.now()}_manual_log`;
 
     payload.expenses.forEach((expense) => {
       addExpense({
@@ -431,6 +496,7 @@ export function useDriverLedger({
       provider: payload.provider,
       hoursWorked: payload.hoursWorked,
       revenue: payload.revenue,
+      ...(payload.markedNoEarnings ? { markedNoEarnings: true } : {}),
       fuelLiters: fuelLiters > 0 ? Number(fuelLiters.toFixed(2)) : undefined,
       expensesTotal: expensesTotal > 0 ? Number(expensesTotal.toFixed(2)) : 0,
       notes: payload.notes,
@@ -463,6 +529,7 @@ export function useDriverLedger({
       endedAt,
       hoursWorked: Number(payload.hoursWorked.toFixed(2)),
       revenue: payload.revenue,
+      ...(payload.markedNoEarnings ? { markedNoEarnings: true } : {}),
       taxToSetAside,
       mileageClaim,
       expensesTotal,
@@ -489,8 +556,10 @@ export function useDriverLedger({
     addTrip,
     deleteTrip,
     updateTrip,
+    linkTripToShift,
     addExpense,
     deleteExpense,
+    reclassifyExpensesForMethod,
     updateExpense,
     addDailyLog,
     deleteDailyLog,

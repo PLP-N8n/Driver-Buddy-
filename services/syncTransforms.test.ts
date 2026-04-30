@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type DailyWorkLog, type Expense, ExpenseCategory, type Trip } from '../types';
-import { applyPulledExpenses, applyPulledShiftWorkLogs, buildSyncPayload, sanitizeExpenseForStorage } from './syncTransforms';
+import { applyPulledExpenses, applyPulledShiftWorkLogs, applyPulledTrips, buildSyncPayload, sanitizeExpenseForStorage } from './syncTransforms';
 
 describe('syncTransforms', () => {
   it('buildSyncPayload includes all changed records', () => {
@@ -15,6 +15,7 @@ describe('syncTransforms', () => {
         totalMiles: 20,
         purpose: 'Business',
         notes: 'Airport run',
+        linkedShiftId: 'log-1',
         updatedAt: '2026-04-03T20:00:00.000Z',
       },
     ];
@@ -65,6 +66,12 @@ describe('syncTransforms', () => {
     expect(payload.shifts).toHaveLength(1);
     expect(payload.shiftEarnings).toHaveLength(2);
     expect(payload.mileageLogs).toHaveLength(1);
+    expect(payload.mileageLogs[0]!).toEqual(
+      expect.objectContaining({
+        id: 'trip-1',
+        linkedWorkId: 'log-1',
+      })
+    );
     expect(payload.expenses).toHaveLength(1);
     expect(payload.settings).toEqual(DEFAULT_SETTINGS);
     expect(payload.shifts[0]).toEqual(
@@ -107,6 +114,34 @@ describe('syncTransforms', () => {
         energyUnit: 'kWh',
       })
     );
+  });
+
+  it('applyPulledTrips restores linked shift ids from synced mileage rows', () => {
+    const merged = applyPulledTrips([
+      {
+        id: 'trip-linked',
+        date: '2026-04-03',
+        description: JSON.stringify({
+          startLocation: 'Leeds',
+          endLocation: 'Bradford',
+          startOdometer: 1000,
+          endOdometer: 1020,
+          notes: 'Airport run',
+          purpose: 'Business',
+        }),
+        miles: 20,
+        trip_type: 'Business',
+        linked_work_id: 'log-1',
+        updated_at: '2026-04-03T20:00:00.000Z',
+      },
+    ]);
+
+    expect(merged).toEqual([
+      expect.objectContaining({
+        id: 'trip-linked',
+        linkedShiftId: 'log-1',
+      }),
+    ]);
   });
 
   it('sanitizeExpenseForStorage strips blob URLs', () => {

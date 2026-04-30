@@ -13,6 +13,9 @@ import {
 import { DailyWorkLog, DriverRole, ProviderSplit, Settings, Trip } from '../types';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
+import { resolveClearedMileageLink } from '../utils/mileageLinkage';
+import { getProvidersByRole } from '../utils/providers';
+import { calculateClockShiftDurationHours } from '../utils/shiftDuration';
 import { todayUK, ukWeekStart } from '../utils/ukDate';
 import {
   dangerButtonClasses,
@@ -47,21 +50,6 @@ const getProviderBadgeClass = (provider: string): string => {
   return 'bg-surface-raised text-slate-300';
 };
 
-const getProvidersByRole = (role: DriverRole): string[] => {
-  switch (role) {
-    case 'COURIER':
-      return ['Amazon Flex', 'DPD', 'Evri', 'Yodel', 'CitySprint', 'Royal Mail', 'Gophr'];
-    case 'FOOD_DELIVERY':
-      return ['Uber Eats', 'Deliveroo', 'Just Eat', 'Stuart', 'Beelivery', 'Gopuff'];
-    case 'TAXI':
-      return ['Uber', 'Bolt', 'FREENOW', 'Ola', 'Gett', 'Local Firm', 'Private Clients'];
-    case 'LOGISTICS':
-      return ['BCA Logistics', 'Engineius', 'Manheim', 'Drascombe', 'Auto Trader', 'Private Trade'];
-    default:
-      return ['Private client', 'Agency', 'Other'];
-  }
-};
-
 const getJobLabel = (roles: DriverRole[]): string => {
   if (roles.includes('TAXI')) return 'Rides';
   if (roles.includes('FOOD_DELIVERY')) return 'Deliveries';
@@ -72,6 +60,7 @@ const getJobLabel = (roles: DriverRole[]): string => {
 
 interface WorkLogProps {
   logs: DailyWorkLog[];
+  trips: Trip[];
   settings: Settings;
   onAddLog: (log: DailyWorkLog) => void;
   onUpdateLog: (log: DailyWorkLog) => void;
@@ -256,7 +245,7 @@ function WorkLogForm({
   const sheetRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState<FormState>(() => (editingLog ? logToForm(editingLog) : emptyForm()));
   const [errors, setErrors] = useState<{
-    providers: Array<{ revenue?: string }>;
+    providers: Array<{ provider?: string; revenue?: string }>;
     hours?: string;
     fuel?: string;
     miles?: string;
@@ -277,11 +266,8 @@ function WorkLogForm({
 
   useEffect(() => {
     if (!form.startTime || !form.endTime) return;
-    const [sh = 0, sm = 0] = form.startTime.split(':').map(Number);
-    const [eh = 0, em = 0] = form.endTime.split(':').map(Number);
-    const totalMins = (eh * 60 + em) - (sh * 60 + sm) - (parseInt(form.breakMinutes) || 0);
-    const derived = Math.max(0, totalMins / 60);
-    if (derived > 0) {
+    const derived = calculateClockShiftDurationHours(form.startTime, form.endTime, parseInt(form.breakMinutes, 10) || 0);
+    if (derived != null && derived > 0) {
       setForm((current) => ({ ...current, hours: String(Math.round(derived * 100) / 100) }));
     }
   }, [form.startTime, form.endTime, form.breakMinutes]);
@@ -291,7 +277,18 @@ function WorkLogForm({
 
     const providerErrors = form.providers.map((entry) => {
       const revenue = parseFloat(entry.revenue);
-      return !Number.isFinite(revenue) || revenue <= 0 ? { revenue: 'Required: enter a value greater than 0' } : {};
+      const selectedProvider = entry.provider.trim();
+      const customProvider = entry.customProvider.trim();
+      const provider =
+        !selectedProvider
+          ? 'Please select a provider'
+          : selectedProvider === 'Other' && !customProvider
+            ? 'Please enter a provider name'
+            : undefined;
+      return {
+        provider,
+        revenue: !Number.isFinite(revenue) || revenue <= 0 ? 'Required: enter a value greater than 0' : undefined,
+      };
     });
 
     const hours = parseFloat(form.hours);
@@ -306,7 +303,7 @@ function WorkLogForm({
     };
 
     setErrors(nextErrors);
-    if (providerErrors.some((entry) => entry.revenue) || nextErrors.hours || nextErrors.fuel || nextErrors.miles) {
+    if (providerErrors.some((entry) => entry.provider || entry.revenue) || nextErrors.hours || nextErrors.fuel || nextErrors.miles) {
       return;
     }
 
@@ -376,6 +373,9 @@ function WorkLogForm({
                       ))}
                       <option value="Other">Other</option>
                     </select>
+                    {entry.provider !== 'Other' && errors.providers[index]?.provider && (
+                      <p className="mt-1 text-xs text-red-400">{errors.providers[index].provider}</p>
+                    )}
                   </div>
                   <div>
                     <label className={fieldLabelClasses}>Revenue (£) *</label>
@@ -403,20 +403,25 @@ function WorkLogForm({
                 </div>
 
                 {entry.provider === 'Other' && (
-                  <input
-                    type="text"
-                    value={entry.customProvider}
-                      onChange={(event) =>
-                        setForm((current) => {
-                          const next = [...current.providers];
-                          const currentEntry = next[index] ?? emptyProviderEntry();
-                          next[index] = { ...currentEntry, customProvider: event.target.value };
-                          return { ...current, providers: next };
-                        })
-                      }
-                    className={inputClasses}
-                    placeholder="Provider name"
-                  />
+                  <div>
+                    <input
+                      type="text"
+                      value={entry.customProvider}
+                        onChange={(event) =>
+                          setForm((current) => {
+                            const next = [...current.providers];
+                            const currentEntry = next[index] ?? emptyProviderEntry();
+                            next[index] = { ...currentEntry, customProvider: event.target.value };
+                            return { ...current, providers: next };
+                          })
+                        }
+                      className={inputClasses}
+                      placeholder="Provider name"
+                    />
+                    {errors.providers[index]?.provider && (
+                      <p className="mt-1 text-xs text-red-400">{errors.providers[index].provider}</p>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex items-end gap-3">
@@ -624,6 +629,7 @@ function WorkLogForm({
 
 export const WorkLog: React.FC<WorkLogProps> = ({
   logs,
+  trips,
   settings,
   onAddLog,
   onUpdateLog,
@@ -683,7 +689,7 @@ export const WorkLog: React.FC<WorkLogProps> = ({
 
   const handleSave = (form: FormState) => {
     const splits: ProviderSplit[] = form.providers.map((entry) => ({
-      provider: entry.provider === 'Other' ? entry.customProvider : entry.provider,
+      provider: entry.provider === 'Other' ? entry.customProvider.trim() : entry.provider.trim(),
       revenue: parseFloat(entry.revenue),
       jobCount: entry.jobCount ? parseInt(entry.jobCount, 10) : undefined,
     }));
@@ -713,6 +719,7 @@ export const WorkLog: React.FC<WorkLogProps> = ({
             date: form.date,
             totalMiles: miles,
             startLocation: form.startLocation,
+            linkedShiftId: editingLog.id,
             notes: `Auto from ${primaryProvider} shift`,
           });
         } else {
@@ -727,8 +734,15 @@ export const WorkLog: React.FC<WorkLogProps> = ({
             totalMiles: miles,
             purpose: 'Business',
             notes: `Auto from ${primaryProvider} shift`,
+            linkedShiftId: editingLog.id,
           });
           updated.linkedTripId = tripId;
+        }
+      } else {
+        const clearedLink = resolveClearedMileageLink(editingLog.linkedTripId, trips);
+        if (clearedLink) {
+          if (clearedLink.tripIdToDelete) onDeleteTrip(clearedLink.tripIdToDelete);
+          updated.linkedTripId = clearedLink.linkedTripId;
         }
       }
 
@@ -760,6 +774,7 @@ export const WorkLog: React.FC<WorkLogProps> = ({
           totalMiles: miles,
           purpose: 'Business',
           notes: `Auto from ${primaryProvider} shift`,
+          linkedShiftId: id,
         });
         newLog.linkedTripId = tripId;
       }

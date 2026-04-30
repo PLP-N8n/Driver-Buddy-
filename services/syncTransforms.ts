@@ -11,6 +11,7 @@ type SyncTripMeta = {
   endOdometer: number;
   notes: string;
   purpose: Trip['purpose'];
+  linkedShiftId?: string;
 };
 
 type SyncWorkLogMeta = {
@@ -23,6 +24,7 @@ type SyncWorkLogMeta = {
   startedAt?: string;
   endedAt?: string;
   providerSplits?: ProviderSplit[];
+  markedNoEarnings?: boolean;
 };
 
 type SyncExpenseMeta = {
@@ -240,6 +242,7 @@ export const buildSyncPayload = (
         startedAt: log.startedAt,
         endedAt: log.endedAt,
         providerSplits: log.providerSplits,
+        markedNoEarnings: log.markedNoEarnings,
       } satisfies SyncWorkLogMeta),
       updatedAt: toSyncTimestamp(log.updatedAt, log.date),
     })),
@@ -255,10 +258,11 @@ export const buildSyncPayload = (
         endOdometer: trip.endOdometer,
         notes: trip.notes,
         purpose: trip.purpose,
+        linkedShiftId: trip.linkedShiftId,
       } satisfies SyncTripMeta),
       miles: trip.totalMiles,
       tripType: trip.purpose,
-      linkedWorkId: null,
+      linkedWorkId: trip.linkedShiftId ?? null,
       updatedAt: toSyncTimestamp(trip.updatedAt, trip.date),
     })),
     expenses: classifiedExpenses.map((expense) => ({
@@ -337,6 +341,7 @@ export const applyPulledTrips = (
     const purpose = isTripPurpose(row.trip_type) ? row.trip_type : meta?.purpose ?? 'Business';
     const startOdometer = Number(meta?.startOdometer ?? 0);
     const endOdometer = Number(meta?.endOdometer ?? startOdometer + totalMiles);
+    const linkedShiftId = row.linkedWorkId ?? row.linked_work_id ?? meta?.linkedShiftId ?? undefined;
 
     return {
       id: row.id,
@@ -348,6 +353,7 @@ export const applyPulledTrips = (
       totalMiles,
       purpose,
       notes: meta?.notes ?? row.description ?? '',
+      ...(linkedShiftId != null ? { linkedShiftId } : {}),
       updatedAt: row.updated_at ?? undefined,
     };
   }));
@@ -374,6 +380,7 @@ export const applyPulledWorkLogs = (
       startedAt: meta?.startedAt,
       endedAt: meta?.endedAt,
       providerSplits: meta?.providerSplits,
+      markedNoEarnings: meta?.markedNoEarnings,
       updatedAt: row.updated_at ?? undefined,
     };
   }));
