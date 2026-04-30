@@ -14,7 +14,7 @@ type CorsEnv = {
 };
 
 const CORS_ALLOW_METHODS = 'GET, POST, DELETE, OPTIONS';
-const CORS_ALLOW_HEADERS = 'Content-Type, X-Device-ID, X-Session-Token, Authorization';
+const CORS_ALLOW_HEADERS = 'Content-Type, X-Device-ID, X-Session-Token, Authorization, sentry-trace, baggage';
 
 // CORS policy:
 // - Methods cover health reads, sync/auth/plaid/receipt writes, device deletion, and browser preflight.
@@ -50,6 +50,45 @@ export function getCorsHeaders(request: Request, env?: CorsEnv): Record<string, 
     'Access-Control-Allow-Headers': CORS_ALLOW_HEADERS,
     Vary: 'Origin',
   };
+}
+
+function mergeVaryHeader(existing: string | null, next: string): string {
+  if (!existing) return next;
+
+  const values = new Set(
+    existing
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+
+  next
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .forEach((value) => values.add(value));
+
+  return Array.from(values).join(', ');
+}
+
+export function withCorsHeaders(request: Request, response: Response, env?: CorsEnv): Response {
+  const headers = new Headers(response.headers);
+  const corsHeaders = getCorsHeaders(request, env);
+
+  Object.entries(corsHeaders).forEach(([key, value]) => {
+    if (key.toLowerCase() === 'vary') {
+      headers.set(key, mergeVaryHeader(headers.get(key), value));
+      return;
+    }
+
+    headers.set(key, value);
+  });
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 export function handleOptions(request: Request, env?: CorsEnv): Response {

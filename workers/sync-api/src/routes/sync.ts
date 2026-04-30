@@ -55,6 +55,16 @@ const asRequiredId = (value: unknown): string => {
 
 const asFlag = (value: unknown, fallback = false) => (value ? 1 : fallback ? 1 : 0);
 
+const asNumberOrNull = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+
+  return null;
+};
+
 const asUpdatedAt = (value: unknown, fallback: number): number => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -76,6 +86,128 @@ function getSettingsUpdatedAt(settings: unknown, fallback: number): number {
   return asUpdatedAt((settings as { updatedAt?: unknown; updated_at?: unknown }).updatedAt ?? (settings as { updated_at?: unknown }).updated_at, fallback);
 }
 
+type ExpenseScope = 'business' | 'personal' | 'mixed';
+type TaxTreatment = 'deductible' | 'partially_deductible' | 'blocked_under_simplified' | 'non_deductible';
+type VehicleExpenseType = 'running_cost' | 'separately_allowable' | 'non_vehicle' | 'personal_only';
+type ClaimMethod = 'SIMPLIFIED' | 'ACTUAL';
+
+const vehicleRunningCostCategories = new Set([
+  'Fuel',
+  'Public Charging',
+  'Home Charging',
+  'Repairs & Maintenance',
+  'Insurance',
+  'Vehicle Tax',
+  'MOT',
+  'Cleaning',
+]);
+
+const separatelyAllowableCategories = new Set(['Parking/Tolls']);
+
+const asClaimMethod = (settings: unknown): ClaimMethod => {
+  if (!settings || typeof settings !== 'object') return 'SIMPLIFIED';
+  const value = (settings as { claimMethod?: unknown }).claimMethod;
+  return value === 'ACTUAL' ? 'ACTUAL' : 'SIMPLIFIED';
+};
+
+const asExpenseScope = (value: unknown): ExpenseScope | null => {
+  if (value === 'business' || value === 'personal' || value === 'mixed') return value;
+  return null;
+};
+
+const asTaxTreatment = (value: unknown): TaxTreatment | null => {
+  if (
+    value === 'deductible' ||
+    value === 'partially_deductible' ||
+    value === 'blocked_under_simplified' ||
+    value === 'non_deductible'
+  ) {
+    return value;
+  }
+  return null;
+};
+
+const asVehicleExpenseType = (value: unknown): VehicleExpenseType | null => {
+  if (value === 'running_cost' || value === 'separately_allowable' || value === 'non_vehicle' || value === 'personal_only') {
+    return value;
+  }
+  return null;
+};
+
+const getVehicleExpenseType = (category: string): VehicleExpenseType => {
+  if (vehicleRunningCostCategories.has(category)) return 'running_cost';
+  if (separatelyAllowableCategories.has(category)) return 'separately_allowable';
+  return 'non_vehicle';
+};
+
+const getTaxTreatment = (vehicleExpenseType: VehicleExpenseType, scope: ExpenseScope, claimMethod: ClaimMethod): TaxTreatment => {
+  if (scope === 'personal') return 'non_deductible';
+  if (vehicleExpenseType === 'running_cost' && claimMethod === 'SIMPLIFIED') return 'blocked_under_simplified';
+  if (scope === 'mixed') return 'partially_deductible';
+  return 'deductible';
+};
+
+const clampBusinessUsePercent = (value: number | null, scope: ExpenseScope) => {
+  if (scope === 'personal') return 0;
+  if (value === null) return scope === 'mixed' ? 50 : 100;
+  return Math.min(100, Math.max(0, value));
+};
+
+const readExpenseMeta = (row: Record<string, unknown>): { isVatClaimable?: boolean } => {
+  const description = asStringOrNull(row.description);
+  if (!description) return {};
+
+  try {
+    const parsed = JSON.parse(description) as { isVatClaimable?: unknown };
+    return { isVatClaimable: parsed.isVatClaimable === true };
+  } catch {
+    return {};
+  }
+};
+
+const calculateDeductibleAmounts = (
+  amount: number,
+  isVatClaimable: boolean,
+  taxTreatment: TaxTreatment,
+  businessUsePercent: number
+) => {
+  const taxBasisAmount = isVatClaimable ? amount / 1.2 : amount;
+  if (taxTreatment === 'non_deductible' || taxTreatment === 'blocked_under_simplified') {
+    return { deductibleAmount: 0, nonDeductibleAmount: taxBasisAmount };
+  }
+  if (taxTreatment === 'partially_deductible') {
+    const deductibleAmount = (taxBasisAmount * businessUsePercent) / 100;
+    return { deductibleAmount, nonDeductibleAmount: taxBasisAmount - deductibleAmount };
+  }
+  return { deductibleAmount: taxBasisAmount, nonDeductibleAmount: 0 };
+};
+
+const classifyExpenseRow = (row: Record<string, unknown>, claimMethod: ClaimMethod) => {
+  const category = asStringOrNull(row.category) ?? '';
+  const scope = asExpenseScope(row.scope) ?? 'business';
+  const businessUsePercent = clampBusinessUsePercent(
+    asNumberOrNull(row.businessUsePercent ?? row.business_use_percent),
+    scope
+  );
+  const vehicleExpenseType = asVehicleExpenseType(row.vehicleExpenseType ?? row.vehicle_expense_type) ?? getVehicleExpenseType(category);
+  const incomingTaxTreatment = asTaxTreatment(row.taxTreatment ?? row.tax_treatment);
+  const taxTreatment = incomingTaxTreatment ?? getTaxTreatment(vehicleExpenseType, scope, claimMethod);
+  const amount = asNumberOrNull(row.amount) ?? 0;
+  const meta = readExpenseMeta(row);
+  const calculated = calculateDeductibleAmounts(amount, Boolean(meta.isVatClaimable), taxTreatment, businessUsePercent);
+  const incomingDeductibleAmount = asNumberOrNull(row.deductibleAmount ?? row.deductible_amount);
+  const incomingNonDeductibleAmount = asNumberOrNull(row.nonDeductibleAmount ?? row.non_deductible_amount);
+
+  return {
+    scope,
+    businessUsePercent,
+    deductibleAmount: incomingTaxTreatment ? incomingDeductibleAmount ?? calculated.deductibleAmount : calculated.deductibleAmount,
+    nonDeductibleAmount: incomingTaxTreatment ? incomingNonDeductibleAmount ?? calculated.nonDeductibleAmount : calculated.nonDeductibleAmount,
+    vehicleExpenseType,
+    taxTreatment,
+  };
+};
+
 async function isStaleShift(env: Env, accountId: string, shiftId: string, incomingUpdatedAt: number): Promise<boolean> {
   const existing = await env.DB.prepare('SELECT updated_at FROM shifts WHERE id = ? AND account_id = ?')
     .bind(shiftId, accountId)
@@ -95,6 +227,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
   if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
 
   const now = Date.now();
+  const claimMethod = asClaimMethod(body.settings);
   await env.DB.prepare(
     'INSERT INTO users (device_id, created_at, last_sync) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET last_sync = ?'
   ).bind(accountId, now, now, now).run();
@@ -115,6 +248,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
 
   for (const row of body.expenses ?? []) {
     const updatedAt = getRowUpdatedAt(row, now);
+    const taxClassification = classifyExpenseRow(row, claimMethod);
     await env.DB.prepare(
       'INSERT INTO expenses (id, device_id, date, category, description, amount, tax_deductible, has_image, scope, business_use_percent, deductible_amount, non_deductible_amount, vehicle_expense_type, tax_treatment, linked_shift_id, source_type, review_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, device_id) DO UPDATE SET date=excluded.date, category=excluded.category, description=excluded.description, amount=excluded.amount, tax_deductible=excluded.tax_deductible, has_image=excluded.has_image, scope=excluded.scope, business_use_percent=excluded.business_use_percent, deductible_amount=excluded.deductible_amount, non_deductible_amount=excluded.non_deductible_amount, vehicle_expense_type=excluded.vehicle_expense_type, tax_treatment=excluded.tax_treatment, linked_shift_id=excluded.linked_shift_id, source_type=excluded.source_type, review_status=excluded.review_status, updated_at=excluded.updated_at WHERE expenses.updated_at IS NULL OR excluded.updated_at >= expenses.updated_at'
     ).bind(
@@ -126,12 +260,12 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
       row.amount ?? null,
       asFlag(row.taxDeductible, true),
       asFlag(row.hasImage),
-      asStringOrNull(row.scope) ?? 'business',
-      row.businessUsePercent ?? 100,
-      row.deductibleAmount ?? 0,
-      row.nonDeductibleAmount ?? 0,
-      asStringOrNull(row.vehicleExpenseType) ?? 'non_vehicle',
-      asStringOrNull(row.taxTreatment) ?? 'deductible',
+      taxClassification.scope,
+      taxClassification.businessUsePercent,
+      taxClassification.deductibleAmount,
+      taxClassification.nonDeductibleAmount,
+      taxClassification.vehicleExpenseType,
+      taxClassification.taxTreatment,
       asStringOrNull(row.linkedShiftId),
       asStringOrNull(row.sourceType) ?? 'manual',
       asStringOrNull(row.reviewStatus) ?? 'confirmed',
