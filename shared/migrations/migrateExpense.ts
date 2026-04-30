@@ -1,5 +1,5 @@
 import type { Expense } from '../types/expense';
-import { classifyExpense, calcDeductibleAmount } from '../calculations/expenses';
+import { calculateExpenseTaxClassification } from '../calculations/expenses';
 
 interface LegacyExpense {
   id: string;
@@ -26,17 +26,17 @@ export function migrateLegacyExpense(
   // Already migrated
   if ('scope' in legacy && 'taxTreatment' in legacy) return legacy as Expense;
 
-  const { vehicleExpenseType, taxTreatment } = classifyExpense(legacy.category, 'business', claimMethod);
-  const { deductibleAmount, nonDeductibleAmount } = calcDeductibleAmount(legacy.amount, taxTreatment, 100);
+  const taxClassification = calculateExpenseTaxClassification({
+    amount: legacy.amount,
+    category: legacy.category,
+    claimMethod,
+    isVatClaimable: legacy.isVatClaimable,
+    scope: 'business',
+  });
 
   return {
     ...legacy,
-    scope: 'business',
-    businessUsePercent: 100,
-    deductibleAmount,
-    nonDeductibleAmount,
-    vehicleExpenseType,
-    taxTreatment,
+    ...taxClassification,
     linkedShiftId: null,
     sourceType: 'manual',
     reviewStatus: 'confirmed',

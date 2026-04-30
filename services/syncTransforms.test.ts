@@ -124,6 +124,38 @@ describe('syncTransforms', () => {
     expect(sanitized.hasReceiptImage).toBe(true);
   });
 
+  it('buildSyncPayload classifies expenses before syncing', () => {
+    const payload = buildSyncPayload(
+      [],
+      [
+        {
+          id: 'expense-unclassified',
+          date: '2026-04-10',
+          category: ExpenseCategory.PHONE,
+          amount: 120,
+          description: 'Phone bill',
+          isVatClaimable: true,
+        },
+      ],
+      [],
+      DEFAULT_SETTINGS
+    );
+
+    expect(payload.expenses[0]).toEqual(
+      expect.objectContaining({
+        id: 'expense-unclassified',
+        scope: 'business',
+        businessUsePercent: 100,
+        deductibleAmount: 100,
+        nonDeductibleAmount: 0,
+        vehicleExpenseType: 'non_vehicle',
+        taxTreatment: 'deductible',
+        sourceType: 'manual',
+        reviewStatus: 'confirmed',
+      })
+    );
+  });
+
   it('applyPulledExpenses merges without duplicates', () => {
     const localExpenses: Expense[] = [
       {

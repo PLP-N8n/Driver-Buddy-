@@ -12,9 +12,11 @@ import {
 } from '../types';
 import * as Sentry from '../src/sentry';
 import { trackEvent } from '../services/analyticsService';
+import { calculateExpenseTaxClassification } from '../shared/calculations/expenses';
+import { calcMileageAllowanceForMiles } from '../shared/calculations/mileage';
 import { sanitizeExpenseForStorage } from '../services/syncTransforms';
 import { generateInsights } from '../utils/insights';
-import { todayUK, ukWeekStart } from '../utils/ukDate';
+import { getTaxYearForDate, todayUK, ukTaxYearEnd, ukTaxYearStart, ukWeekStart } from '../utils/ukDate';
 
 const nowIso = () => new Date(Date.now()).toISOString();
 const DELETED_IDS_KEY = 'driver_deleted_ids';
@@ -153,13 +155,28 @@ export function useDriverLedger({
   const updateTrip = (id: string, updates: Partial<Trip>) =>
     setTrips((current) => current.map((trip) => (trip.id === id ? { ...trip, ...updates, updatedAt: nowIso() } : trip)));
 
+  const ensureExpenseTaxClassification = (expense: Expense): Expense => ({
+    ...expense,
+    ...calculateExpenseTaxClassification({
+      amount: expense.amount,
+      businessUsePercent: expense.businessUsePercent,
+      category: expense.category,
+      claimMethod: settings.claimMethod,
+      isVatClaimable: expense.isVatClaimable,
+      scope: expense.scope ?? 'business',
+    }),
+    sourceType: expense.sourceType ?? 'manual',
+    reviewStatus: expense.reviewStatus ?? 'confirmed',
+  });
+
   const addExpense = (expense: Expense) => {
+    const classifiedExpense = ensureExpenseTaxClassification(expense);
     setExpenses((current) => {
-      const next = [...current, { ...expense, updatedAt: nowIso() }];
+      const next = [...current, { ...classifiedExpense, updatedAt: nowIso() }];
       localStorage.setItem('driver_expenses', JSON.stringify(next.map(sanitizeExpenseForStorage)));
       return next;
     });
-    trackEvent('expense_added', { category: expense.category });
+    trackEvent('expense_added', { category: classifiedExpense.category });
   };
 
   const deleteExpense = (id: string) => {
@@ -174,7 +191,8 @@ export function useDriverLedger({
 
   const updateExpense = (expense: Expense) =>
     setExpenses((current) => {
-      const next = current.map((item) => (item.id === expense.id ? { ...expense, updatedAt: nowIso() } : item));
+      const classifiedExpense = ensureExpenseTaxClassification(expense);
+      const next = current.map((item) => (item.id === expense.id ? { ...classifiedExpense, updatedAt: nowIso() } : item));
       localStorage.setItem('driver_expenses', JSON.stringify(next.map(sanitizeExpenseForStorage)));
       return next;
     });
@@ -206,12 +224,20 @@ export function useDriverLedger({
   const updateDailyLog = (log: DailyWorkLog) =>
     setDailyLogs((current) => current.map((item) => (item.id === log.id ? { ...log, updatedAt: nowIso() } : item)));
 
-  const calculateMileageClaim = (miles: number) => {
-    const totalBusinessMiles = trips.filter((trip) => trip.purpose === 'Business').reduce((sum, trip) => sum + trip.totalMiles, 0);
-    const remainingAtPrimaryRate = Math.max(0, 10000 - totalBusinessMiles);
-    const milesAtPrimaryRate = Math.min(miles, remainingAtPrimaryRate);
-    const milesAtSecondaryRate = Math.max(0, miles - milesAtPrimaryRate);
-    return milesAtPrimaryRate * settings.businessRateFirst10k + milesAtSecondaryRate * settings.businessRateAfter10k;
+  const calculateMileageClaim = (miles: number, date = todayUK()) => {
+    const taxYear = getTaxYearForDate(date);
+    const taxYearStart = ukTaxYearStart(taxYear);
+    const taxYearEnd = ukTaxYearEnd(taxYear);
+    const totalBusinessMiles = trips
+      .filter((trip) => trip.purpose === 'Business' && trip.date >= taxYearStart && trip.date <= taxYearEnd)
+      .reduce((sum, trip) => sum + trip.totalMiles, 0);
+
+    return calcMileageAllowanceForMiles(
+      miles,
+      totalBusinessMiles,
+      settings.businessRateFirst10k,
+      settings.businessRateAfter10k
+    );
   };
 
   const startActiveSession = ({ provider, startOdometer }: { provider: string; startOdometer?: number }) => {
@@ -242,7 +268,7 @@ export function useDriverLedger({
     const expensesTotal = sessionExpenses.reduce((sum, expense) => sum + expense.amount, 0);
     const fuelLiters = getFuelLiters(sessionExpenses);
     const taxToSetAside = revenue * (settings.taxSetAsidePercent / 100);
-    const mileageClaim = calculateMileageClaim(miles);
+    const mileageClaim = calculateMileageClaim(miles, session.date);
     const realProfit = revenue - taxToSetAside - expensesTotal;
     const durationMs = Math.max(new Date(endedAt).getTime() - new Date(session.startedAt).getTime(), 0);
     const hoursWorked = Math.max(0.1, durationMs / (1000 * 60 * 60));
@@ -281,6 +307,7 @@ export function useDriverLedger({
         amount: expense.amount,
         description: expense.description,
         ...copyEnergyFields(expense),
+        linkedShiftId: logId,
         updatedAt,
       });
     });
@@ -361,7 +388,7 @@ export function useDriverLedger({
         ? Math.max(0, payload.endOdometer - payload.startOdometer)
         : 0;
     const taxToSetAside = payload.revenue * (settings.taxSetAsidePercent / 100);
-    const mileageClaim = calculateMileageClaim(miles);
+    const mileageClaim = calculateMileageClaim(miles, payload.date);
     const realProfit = payload.revenue - taxToSetAside - expensesTotal;
 
     let linkedTripId: string | undefined;
@@ -383,6 +410,8 @@ export function useDriverLedger({
       addTrip(linkedTripForInsights);
     }
 
+    const logId = `${Date.now()}_manual_log`;
+
     payload.expenses.forEach((expense) => {
       addExpense({
         id: expense.id,
@@ -391,11 +420,11 @@ export function useDriverLedger({
         amount: expense.amount,
         description: expense.description,
         ...copyEnergyFields(expense),
+        linkedShiftId: logId,
         updatedAt,
       });
     });
 
-    const logId = `${Date.now()}_manual_log`;
     const completedLog: DailyWorkLog = {
       id: logId,
       date: payload.date,

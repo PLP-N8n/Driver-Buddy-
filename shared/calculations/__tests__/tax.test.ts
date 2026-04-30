@@ -117,6 +117,27 @@ describe('calcVehicleTaxDeductions', () => {
     expect(result.actualDeduction).toBe(80);
   });
 
+  it('does not over-deduct stored gross deductibleAmount for VAT-claimable expenses', () => {
+    const result = calcVehicleTaxDeductions({
+      expenses: [
+        { category: 'Phone', amount: 120, isVatClaimable: true, taxTreatment: 'deductible', deductibleAmount: 120 },
+        {
+          category: 'Phone',
+          amount: 120,
+          businessUsePercent: 50,
+          isVatClaimable: true,
+          taxTreatment: 'partially_deductible',
+          deductibleAmount: 60,
+        },
+      ],
+      totalMileageAllowance: 0,
+      businessUsePercent: 1,
+    });
+
+    expect(result.otherBusinessExpenses).toBe(150);
+    expect(result.actualDeduction).toBe(150);
+  });
+
   it('excludes personal-scope fuel from vehicle running costs', () => {
     const result = calcVehicleTaxDeductions({
       expenses: [

@@ -14,8 +14,8 @@ import {
 import { Settings, Trip, TripPurpose } from '../types';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
-import { calculateMileageClaim } from '../utils/tax';
-import { todayUK } from '../utils/ukDate';
+import { calcMileageAllowanceForMiles } from '../shared/calculations/mileage';
+import { getTaxYearForDate, todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
 import {
   dangerButtonClasses,
   fieldErrorClasses,
@@ -60,15 +60,53 @@ const purposeChipClasses: Record<TripPurpose, string> = {
   Commute: 'bg-amber-500/20 text-amber-400',
 };
 
+const getTripTaxYearBounds = (date: string) => {
+  const taxYear = getTaxYearForDate(date);
+  return {
+    start: ukTaxYearStart(taxYear),
+    end: ukTaxYearEnd(taxYear),
+  };
+};
+
+const getBusinessMilesBeforeTrip = (trip: Trip, trips: Trip[]) => {
+  const { start, end } = getTripTaxYearBounds(trip.date);
+
+  return trips
+    .filter((candidate) => candidate.purpose === 'Business')
+    .filter((candidate) => candidate.date >= start && candidate.date <= end)
+    .filter((candidate) => {
+      if (candidate.id === trip.id) return false;
+      if (candidate.date < trip.date) return true;
+      return candidate.date === trip.date && candidate.id.localeCompare(trip.id) < 0;
+    })
+    .reduce((sum, candidate) => sum + candidate.totalMiles, 0);
+};
+
+const calculateTripMileageClaim = (trip: Trip, trips: Trip[], settings: Settings) => {
+  if (trip.purpose !== 'Business') return 0;
+
+  const priorBusinessMiles = getBusinessMilesBeforeTrip(trip, trips);
+  return calcMileageAllowanceForMiles(
+    trip.totalMiles,
+    priorBusinessMiles,
+    settings.businessRateFirst10k,
+    settings.businessRateAfter10k
+  );
+};
+
 function MonthlySummaryBar({ trips, settings }: { trips: Trip[]; settings: Settings }) {
   const monthKey = todayUK().slice(0, 7);
   const monthTrips = trips.filter((trip) => trip.date.startsWith(monthKey));
   if (monthTrips.length === 0) return null;
 
+  const monthBusinessTrips = monthTrips.filter((trip) => trip.purpose === 'Business');
   const businessMiles = monthTrips
     .filter((trip) => trip.purpose === 'Business')
     .reduce((sum, trip) => sum + trip.totalMiles, 0);
-  const claimable = calculateMileageClaim(businessMiles, settings.businessRateFirst10k, settings.businessRateAfter10k);
+  const claimable = monthBusinessTrips.reduce(
+    (sum, trip) => sum + calculateTripMileageClaim(trip, trips, settings),
+    0
+  );
 
   const byPurpose: Partial<Record<TripPurpose, number>> = {};
   monthTrips.forEach((trip) => {
@@ -361,7 +399,7 @@ export const MileageLog: React.FC<MileageLogProps> = ({
                     <p className="font-mono font-semibold text-green-400">{formatNumber(trip.totalMiles)} miles</p>
                     {trip.purpose === 'Business' && (
                       <p className="text-xs text-green-400/70">
-                        &asymp; &pound;{calculateMileageClaim(trip.totalMiles, settings.businessRateFirst10k, settings.businessRateAfter10k).toFixed(2)} claimable
+                        &asymp; &pound;{calculateTripMileageClaim(trip, trips, settings).toFixed(2)} claimable
                       </p>
                     )}
                     {!trip.notes?.startsWith('Auto from') && trip.notes && (

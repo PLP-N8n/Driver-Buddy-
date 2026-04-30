@@ -31,6 +31,24 @@ export function calcMileageAllowance(
 }
 
 /**
+ * HMRC simplified mileage allowance for an increment of business miles after
+ * earlier tax-year miles have already used part of the 10,000-mile band.
+ */
+export function calcMileageAllowanceForMiles(
+  businessMiles: number,
+  priorTaxYearBusinessMiles: number,
+  rateFirst10k = 0.45,
+  rateAfter10k = 0.25
+): number {
+  const currentMiles = Math.max(0, businessMiles);
+  const priorMiles = Math.max(0, priorTaxYearBusinessMiles);
+  return (
+    calcMileageAllowance(priorMiles + currentMiles, rateFirst10k, rateAfter10k) -
+    calcMileageAllowance(priorMiles, rateFirst10k, rateAfter10k)
+  );
+}
+
+/**
  * Validate that odometer readings are in correct sequence.
  */
 export function validateOdoSequence(

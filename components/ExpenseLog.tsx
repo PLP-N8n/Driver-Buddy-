@@ -15,7 +15,11 @@ import {
 } from 'lucide-react';
 import { Expense, ExpenseCategory, EXPENSE_CATEGORY_OPTIONS, Settings } from '../types';
 import { deleteImage, deleteRemoteReceipt, getImageWithRemoteFallback, saveImage } from '../services/imageStore';
-import { calcDeductibleAmount, classifyExpense, isVehicleRunningCostCategory } from '../shared/calculations/expenses';
+import {
+  calculateExpenseTaxClassification,
+  getTaxDeductibleAmount,
+  isVehicleRunningCostCategory,
+} from '../shared/calculations/expenses';
 import type { Expense as EnhancedExpense } from '../shared/types/expense';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
@@ -23,7 +27,7 @@ import { ReceiptStatusBadge } from './ReceiptStatusBadge';
 import { useReceiptUpload } from '../hooks/useReceiptUpload';
 import { getSimplifiedMileageDeductibleExplanation } from '../utils/simplifiedMileageDeductibleCopy';
 import { suggestCategory } from '../utils/expenseCategorySuggestions';
-import { todayUK, ukTaxYearStart } from '../utils/ukDate';
+import { todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
 import {
   formatEnergyQuantity,
   getEnergyQuantityLabel,
@@ -83,11 +87,7 @@ const getReceiptSourceKey = (expense: ExpenseRecord) =>
   `${expense.id}:${expense.receiptId ?? expense.receiptUrl ?? (expense.hasReceiptImage ? 'local-receipt' : 'no-receipt')}`;
 
 const getStoredDeductibleAmount = (expense: ExpenseRecord) => {
-  if (typeof expense.deductibleAmount === 'number') {
-    return expense.deductibleAmount;
-  }
-
-  return expense.isVatClaimable ? expense.amount / 1.2 : expense.amount;
+  return getTaxDeductibleAmount(expense);
 };
 
 const getReceiptBlobKey = async (expenseId: string, blob: Blob) => {
@@ -135,7 +135,13 @@ const createDefaultExpenseDraft = (): Partial<ExpenseRecord> => ({
 
 function TaxYearDeductibleCallout({ expenses, settings }: { expenses: ExpenseRecord[]; settings: Settings }) {
   const taxYearStart = ukTaxYearStart();
-  const taxYearExpenses = expenses.filter((expense) => expense.date >= taxYearStart);
+  const taxYearEnd = ukTaxYearEnd();
+  const taxYearExpenses = expenses.filter(
+    (expense) =>
+      expense.date >= taxYearStart &&
+      expense.date <= taxYearEnd &&
+      !(isVehicleRunningCostCategory(expense.category) && expense.taxTreatment === undefined)
+  );
 
   if (taxYearExpenses.length === 0) return null;
 
@@ -498,12 +504,15 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
     const energyQuantity = energyUnit && litersInput ? parseFloat(litersInput) : undefined;
     const scope = scopeInput;
     const businessUsePercent = scopeInput === 'personal' ? 0 : businessUsePercentInput;
-    const { vehicleExpenseType, taxTreatment } = classifyExpense(category, scope, settings.claimMethod);
-    const { deductibleAmount, nonDeductibleAmount } = calcDeductibleAmount(
+    const isVatClaimable = newExpense.isVatClaimable || false;
+    const taxClassification = calculateExpenseTaxClassification({
       amount,
-      taxTreatment,
-      businessUsePercent
-    );
+      businessUsePercent,
+      category,
+      claimMethod: settings.claimMethod,
+      isVatClaimable,
+      scope,
+    });
 
     const expenseData: ExpenseRecord = {
       id,
@@ -512,16 +521,11 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
       amount,
       description: newExpense.description || '',
       hasReceiptImage,
-      isVatClaimable: newExpense.isVatClaimable || false,
+      isVatClaimable,
       energyQuantity: Number.isFinite(energyQuantity) && energyQuantity && energyQuantity > 0 ? energyQuantity : undefined,
       energyUnit: Number.isFinite(energyQuantity) && energyQuantity && energyQuantity > 0 ? energyUnit : undefined,
       liters: energyUnit === 'litre' && Number.isFinite(energyQuantity) && energyQuantity && energyQuantity > 0 ? energyQuantity : undefined,
-      scope,
-      businessUsePercent,
-      deductibleAmount,
-      nonDeductibleAmount,
-      vehicleExpenseType,
-      taxTreatment,
+      ...taxClassification,
       linkedShiftId: editingExpense?.linkedShiftId ?? newExpense.linkedShiftId ?? null,
       sourceType: editingExpense?.sourceType ?? 'manual',
       reviewStatus: editingExpense ? 'edited' : 'confirmed',

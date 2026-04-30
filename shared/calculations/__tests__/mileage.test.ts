@@ -3,6 +3,7 @@ import {
   calcBusinessMilesFromOdo,
   calcPersonalGapMiles,
   calcMileageAllowance,
+  calcMileageAllowanceForMiles,
   validateOdoSequence,
 } from '../mileage';
 
@@ -43,6 +44,16 @@ describe('calcMileageAllowance', () => {
   });
   it('respects custom rates', () => {
     expect(calcMileageAllowance(100, 0.50, 0.25)).toBeCloseTo(50);
+  });
+});
+
+describe('calcMileageAllowanceForMiles', () => {
+  it('uses the remaining first-rate band after prior tax-year miles', () => {
+    expect(calcMileageAllowanceForMiles(100, 9_950)).toBeCloseTo(35);
+  });
+
+  it('uses the second rate once prior tax-year miles exceed 10000', () => {
+    expect(calcMileageAllowanceForMiles(100, 10_000)).toBeCloseTo(25);
   });
 });
 

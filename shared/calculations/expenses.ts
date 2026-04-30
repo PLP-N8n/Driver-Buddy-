@@ -99,6 +99,95 @@ export function classifyExpense(
   return { vehicleExpenseType, taxTreatment };
 }
 
+export function calcExpenseTaxBasisAmount(amount: number, isVatClaimable = false): number {
+  return isVatClaimable ? amount / 1.2 : amount;
+}
+
+const clampBusinessUsePercent = (value: number) => Math.max(0, Math.min(100, value));
+
+const getDefaultBusinessUsePercent = (scope: ExpenseScope, businessUsePercent?: number) => {
+  if (scope === 'personal') return 0;
+  if (businessUsePercent !== undefined && Number.isFinite(businessUsePercent)) {
+    return clampBusinessUsePercent(businessUsePercent);
+  }
+  return scope === 'mixed' ? 50 : 100;
+};
+
+export function calculateExpenseTaxClassification({
+  amount,
+  businessUsePercent,
+  category,
+  claimMethod,
+  isVatClaimable = false,
+  scope = 'business',
+}: {
+  amount: number;
+  businessUsePercent?: number;
+  category: string;
+  claimMethod: 'SIMPLIFIED' | 'ACTUAL';
+  isVatClaimable?: boolean;
+  scope?: ExpenseScope;
+}): Pick<
+  Expense,
+  | 'businessUsePercent'
+  | 'deductibleAmount'
+  | 'nonDeductibleAmount'
+  | 'scope'
+  | 'taxTreatment'
+  | 'vehicleExpenseType'
+> {
+  const normalizedBusinessUsePercent = getDefaultBusinessUsePercent(scope, businessUsePercent);
+  const { vehicleExpenseType, taxTreatment } = classifyExpense(category, scope, claimMethod);
+  const taxBasisAmount = calcExpenseTaxBasisAmount(amount, isVatClaimable);
+  const { deductibleAmount, nonDeductibleAmount } = calcDeductibleAmount(
+    taxBasisAmount,
+    taxTreatment,
+    normalizedBusinessUsePercent
+  );
+
+  return {
+    scope,
+    businessUsePercent: normalizedBusinessUsePercent,
+    deductibleAmount,
+    nonDeductibleAmount,
+    vehicleExpenseType,
+    taxTreatment,
+  };
+}
+
+export function getTaxDeductibleAmount(expense: {
+  amount: number;
+  businessUsePercent?: number;
+  deductibleAmount?: number;
+  isVatClaimable?: boolean;
+  taxTreatment?: TaxTreatment;
+}): number {
+  if (expense.taxTreatment === 'non_deductible' || expense.taxTreatment === 'blocked_under_simplified') {
+    return 0;
+  }
+
+  const storedDeductibleAmount = expense.deductibleAmount;
+  if (storedDeductibleAmount === undefined) {
+    return calcExpenseTaxBasisAmount(expense.amount, expense.isVatClaimable);
+  }
+
+  if (!expense.isVatClaimable) {
+    return storedDeductibleAmount;
+  }
+
+  const taxBasisAmount = calcExpenseTaxBasisAmount(expense.amount, true);
+  const businessUsePercent =
+    expense.businessUsePercent !== undefined && Number.isFinite(expense.businessUsePercent)
+      ? getDefaultBusinessUsePercent('mixed', expense.businessUsePercent)
+      : 100;
+  const maxNetDeductible =
+    expense.taxTreatment === 'partially_deductible' || businessUsePercent < 100
+      ? (taxBasisAmount * businessUsePercent) / 100
+      : taxBasisAmount;
+
+  return Math.min(storedDeductibleAmount, maxNetDeductible);
+}
+
 /**
  * Compute deductible and non-deductible split for an expense.
  */
@@ -121,5 +210,5 @@ export function calcDeductibleAmount(
  * Sum total deductible amount across a list of expenses.
  */
 export function sumDeductibleExpenses(expenses: Expense[]): number {
-  return expenses.reduce((sum, e) => sum + e.deductibleAmount, 0);
+  return expenses.reduce((sum, e) => sum + getTaxDeductibleAmount(e), 0);
 }

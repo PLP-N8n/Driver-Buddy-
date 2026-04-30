@@ -27,10 +27,16 @@ export function toUKDateString(date: Date): string {
 
 /** Returns the starting calendar year of the current UK tax year (Apr 6 - Apr 5) */
 export function getTaxYear(): number {
-  const today = todayUK();
-  const [y, m, d] = today.split('-').map(Number);
-  if (y == null || m == null || d == null) {
-    throw new Error(`Invalid date: ${today}`);
+  return getTaxYearForDate(todayUK());
+}
+
+/** Returns the starting calendar year of the UK tax year containing dateStr. */
+export function getTaxYearForDate(dateStr: string): number {
+  const y = Number.parseInt(dateStr.slice(0, 4), 10);
+  const m = Number.parseInt(dateStr.slice(5, 7), 10);
+  const d = Number.parseInt(dateStr.slice(8, 10), 10);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    throw new Error(`Invalid date: ${dateStr}`);
   }
   if (m > 4 || (m === 4 && d >= 6)) return y;
   return y - 1;

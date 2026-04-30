@@ -1,5 +1,6 @@
 import { DailyWorkLog, EnergyQuantityUnit, Expense, ExpenseCategory, ProviderSplit, Settings, SyncPullPayload, Trip } from '../types';
 import * as Sentry from '../src/sentry';
+import { calculateExpenseTaxClassification } from '../shared/calculations/expenses';
 import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
 import { saveImage } from './imageStore';
 
@@ -112,6 +113,14 @@ const formatPlatformLabel = (value: string | null | undefined) => {
 const toSyncTimestamp = (updatedAt: string | undefined, fallbackDate: string): string =>
   updatedAt ?? `${fallbackDate}T12:00:00.000Z`;
 
+const hasCompleteExpenseTaxClassification = (expense: Expense) =>
+  expense.scope !== undefined &&
+  expense.businessUsePercent !== undefined &&
+  expense.deductibleAmount !== undefined &&
+  expense.nonDeductibleAmount !== undefined &&
+  expense.vehicleExpenseType !== undefined &&
+  expense.taxTreatment !== undefined;
+
 export const sanitizeExpenseForStorage = <T extends Expense>(expense: T): T => {
   const { receiptUrl: _receiptUrl, ...rest } = expense;
   const storedReceiptUrl =
@@ -168,6 +177,25 @@ export const buildSyncPayload = (
 ) => {
   const tripsById = new Map(trips.map((trip) => [trip.id, trip]));
   const shifts = dailyLogs.map((log) => migrateDailyWorkLog(log, log.linkedTripId ? tripsById.get(log.linkedTripId) : undefined));
+  const classifiedExpenses = expenses.map((expense) => {
+    const taxClassification = hasCompleteExpenseTaxClassification(expense)
+      ? {}
+      : calculateExpenseTaxClassification({
+          amount: expense.amount,
+          businessUsePercent: expense.businessUsePercent,
+          category: expense.category,
+          claimMethod: settings.claimMethod,
+          isVatClaimable: expense.isVatClaimable,
+          scope: expense.scope ?? 'business',
+        });
+
+    return {
+      ...expense,
+      ...taxClassification,
+      sourceType: expense.sourceType ?? 'manual',
+      reviewStatus: expense.reviewStatus ?? 'confirmed',
+    };
+  });
   const shiftRows: SyncShiftPushItem[] = shifts.map((shift) => ({
     id: shift.id,
     date: shift.date,
@@ -233,7 +261,7 @@ export const buildSyncPayload = (
       linkedWorkId: null,
       updatedAt: toSyncTimestamp(trip.updatedAt, trip.date),
     })),
-    expenses: expenses.map((expense) => ({
+    expenses: classifiedExpenses.map((expense) => ({
       id: expense.id,
       date: expense.date,
       category: expense.category,

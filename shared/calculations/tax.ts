@@ -1,9 +1,10 @@
 import type { Expense, TaxTreatment } from '../types/expense';
 import { calcMileageAllowance } from './mileage';
 import {
+  calcExpenseTaxBasisAmount,
+  getTaxDeductibleAmount,
   isTaxAllowableExpenseCategory,
   isVehicleRunningCostCategory,
-  sumDeductibleExpenses,
 } from './expenses';
 
 export interface TaxSettings {
@@ -16,6 +17,7 @@ export interface TaxSettings {
 }
 
 type TaxAnalysisExpense = Pick<Expense, 'category' | 'amount' | 'isVatClaimable'> & {
+  businessUsePercent?: number;
   deductibleAmount?: number;
   taxTreatment?: TaxTreatment;
 };
@@ -42,11 +44,11 @@ export function calcSimplifiedDeduction(
  * Actual expenses deduction - sum of all deductible expense amounts.
  */
 export function calcActualDeduction(expenses: Expense[]): number {
-  return sumDeductibleExpenses(expenses);
+  return expenses.reduce((sum, expense) => sum + getTaxDeductibleAmount(expense), 0);
 }
 
 export function calcExpenseAmountNetOfVat(expense: TaxAnalysisExpense): number {
-  return expense.isVatClaimable ? expense.amount / 1.2 : expense.amount;
+  return calcExpenseTaxBasisAmount(expense.amount, expense.isVatClaimable);
 }
 
 export function calcVehicleTaxDeductions({
@@ -65,7 +67,7 @@ export function calcVehicleTaxDeductions({
     .reduce((sum, expense) => {
       if (expense.taxTreatment !== undefined) {
         if (expense.taxTreatment === 'non_deductible' || expense.taxTreatment === 'blocked_under_simplified') return sum;
-        return sum + (expense.deductibleAmount ?? calcExpenseAmountNetOfVat(expense));
+        return sum + getTaxDeductibleAmount(expense);
       }
       // Legacy: no stored classification — fall back to category filter
       if (!isTaxAllowableExpenseCategory(expense.category)) return sum;

@@ -79,7 +79,7 @@ test('downloads the tax summary report from the reporting page', async ({ page }
   await page.getByRole('button', { name: 'Tax' }).click();
   const mainContent = page.locator('main');
   await expect(mainContent.getByText('Tax pot', { exact: true })).toBeVisible();
-  await expect(mainContent.getByText('Weekly target', { exact: true })).toBeVisible();
+  await expect(mainContent.getByText('What to set aside this week', { exact: true })).toBeVisible();
   await expect(mainContent.getByText('Key dates', { exact: true })).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');

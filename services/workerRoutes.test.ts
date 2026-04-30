@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { handleOptions, isAllowedOrigin } from '../workers/sync-api/src/lib/cors';
+import syncWorker from '../workers/sync-api/src/index';
+import { handleOptions, isAllowedOrigin, withCorsHeaders } from '../workers/sync-api/src/lib/cors';
 import { issueSessionToken } from '../workers/sync-api/src/lib/session';
 import { handleAuthRegister, handleAuthSession } from '../workers/sync-api/src/routes/auth';
 import { handleEvents } from '../workers/sync-api/src/routes/events';
@@ -84,6 +85,70 @@ describe('Worker CORS routes', () => {
     );
     expect(denied.status).toBe(403);
     expect(denied.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('allows browser tracing headers on preflight requests', () => {
+    const response = handleOptions(
+      new Request('https://worker.example.test/sync/pull', {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://drivertax.rudradigital.uk',
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'x-device-id,x-session-token,sentry-trace,baggage',
+        },
+      })
+    );
+
+    const allowHeaders = response.headers.get('Access-Control-Allow-Headers')?.toLowerCase() ?? '';
+    expect(response.status).toBe(204);
+    expect(allowHeaders).toContain('x-device-id');
+    expect(allowHeaders).toContain('x-session-token');
+    expect(allowHeaders).toContain('sentry-trace');
+    expect(allowHeaders).toContain('baggage');
+  });
+
+  it('can add CORS headers to an existing error response', async () => {
+    const response = withCorsHeaders(
+      new Request('https://worker.example.test/sync/pull', {
+        headers: { Origin: 'https://drivertax.rudradigital.uk' },
+      }),
+      new Response(JSON.stringify({ error: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://drivertax.rudradigital.uk');
+    expect(response.headers.get('Content-Type')).toBe('application/json');
+    expect(await response.json()).toMatchObject({ error: 'unauthorized' });
+  });
+
+  it('keeps CORS headers on uncaught Worker exceptions', async () => {
+    const origin = 'https://drivertax.rudradigital.uk';
+    const response = await syncWorker.fetch(
+      new Request('https://worker.example.test/api/events', {
+        method: 'POST',
+        headers: {
+          Origin: origin,
+          'Content-Type': 'application/json',
+          'X-Device-ID': 'device-123',
+        },
+        body: JSON.stringify({ event: 'app_open' }),
+      }),
+      {
+        DB: { prepare: vi.fn(() => { throw new Error('db unavailable'); }) } as unknown as D1Database,
+        RECEIPTS: {} as R2Bucket,
+        ANALYTICS: { writeDataPoint: vi.fn() } as unknown as AnalyticsEngineDataset,
+        SESSION_SECRET: 'test-secret',
+        ADMIN_TOKEN: 'admin-token',
+        PLAID_TOKEN_KEY: 'test-key',
+      }
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+    expect(await response.json()).toMatchObject({ error: 'internal error' });
   });
 });
 
