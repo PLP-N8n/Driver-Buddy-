@@ -23,23 +23,34 @@ import {
   UserRound,
   UtensilsCrossed,
 } from 'lucide-react';
-import { DriverRole, EXPENSE_CATEGORY_OPTIONS, ExpenseCategory, RecurringExpense, RecurringExpenseFrequency, Settings, VehicleFuelType } from '../types';
+import { DriverRole, EXPENSE_CATEGORY_OPTIONS, ExpenseCategory, RecurringExpense, RecurringExpenseFrequency, Settings, VehicleFuelType, type Expense } from '../types';
 import { LinkedDevicesPanel } from './LinkedDevicesPanel';
 import { PlaidSyncToggle } from './PlaidSyncToggle';
 import { ReceiptSyncPanel } from './ReceiptSyncPanel';
 import { ensureReminderPermission, getReminderPermission, type ReminderPermissionState } from '../services/reminderService';
+import { isSyncConfigured, type SyncStatus } from '../services/syncService';
+import { isVehicleRunningCostCategory } from '../shared/calculations/expenses';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { getTaxYearForDate, toUKDateString, ukTaxYearStart } from '../utils/ukDate';
 import {
+  dialogBackdropClasses,
+  dialogPanelClasses,
   fieldLabelClasses,
   getNumericInputProps,
   inputClasses,
   panelClasses,
+  primaryButtonClasses,
   secondaryButtonClasses,
   subtlePanelClasses,
 } from '../utils/ui';
 
+type ClaimMethod = 'SIMPLIFIED' | 'ACTUAL';
+
 interface SettingsProps {
   settings: Settings;
   onUpdateSettings: (settings: Settings) => void;
+  expenses: Expense[];
+  reclassifyExpensesForMethod: (newMethod: ClaimMethod) => number;
   onBackup: () => void;
   onExportCSV: () => void;
   onExportHmrcSummary: () => void;
@@ -56,6 +67,8 @@ interface SettingsProps {
   restoreStatusMessage: string | null;
   reminderFocusSignal?: number;
   onReminderFocusHandled?: () => void;
+  syncStatus: SyncStatus;
+  receiptStats: { total: number; synced: number; uploading: number; failed: number; localOnly: number };
 }
 
 const roleOptions: Array<{ role: DriverRole; label: string; description: string; icon: LucideIcon }> = [
@@ -80,9 +93,26 @@ const visibleSettingsSections = {
   bankSync: false,
 } as const;
 
+const claimMethodLabels: Record<ClaimMethod, string> = {
+  SIMPLIFIED: 'Simplified',
+  ACTUAL: 'Actual costs',
+};
+
+const claimMethodCopyLabels: Record<ClaimMethod, string> = {
+  SIMPLIFIED: 'simplified',
+  ACTUAL: 'actual costs',
+};
+
+const claimMethodFuelExamples: Record<ClaimMethod, string> = {
+  SIMPLIFIED: 'fuel moves from deductible to blocked.',
+  ACTUAL: 'fuel moves from blocked to deductible.',
+};
+
 export const SettingsPanel: React.FC<SettingsProps> = ({
   settings,
   onUpdateSettings,
+  expenses,
+  reclassifyExpensesForMethod,
   onBackup,
   onExportCSV,
   onExportHmrcSummary,
@@ -95,10 +125,13 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
   restoreStatusMessage,
   reminderFocusSignal,
   onReminderFocusHandled,
+  syncStatus,
+  receiptStats,
 }) => {
   const update = (patch: Partial<Settings>) => onUpdateSettings({ ...settings, ...patch });
   const reminderSectionRef = useRef<HTMLElement | null>(null);
   const reminderTimeInputRef = useRef<HTMLInputElement | null>(null);
+  const methodChangeDialogRef = useRef<HTMLDivElement | null>(null);
   const [restoreCode, setRestoreCode] = useState('');
   const [vehicleTaxInput, setVehicleTaxInput] = useState(settings.vehicleTax ? settings.vehicleTax.toString() : '');
   const [reminderPermission, setReminderPermission] = useState<ReminderPermissionState>(() => getReminderPermission());
@@ -108,6 +141,9 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
   const [newRecurringAmount, setNewRecurringAmount] = useState('');
   const [newRecurringFrequency, setNewRecurringFrequency] = useState<RecurringExpenseFrequency>('monthly');
   const [newRecurringMonth, setNewRecurringMonth] = useState(1);
+  const [pendingMethodChange, setPendingMethodChange] = useState<{ newMethod: ClaimMethod; count: number } | null>(null);
+
+  useFocusTrap(methodChangeDialogRef, pendingMethodChange !== null, () => setPendingMethodChange(null));
 
   useEffect(() => {
     localStorage.setItem('dtpro_settings_visited', 'true');
@@ -158,6 +194,30 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
     update({ reminderEnabled: true, reminderTime: settings.reminderTime || '18:00' });
   };
 
+  const handleClaimMethodChange = (newMethod: ClaimMethod) => {
+    if (newMethod === settings.claimMethod) return;
+
+    const taxYearStart = ukTaxYearStart(getTaxYearForDate(toUKDateString(new Date())));
+    const affected = expenses.filter(
+      (expense) => isVehicleRunningCostCategory(expense.category) && expense.date >= taxYearStart
+    );
+
+    if (affected.length === 0) {
+      update({ claimMethod: newMethod });
+      return;
+    }
+
+    setPendingMethodChange({ newMethod, count: affected.length });
+  };
+
+  const applyPendingMethodChange = () => {
+    if (!pendingMethodChange) return;
+
+    reclassifyExpensesForMethod(pendingMethodChange.newMethod);
+    update({ claimMethod: pendingMethodChange.newMethod });
+    setPendingMethodChange(null);
+  };
+
   const reminderStatusText = (() => {
     if (!settings.reminderEnabled) return 'Off';
     if (reminderPermission === 'granted') return `Scheduled daily at ${settings.reminderTime || '18:00'}.`;
@@ -165,6 +225,19 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
     if (reminderPermission === 'unsupported') return 'This browser will show an in-app prompt while Driver Buddy is open.';
     return 'Scheduled. Allow browser notifications when prompted for background-style alerts.';
   })();
+
+  const pendingMethodChangeCopy = pendingMethodChange
+    ? (() => {
+        const expenseLabel = pendingMethodChange.count === 1 ? 'vehicle expense' : 'vehicle expenses';
+        const verb = pendingMethodChange.count === 1 ? 'was' : 'were';
+        const objectLabel = pendingMethodChange.count === 1 ? 'it' : 'them';
+
+        return {
+          title: `Switch to ${claimMethodLabels[pendingMethodChange.newMethod]}?`,
+          body: `${pendingMethodChange.count} ${expenseLabel} logged this tax year ${verb} classified under ${claimMethodCopyLabels[settings.claimMethod]}. Switching will reclassify ${objectLabel} to match ${claimMethodCopyLabels[pendingMethodChange.newMethod]} -- for example, ${claimMethodFuelExamples[pendingMethodChange.newMethod]} This updates your tax estimate immediately.`,
+        };
+      })()
+    : null;
 
   return (
     <div className="space-y-4">
@@ -296,6 +369,58 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
       </section>
 
       <section className={`${panelClasses} p-5`}>
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-white">Your records</h2>
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className={`${subtlePanelClasses} flex items-center justify-between gap-4 px-4 py-3`}>
+            <span className="text-sm text-slate-200">
+              {!isSyncConfigured()
+                ? 'Stored on this device only'
+                : syncStatus === 'idle'
+                ? 'Records synced'
+                : syncStatus === 'syncing'
+                ? 'Syncing...'
+                : syncStatus === 'error'
+                ? 'Sync error -- check connection'
+                : 'Offline -- records will sync when reconnected'}
+            </span>
+            <span
+              className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${
+                !isSyncConfigured() || syncStatus === 'offline'
+                  ? 'bg-slate-500'
+                  : syncStatus === 'idle'
+                  ? 'bg-emerald-400'
+                  : syncStatus === 'error'
+                  ? 'bg-amber-400'
+                  : 'bg-slate-500'
+              }`}
+            />
+          </div>
+          {receiptStats.total > 0 && (
+            <div className={`${subtlePanelClasses} px-4 py-3`}>
+              <p className="text-sm text-slate-200">
+                {receiptStats.failed > 0
+                  ? `${receiptStats.failed} failed to upload -- check connection`
+                  : receiptStats.localOnly > 0
+                  ? `${receiptStats.total} receipts: ${receiptStats.synced} saved, ${receiptStats.localOnly} local only`
+                  : `${receiptStats.total} receipts saved`}
+              </p>
+            </div>
+          )}
+          <div className={`${subtlePanelClasses} flex items-center justify-between gap-4 px-4 py-3`}>
+            <p className="text-sm text-slate-400">
+              Download a CSV of your income, expenses, and mileage for your accountant.
+            </p>
+            <button type="button" onClick={onExportCSV} className={secondaryButtonClasses}>
+              <Download className="h-4 w-4" />
+              <span>Download accountant records</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className={`${panelClasses} p-5`}>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className={`${subtlePanelClasses} p-4`}>
             <div className="mb-4">
@@ -309,7 +434,7 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => update({ claimMethod: 'SIMPLIFIED' })}
+                onClick={() => handleClaimMethodChange('SIMPLIFIED')}
                 className={`rounded-full px-4 py-3 text-sm font-semibold transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
                   settings.claimMethod === 'SIMPLIFIED' ? 'bg-brand text-white' : 'bg-surface text-slate-300 hover:bg-surface-border'
                 }`}
@@ -318,7 +443,7 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => update({ claimMethod: 'ACTUAL' })}
+                onClick={() => handleClaimMethodChange('ACTUAL')}
                 className={`rounded-full px-4 py-3 text-sm font-semibold transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
                   settings.claimMethod === 'ACTUAL' ? 'bg-brand text-white' : 'bg-surface text-slate-300 hover:bg-surface-border'
                 }`}
@@ -562,7 +687,7 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
           <CalendarClock className="h-4 w-4 text-slate-400" />
           <div>
             <h2 className="text-base font-semibold text-white">Regular Expenses</h2>
-            <p className="text-sm text-slate-400">Fixed costs logged once — prompted on your dashboard each period.</p>
+            <p className="text-sm text-slate-400">Fixed costs logged once, prompted on your dashboard each period.</p>
           </div>
         </div>
 
@@ -573,8 +698,8 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
                 <div className="min-w-0">
                   <p className="truncate text-sm text-white">{item.description}</p>
                   <p className="text-xs text-slate-400">
-                    £{item.amount.toFixed(2)} · {item.category} · {item.frequency}
-                    {item.lastLoggedDate ? ` · last logged ${item.lastLoggedDate}` : ''}
+                    GBP {item.amount.toFixed(2)} | {item.category} | {item.frequency}
+                    {item.lastLoggedDate ? ` | last logged ${item.lastLoggedDate}` : ''}
                   </p>
                 </div>
                 <button
@@ -605,7 +730,7 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="recurring-amount" className={fieldLabelClasses}>Amount (£)</label>
+                <label htmlFor="recurring-amount" className={fieldLabelClasses}>Amount (GBP)</label>
                 <input
                   id="recurring-amount"
                   type="number"
@@ -918,6 +1043,32 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
           </div>
           <PlaidSyncToggle />
         </section>
+      )}
+
+      {pendingMethodChangeCopy && (
+        <div className={dialogBackdropClasses} onClick={() => setPendingMethodChange(null)}>
+          <div
+            ref={methodChangeDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="claim-method-change-title"
+            className={`${dialogPanelClasses} max-w-md`}
+            onClick={(event: React.MouseEvent<HTMLDivElement>) => event.stopPropagation()}
+          >
+            <h2 id="claim-method-change-title" className="text-lg font-semibold text-white">
+              {pendingMethodChangeCopy.title}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">{pendingMethodChangeCopy.body}</p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setPendingMethodChange(null)} className={secondaryButtonClasses}>
+                Cancel
+              </button>
+              <button type="button" onClick={applyPendingMethodChange} className={primaryButtonClasses}>
+                Reclassify and switch
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
