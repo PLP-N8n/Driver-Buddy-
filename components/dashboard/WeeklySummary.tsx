@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, Car, Receipt, Share2, Sparkles } from 'lucide-react';
+import { Bell, Car, Receipt, Share2, Sparkles, X } from 'lucide-react';
 import { calcKept } from '../../shared/calculations/tax';
 import type { CompletedShiftSummary, DailyWorkLog, Expense, Trip } from '../../types';
 import { shouldPromptForShiftMileage } from '../../utils/mileageLinkage';
@@ -15,6 +15,7 @@ type WeeklySummaryProps = {
   summaryInsight: string | null;
   summaryProgressPercent: number;
   weeklyRevenueTarget: number;
+  isFirstShift?: boolean;
   onDismissCompletedSummary: () => void;
   onShareSummary: (summaryText: string) => void | Promise<void>;
   onAddExpense: () => void;
@@ -52,6 +53,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   summaryInsight,
   summaryProgressPercent,
   weeklyRevenueTarget,
+  isFirstShift = false,
   onDismissCompletedSummary,
   onShareSummary,
   onAddExpense,
@@ -59,6 +61,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   onSetReminder,
 }) => {
   const [dismissedNudgeSummaryId, setDismissedNudgeSummaryId] = React.useState<string | null>(null);
+  const [reminderNudgeDismissed, setReminderNudgeDismissed] = React.useState(false);
 
   React.useEffect(() => {
     setDismissedNudgeSummaryId(null);
@@ -149,6 +152,34 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
               Skip
             </button>
           </div>
+        </div>
+      )}
+
+      {isFirstShift && !reminderNudgeDismissed && (
+        <div className="mt-4 rounded-2xl border border-brand/30 bg-brand/10 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-full bg-brand/20 p-2 text-brand">
+              <Bell className="h-4 w-4" />
+            </div>
+            <p className="min-w-0 flex-1 text-sm font-medium leading-5 text-white">
+              Set a daily reminder so logging never slips your mind.
+            </p>
+            <button
+              type="button"
+              onClick={() => setReminderNudgeDismissed(true)}
+              className="rounded-full p-1 text-slate-400 transition-colors hover:text-slate-200"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => { onSetReminder(); setReminderNudgeDismissed(true); }}
+            className={`${primaryButtonClasses} mt-3 w-full justify-center`}
+          >
+            Turn on daily reminders
+          </button>
         </div>
       )}
 

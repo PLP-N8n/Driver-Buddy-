@@ -319,18 +319,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
                     />
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <button type="submit" disabled={!canShowQuickWin} className={`${primaryButtonClasses} justify-center`}>
-                      Show me
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => completeOnboarding({ startWorkDay: false, hasLoggedShift: false })}
-                      className={`${secondaryButtonClasses} justify-center`}
-                    >
-                      Skip for now
-                    </button>
-                  </div>
+                  <button type="submit" disabled={!canShowQuickWin} className={`${primaryButtonClasses} w-full justify-center`}>
+                    Show me
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => completeOnboarding({ startWorkDay: false, hasLoggedShift: false })}
+                    className="mt-3 w-full text-center text-sm text-slate-500 transition-colors hover:text-slate-300"
+                  >
+                    Skip for now
+                  </button>
                 </form>
               </>
             )}

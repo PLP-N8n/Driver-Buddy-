@@ -5,10 +5,7 @@ import {
   ChevronDown,
   Clock3,
   LoaderCircle,
-  MapPin,
-  PoundSterling,
   Sparkles,
-  TrendingUp,
 } from 'lucide-react';
 import {
   ActiveWorkSession,
@@ -806,6 +803,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           summaryInsight={summaryInsight ?? null}
           summaryProgressPercent={summaryProgressPercent}
           weeklyRevenueTarget={settings.weeklyRevenueTarget}
+          isFirstShift={dailyLogs.length <= 1}
           onDismissCompletedSummary={onDismissCompletedSummary}
           onShareSummary={onShareCompletedSummary}
           onAddExpense={() => onAddCompletedShiftExpense(completedShiftSummary)}
@@ -915,30 +913,15 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
               )}
             </>
           ) : (
-            <section className={`${panelClasses} p-6`}>
-              <div className="space-y-3">
-                <div className={`${subtlePanelClasses} flex items-start gap-3 p-4`}>
-                  <PoundSterling className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
-                  <div>
-                    <p className="text-sm font-medium text-white">Track your earnings</p>
-                    <p className="mt-0.5 text-xs text-slate-400">Start a shift when you want the timer, or use Add shift if you just need the numbers in.</p>
-                  </div>
-                </div>
-                <div className={`${subtlePanelClasses} flex items-start gap-3 p-4`}>
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
-                  <div>
-                    <p className="text-sm font-medium text-white">Track your mileage</p>
-                    <p className="mt-0.5 text-xs text-slate-400">Every business mile matters when you work out what stays in your pocket.</p>
-                  </div>
-                </div>
-                <div className={`${subtlePanelClasses} flex items-start gap-3 p-4`}>
-                  <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                  <div>
-                    <p className="text-sm font-medium text-white">See your real take-home</p>
-                    <p className="mt-0.5 text-xs text-slate-400">Your set-aside rule, expenses, and weekly pace are all kept in view.</p>
-                  </div>
-                </div>
-              </div>
+            <section className={`${panelClasses} p-6 text-center`}>
+              <p className="text-sm text-slate-400">UK drivers claim an average of £800/yr in mileage alone — but only if it&apos;s logged.</p>
+              <button
+                type="button"
+                onClick={() => openManualEntry()}
+                className={`${primaryButtonClasses} mt-5 w-full justify-center`}
+              >
+                Log your first shift
+              </button>
             </section>
           )}
         </>
