@@ -116,7 +116,8 @@ export async function handleAuthSession(request: Request, env: Env): Promise<Res
     return jsonErr(request, 'invalid proof', 400, env);
   }
 
-  const sessionLimit = await checkRateLimit(request, 'auth_session', env.DB, 30, body.accountId);
+  // The accountId is unauthenticated here, so keying on it would let attackers burn another account's quota.
+  const sessionLimit = await checkRateLimit(request, 'auth_session', env.DB);
   if (sessionLimit.limited) return jsonErrWithRetry(request, 'too many requests', 429, sessionLimit.retryAfter, env);
 
   const registrations = await env.DB.prepare(
@@ -131,20 +132,21 @@ export async function handleAuthSession(request: Request, env: Env): Promise<Res
     return jsonErr(request, 'not registered', 401, env);
   }
 
-  let authorized = false;
+  let authorizedDeviceSecretHash: string | null = null;
   for (const registration of deviceRegistrations) {
-    const expectedProof = await sha256Hex(`${registration.device_secret_hash}${body.timestamp}`);
+    const deviceSecretHash = registration.device_secret_hash.toLowerCase();
+    const expectedProof = await sha256Hex(`${deviceSecretHash}${body.timestamp}`);
     if (expectedProof === body.proof.toLowerCase()) {
-      authorized = true;
+      authorizedDeviceSecretHash = deviceSecretHash;
       break;
     }
   }
 
-  if (!authorized) {
+  if (!authorizedDeviceSecretHash) {
     return jsonErr(request, 'unauthorized', 401, env);
   }
 
-  const token = await issueSessionToken(body.accountId, env.SESSION_SECRET);
+  const token = await issueSessionToken(body.accountId, authorizedDeviceSecretHash, env.SESSION_SECRET);
   return jsonOk(request, { token, expiresIn: TOKEN_TTL_SECONDS }, 200, env);
 }
 

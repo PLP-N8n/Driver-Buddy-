@@ -10,8 +10,10 @@ import {
   handleGetReceipt,
   handleMigrateLegacy,
   handleRequestUpload,
+  isValidReceiptKey,
 } from './routes/receipts';
 import { handleSyncDeleteAccount, handleSyncPull, handleSyncPush } from './routes/sync';
+import { jsonErr } from './lib/json';
 
 export interface Env {
   DB: D1Database;
@@ -22,6 +24,15 @@ export interface Env {
   PLAID_TOKEN_KEY: string;
   PLAID_TOKEN_KEY_V2?: string;
   EXTRA_ALLOWED_ORIGINS?: string;
+}
+
+function decodeReceiptKey(encodedKey: string): string | null {
+  try {
+    const key = decodeURIComponent(encodedKey);
+    return isValidReceiptKey(key) ? key : null;
+  } catch {
+    return null;
+  }
 }
 
 async function routeRequest(request: Request, env: Env): Promise<Response> {
@@ -47,11 +58,15 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
   if (path === '/api/receipts/migrate-legacy' && method === 'POST') return await handleMigrateLegacy(request, env);
 
   if (path.startsWith('/api/receipts/') && method === 'GET') {
-    return await handleGetReceipt(request, env, decodeURIComponent(path.slice('/api/receipts/'.length)));
+    const key = decodeReceiptKey(path.slice('/api/receipts/'.length));
+    if (!key) return jsonErr(request, 'invalid receipt key', 400, env);
+    return await handleGetReceipt(request, env, key);
   }
 
   if (path.startsWith('/api/receipts/') && method === 'DELETE') {
-    return await handleDeleteReceipt(request, env, decodeURIComponent(path.slice('/api/receipts/'.length)));
+    const key = decodeReceiptKey(path.slice('/api/receipts/'.length));
+    if (!key) return jsonErr(request, 'invalid receipt key', 400, env);
+    return await handleDeleteReceipt(request, env, key);
   }
 
   return new Response('Not Found', { status: 404 });

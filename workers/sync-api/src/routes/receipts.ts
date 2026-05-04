@@ -17,8 +17,14 @@ export interface Env {
   EXTRA_ALLOWED_ORIGINS?: string;
 }
 
+const RECEIPT_KEY_RE = /^receipts\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_./-]+$/;
+
+export function isValidReceiptKey(key: string): boolean {
+  return RECEIPT_KEY_RE.test(key) && !key.includes('..') && !key.includes('//');
+}
+
 function withReceiptPrefix(accountId: string, key: string): boolean {
-  return key.startsWith(`receipts/${accountId}/`);
+  return isValidReceiptKey(key) && key.startsWith(`receipts/${accountId}/`);
 }
 
 function presignUnavailable(
@@ -67,6 +73,7 @@ export async function handleGetReceipt(request: Request, env: Env, key: string):
 
   const accountId = await getAuthenticatedAccountId(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
+  if (!isValidReceiptKey(key)) return jsonErr(request, 'invalid receipt key', 400, env);
   if (!withReceiptPrefix(accountId, key)) return jsonErr(request, 'forbidden', 403, env);
 
   const object = await env.RECEIPTS.get(key);
@@ -90,6 +97,7 @@ export async function handleDeleteReceipt(request: Request, env: Env, key: strin
 
   const accountId = await getAuthenticatedAccountId(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
+  if (!isValidReceiptKey(key)) return jsonErr(request, 'invalid receipt key', 400, env);
   if (!withReceiptPrefix(accountId, key)) return jsonErr(request, 'forbidden', 403, env);
   await env.RECEIPTS.delete(key);
   return jsonOk(request, { deleted: true }, 200, env);
@@ -115,6 +123,7 @@ export async function handleMigrateLegacy(request: Request, env: Env): Promise<R
     const legacyUrl = new URL(body.legacyUrl);
     const [, encodedKey = ''] = legacyUrl.pathname.split('/api/receipts/');
     const key = decodeURIComponent(encodedKey);
+    if (!isValidReceiptKey(key)) return jsonErr(request, 'invalid receipt key', 400, env);
     if (!withReceiptPrefix(accountId, key)) return jsonErr(request, 'forbidden', 403, env);
     return (await env.RECEIPTS.head(key))
       ? jsonOk(request, { key, message: 'use GET /api/receipts/:key with session token' }, 200, env)

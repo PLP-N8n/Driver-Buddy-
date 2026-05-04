@@ -1,5 +1,6 @@
 export interface SessionPayload {
   sub: string;
+  deviceSecretHash: string;
   iat: number;
   exp: number;
 }
@@ -30,9 +31,9 @@ async function importKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-export async function issueSessionToken(accountId: string, secret: string): Promise<string> {
+export async function issueSessionToken(accountId: string, deviceSecretHash: string, secret: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload: SessionPayload = { sub: accountId, iat: now, exp: now + TOKEN_TTL_SECONDS };
+  const payload: SessionPayload = { sub: accountId, deviceSecretHash, iat: now, exp: now + TOKEN_TTL_SECONDS };
   const enc = new TextEncoder();
   const payloadB64 = b64url(enc.encode(JSON.stringify(payload)).buffer as ArrayBuffer);
   const key = await importKey(secret);

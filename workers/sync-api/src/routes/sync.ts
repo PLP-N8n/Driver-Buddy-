@@ -273,7 +273,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
     ).run();
   }
 
-  const shiftIds = new Set<string>();
+  const upsertedShiftIds = new Set<string>();
 
   for (const row of body.shifts ?? []) {
     const shiftId = asRequiredId(row.id);
@@ -282,7 +282,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
     const updatedAt = getRowUpdatedAt(row, now);
     if (await isStaleShift(env, accountId, shiftId, updatedAt)) continue;
 
-    shiftIds.add(shiftId);
+    upsertedShiftIds.add(shiftId);
 
     await env.DB.prepare(
       'INSERT INTO shifts (id, account_id, date, status, primary_platform, hours_worked, total_earnings, started_at, ended_at, start_odometer, end_odometer, business_miles, personal_gap_miles, gps_miles, mileage_source, start_lat, start_lng, end_lat, end_lng, fuel_liters, job_count, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM shifts WHERE id = ? AND account_id = ?), datetime(\'now\')), ?) ON CONFLICT(id, account_id) DO UPDATE SET date=excluded.date, status=excluded.status, primary_platform=excluded.primary_platform, hours_worked=excluded.hours_worked, total_earnings=excluded.total_earnings, started_at=excluded.started_at, ended_at=excluded.ended_at, start_odometer=excluded.start_odometer, end_odometer=excluded.end_odometer, business_miles=excluded.business_miles, personal_gap_miles=excluded.personal_gap_miles, gps_miles=excluded.gps_miles, mileage_source=excluded.mileage_source, start_lat=excluded.start_lat, start_lng=excluded.start_lng, end_lat=excluded.end_lat, end_lng=excluded.end_lng, fuel_liters=excluded.fuel_liters, job_count=excluded.job_count, notes=excluded.notes, updated_at=excluded.updated_at'
@@ -326,7 +326,7 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
     shiftEarningsByShiftId.set(shiftId, existing);
   }
 
-  for (const shiftId of shiftIds) {
+  for (const shiftId of upsertedShiftIds) {
     await env.DB.prepare('DELETE FROM shift_earnings WHERE shift_id = ? AND account_id = ?').bind(shiftId, accountId).run();
 
     for (const row of shiftEarningsByShiftId.get(shiftId) ?? []) {

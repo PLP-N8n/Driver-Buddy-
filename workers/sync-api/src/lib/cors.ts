@@ -46,6 +46,7 @@ export function getCorsHeaders(request: Request, env?: CorsEnv): Record<string, 
 
   return {
     'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': CORS_ALLOW_METHODS,
     'Access-Control-Allow-Headers': CORS_ALLOW_HEADERS,
     Vary: 'Origin',

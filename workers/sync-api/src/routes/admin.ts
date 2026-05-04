@@ -1,5 +1,6 @@
 import { encryptToken } from '../lib/crypto';
 import { jsonErr, jsonOk } from '../lib/json';
+import { checkRateLimit } from '../lib/rateLimit';
 
 export interface Env {
   DB: D1Database;
@@ -15,6 +16,9 @@ type PlaidPlaintextRow = {
 };
 
 export async function handleBackfillPlaidEncryption(request: Request, env: Env): Promise<Response> {
+  const { limited } = await checkRateLimit(request, 'admin_backfill_plaid_encryption', env.DB, 5);
+  if (limited) return jsonErr(request, 'too many requests', 429, env);
+
   const expectedAuth = `Bearer ${env.ADMIN_TOKEN}`;
   if (!env.ADMIN_TOKEN || request.headers.get('Authorization') !== expectedAuth) {
     return jsonErr(request, 'unauthorized', 401, env);

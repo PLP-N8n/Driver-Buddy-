@@ -7,12 +7,16 @@ import { handleAuthRegister, handleAuthSession } from '../workers/sync-api/src/r
 import { handleEvents } from '../workers/sync-api/src/routes/events';
 import { handlePlaidStatus } from '../workers/sync-api/src/routes/plaid';
 import { handleRequestUpload } from '../workers/sync-api/src/routes/receipts';
-import { handleSyncPull } from '../workers/sync-api/src/routes/sync';
+import { handleSyncPull, handleSyncPush } from '../workers/sync-api/src/routes/sync';
 
 type FirstResult = Record<string, number | string | undefined> | null;
 
 function sha256Hex(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function issueTestSessionToken(deviceSecretHash: string, accountId = 'account-123'): Promise<string> {
+  return issueSessionToken(accountId, deviceSecretHash, 'test-secret');
 }
 
 type MockDbOptions = {
@@ -41,6 +45,10 @@ function makeDb(options: FirstResult | MockDbOptions): D1Database {
         first: vi.fn(async () => {
           if (sql.includes('COUNT(*) as count') && sql.includes('account_devices')) {
             return { count: devices.length };
+          }
+          if (sql.includes('SELECT 1 FROM account_devices')) {
+            const hash = String(args[1]).toLowerCase();
+            return devices.some((device) => device.toLowerCase() === hash) ? { found: 1 } : null;
           }
           if (sql.includes('rate_limit_log')) {
             return config.firstResult ?? { count: 0, oldest: Date.now() };
@@ -76,6 +84,7 @@ describe('Worker CORS routes', () => {
     );
     expect(allowed.status).toBe(204);
     expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:3000');
+    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
 
     const denied = handleOptions(
       new Request('https://worker.example.test/api/sync', {
@@ -120,6 +129,7 @@ describe('Worker CORS routes', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://drivertax.rudradigital.uk');
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
     expect(response.headers.get('Content-Type')).toBe('application/json');
     expect(await response.json()).toMatchObject({ error: 'unauthorized' });
   });
@@ -256,7 +266,8 @@ describe('Worker auth route', () => {
 
 describe('Worker receipt route', () => {
   it('returns a transparent 503 when upload presigning is unavailable', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const deviceHash = '1'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
     const response = await handleRequestUpload(
       new Request('https://worker.example.test/api/receipts/request-upload', {
         method: 'POST',
@@ -271,7 +282,7 @@ describe('Worker receipt route', () => {
         }),
       }),
       {
-        DB: makeDb({ devices: ['1'.repeat(64)], firstResult: { count: 0, oldest: Date.now() } }),
+        DB: makeDb({ devices: [deviceHash], firstResult: { count: 0, oldest: Date.now() } }),
         RECEIPTS: {} as R2Bucket,
         SESSION_SECRET: 'test-secret',
       }
@@ -286,6 +297,100 @@ describe('Worker receipt route', () => {
       uploadUrl: '',
     });
     expect(body.key).toMatch(/^receipts\/account-123\/\d+_fuel_receipt\.jpg$/);
+  });
+
+  it('rejects encoded traversal receipt keys before touching R2', async () => {
+    const r2Get = vi.fn();
+    const dbPrepare = vi.fn(() => {
+      throw new Error('DB should not be touched for invalid receipt keys');
+    });
+    const response = await syncWorker.fetch(
+      new Request('https://worker.example.test/api/receipts/receipts/account-123/..%2F..%2Freceipts/other-account/key', {
+        method: 'GET',
+      }),
+      {
+        DB: { prepare: dbPrepare } as unknown as D1Database,
+        RECEIPTS: { get: r2Get } as unknown as R2Bucket,
+        ANALYTICS: { writeDataPoint: vi.fn() } as unknown as AnalyticsEngineDataset,
+        SESSION_SECRET: 'test-secret',
+        ADMIN_TOKEN: 'admin-token',
+        PLAID_TOKEN_KEY: 'test-key',
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'invalid receipt key' });
+    expect(dbPrepare).not.toHaveBeenCalled();
+    expect(r2Get).not.toHaveBeenCalled();
+  });
+});
+
+describe('Worker sync route', () => {
+  it('does not replace shift earnings when the incoming parent shift is stale', async () => {
+    const deviceHash = '3'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const executedSql: string[] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn((...args: unknown[]) => ({
+          run: vi.fn(async () => {
+            executedSql.push(sql);
+            return {};
+          }),
+          first: vi.fn(async () => {
+            if (sql.includes('rate_limit_log')) {
+              return { count: 0, oldest: Date.now() };
+            }
+            if (sql.includes('SELECT 1 FROM account_devices')) {
+              return String(args[1]).toLowerCase() === deviceHash ? { found: 1 } : null;
+            }
+            if (sql.includes('SELECT updated_at FROM shifts')) {
+              return { updated_at: 2_000 };
+            }
+            return null;
+          }),
+          all: vi.fn(async () => ({ results: [] })),
+        })),
+      })),
+    } as unknown as D1Database;
+
+    const response = await handleSyncPush(
+      new Request('https://worker.example.test/sync/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Token': token,
+        },
+        body: JSON.stringify({
+          shifts: [
+            {
+              id: 'shift-1',
+              date: '2026-05-04',
+              status: 'completed',
+              updated_at: 1_000,
+            },
+          ],
+          shiftEarnings: [
+            {
+              id: 'earning-1',
+              shift_id: 'shift-1',
+              platform: 'uber',
+              amount: 42,
+              job_count: 3,
+            },
+          ],
+        }),
+      }),
+      {
+        DB: db,
+        SESSION_SECRET: 'test-secret',
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(executedSql.some((sql) => sql.includes('DELETE FROM shift_earnings'))).toBe(false);
+    expect(executedSql.some((sql) => sql.includes('INSERT INTO shift_earnings'))).toBe(false);
+    expect(executedSql.some((sql) => sql.startsWith('INSERT INTO shifts'))).toBe(false);
   });
 });
 
@@ -317,7 +422,8 @@ describe('Worker actual response CORS headers', () => {
   const extraOrigin = 'https://preview.example';
 
   it('allows extra configured origins on sync pull responses', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const deviceHash = 'f'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
     const response = await handleSyncPull(
       new Request('https://worker.example.test/api/sync/pull', {
         method: 'GET',
@@ -327,7 +433,7 @@ describe('Worker actual response CORS headers', () => {
         },
       }),
       {
-        DB: makeDb({ devices: ['f'.repeat(64)] }),
+        DB: makeDb({ devices: [deviceHash] }),
         SESSION_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
       }
@@ -338,7 +444,8 @@ describe('Worker actual response CORS headers', () => {
   });
 
   it('allows extra configured origins on receipt responses', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const deviceHash = '2'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
     const response = await handleRequestUpload(
       new Request('https://worker.example.test/api/receipts/request-upload', {
         method: 'POST',
@@ -353,7 +460,7 @@ describe('Worker actual response CORS headers', () => {
         }),
       }),
       {
-        DB: makeDb({ devices: ['2'.repeat(64)] }),
+        DB: makeDb({ devices: [deviceHash] }),
         RECEIPTS: {} as R2Bucket,
         SESSION_SECRET: 'test-secret',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
@@ -365,7 +472,7 @@ describe('Worker actual response CORS headers', () => {
   });
 
   it('rejects receipt upload when a valid X-Session-Token belongs to an account with no registered devices', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const token = await issueTestSessionToken('3'.repeat(64));
     const response = await handleRequestUpload(
       new Request('https://worker.example.test/api/receipts/request-upload', {
         method: 'POST',
@@ -392,7 +499,8 @@ describe('Worker actual response CORS headers', () => {
   });
 
   it('allows extra configured origins on Plaid status responses', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const deviceHash = 'a'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
     const response = await handlePlaidStatus(
       new Request('https://worker.example.test/api/plaid/status', {
         method: 'GET',
@@ -402,7 +510,7 @@ describe('Worker actual response CORS headers', () => {
         },
       }),
       {
-        DB: makeDb({ devices: ['a'.repeat(64)], plaidConnection: null }),
+        DB: makeDb({ devices: [deviceHash], plaidConnection: null }),
         SESSION_SECRET: 'test-secret',
         PLAID_TOKEN_KEY: 'test-key',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
@@ -415,7 +523,7 @@ describe('Worker actual response CORS headers', () => {
   });
 
   it('rejects sync pull when a valid X-Session-Token belongs to an account with no registered devices', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const token = await issueTestSessionToken('4'.repeat(64));
     const response = await handleSyncPull(
       new Request('https://worker.example.test/api/sync/pull', {
         method: 'GET',
@@ -436,7 +544,7 @@ describe('Worker actual response CORS headers', () => {
   });
 
   it('rejects bearer auth when a valid token belongs to an account with no registered devices', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+    const token = await issueTestSessionToken('5'.repeat(64));
     const response = await handlePlaidStatus(
       new Request('https://worker.example.test/api/plaid/status', {
         method: 'GET',
@@ -457,8 +565,8 @@ describe('Worker actual response CORS headers', () => {
     expect(await response.json()).toMatchObject({ error: 'unauthorized' });
   });
 
-  it('accepts bearer auth when the account still has a registered device', async () => {
-    const token = await issueSessionToken('account-123', 'test-secret');
+  it('rejects bearer auth when the token device was deleted but another device remains', async () => {
+    const token = await issueTestSessionToken('6'.repeat(64));
     const response = await handlePlaidStatus(
       new Request('https://worker.example.test/api/plaid/status', {
         method: 'GET',
@@ -468,7 +576,30 @@ describe('Worker actual response CORS headers', () => {
         },
       }),
       {
-        DB: makeDb({ devices: ['b'.repeat(64)], plaidConnection: null }),
+        DB: makeDb({ devices: ['7'.repeat(64)], plaidConnection: null }),
+        SESSION_SECRET: 'test-secret',
+        PLAID_TOKEN_KEY: 'test-key',
+        EXTRA_ALLOWED_ORIGINS: extraOrigin,
+      }
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: 'unauthorized' });
+  });
+
+  it('accepts bearer auth when the token device is still registered', async () => {
+    const deviceHash = 'b'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const response = await handlePlaidStatus(
+      new Request('https://worker.example.test/api/plaid/status', {
+        method: 'GET',
+        headers: {
+          Origin: extraOrigin,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+      {
+        DB: makeDb({ devices: [deviceHash], plaidConnection: null }),
         SESSION_SECRET: 'test-secret',
         PLAID_TOKEN_KEY: 'test-key',
         EXTRA_ALLOWED_ORIGINS: extraOrigin,
