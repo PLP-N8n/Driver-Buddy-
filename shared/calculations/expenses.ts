@@ -100,7 +100,7 @@ export function classifyExpense(
 }
 
 export function calcExpenseTaxBasisAmount(amount: number, isVatClaimable = false): number {
-  return isVatClaimable ? amount / 1.2 : amount;
+  return isVatClaimable ? Math.round((amount / 1.2) * 100) / 100 : amount;
 }
 
 const clampBusinessUsePercent = (value: number) => Math.max(0, Math.min(100, value));

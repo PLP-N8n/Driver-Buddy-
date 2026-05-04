@@ -21,6 +21,7 @@ type WeeklySummaryProps = {
   onAddExpense: () => void;
   onAddMiles: () => void;
   onSetReminder: () => void;
+  onReminderNudgeHandled?: () => void;
 };
 
 type PostShiftNudge = 'mileage' | 'expense';
@@ -59,6 +60,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   onAddExpense,
   onAddMiles,
   onSetReminder,
+  onReminderNudgeHandled,
 }) => {
   const [dismissedNudgeSummaryId, setDismissedNudgeSummaryId] = React.useState<string | null>(null);
   const [reminderNudgeDismissed, setReminderNudgeDismissed] = React.useState(false);
@@ -85,6 +87,15 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
       : !hasExpenseOnShiftDate
         ? 'expense'
         : null;
+  const dismissReminderNudge = () => {
+    onReminderNudgeHandled?.();
+    setReminderNudgeDismissed(true);
+  };
+  const handleSetReminder = () => {
+    onReminderNudgeHandled?.();
+    setReminderNudgeDismissed(true);
+    onSetReminder();
+  };
 
   return (
     <section data-testid="shift-summary-card" className={`${panelClasses} p-6`}>
@@ -166,7 +177,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
             </p>
             <button
               type="button"
-              onClick={() => setReminderNudgeDismissed(true)}
+              onClick={dismissReminderNudge}
               className="rounded-full p-1 text-slate-400 transition-colors hover:text-slate-200"
               aria-label="Dismiss"
             >
@@ -175,7 +186,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => { onSetReminder(); setReminderNudgeDismissed(true); }}
+            onClick={handleSetReminder}
             className={`${primaryButtonClasses} mt-3 w-full justify-center`}
           >
             Turn on daily reminders
@@ -210,7 +221,7 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
         </button>
         <button
           type="button"
-          onClick={onSetReminder}
+          onClick={handleSetReminder}
           className={`${secondaryButtonClasses} px-3 py-2 text-xs`}
         >
           <Bell className="h-4 w-4" />

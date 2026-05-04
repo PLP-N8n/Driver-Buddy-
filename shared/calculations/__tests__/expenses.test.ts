@@ -6,6 +6,7 @@ import {
   getVehicleExpenseType,
   getTaxTreatment,
   classifyExpense,
+  calcExpenseTaxBasisAmount,
   calcDeductibleAmount,
   isSeparatelyAllowableExpenseCategory,
   isTaxAllowableExpenseCategory,
@@ -94,6 +95,20 @@ describe('calcDeductibleAmount', () => {
   it('partially_deductible uses businessUsePercent', () => {
     const result = calcDeductibleAmount(100, 'partially_deductible', 60);
     expect(result).toEqual({ deductibleAmount: 60, nonDeductibleAmount: 40 });
+  });
+});
+
+describe('calcExpenseTaxBasisAmount', () => {
+  it('rounds VAT-exclusive amounts to pence', () => {
+    expect(calcExpenseTaxBasisAmount(100, true)).toBe(83.33);
+
+    const netAmount = calcExpenseTaxBasisAmount(119.99, true);
+    expect(netAmount).toBe(99.99);
+    expect(Number((119.99 - netAmount).toFixed(2))).toBe(20);
+  });
+
+  it('keeps non-VAT-claimable amounts unchanged', () => {
+    expect(calcExpenseTaxBasisAmount(100, false)).toBe(100);
   });
 });
 

@@ -122,7 +122,8 @@ export function calcTaxableProfit(
  * Tax buffer amount to set aside (running estimate, not final tax bill).
  */
 export function calcTaxBuffer(totalEarnings: number, taxSetAsidePercent: number): number {
-  return (totalEarnings * taxSetAsidePercent) / 100;
+  const percent = Math.max(0, Math.min(100, taxSetAsidePercent));
+  return (totalEarnings * percent) / 100;
 }
 
 /**

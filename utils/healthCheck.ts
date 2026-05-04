@@ -1,4 +1,5 @@
 import type { DailyWorkLog, Expense, Settings, Trip } from '../types';
+import { toUKDateString } from './ukDate';
 import { getMileageCoverage, type MileageCoverage } from './mileageLinkage';
 
 export type HealthStatus = 'good' | 'attention' | 'warning';
@@ -21,7 +22,7 @@ const statusRank: Record<HealthStatus, number> = {
 const getDateDaysAgo = (today: string, daysAgo: number) => {
   const date = new Date(`${today}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() - daysAgo);
-  return date.toISOString().slice(0, 10);
+  return toUKDateString(date);
 };
 
 const isInDateWindow = (date: string, start: string, end: string) => date >= start && date <= end;

@@ -12,12 +12,16 @@ type UploadResult = Awaited<ReturnType<typeof requestReceiptUpload>>;
 
 const inFlightUploads = new Map<string, Promise<UploadResult>>();
 
+type UseReceiptUploadOptions = {
+  onUploadFailed?: (expenseId: string, errorReason?: string) => void;
+};
+
 function filenameFor(expenseId: string, blob: Blob): string {
   const mimeExtension = blob.type.split('/')[1]?.split(';')[0];
   return `${expenseId}.${mimeExtension || 'bin'}`;
 }
 
-export function useReceiptUpload() {
+export function useReceiptUpload({ onUploadFailed }: UseReceiptUploadOptions = {}) {
   const [rows, setRows] = useState<ReceiptUploadStatusRow[]>([]);
 
   const refresh = async () => {
@@ -45,9 +49,16 @@ export function useReceiptUpload() {
     const existing = inFlightUploads.get(expenseId);
     if (existing) return existing;
 
-    const promise = requestReceiptUpload(blob, expenseId, filenameFor(expenseId, blob)).finally(() => {
-      inFlightUploads.delete(expenseId);
-    });
+    const promise = requestReceiptUpload(blob, expenseId, filenameFor(expenseId, blob))
+      .then((result) => {
+        if (result?.status === 'failed') {
+          onUploadFailed?.(expenseId, result.errorReason);
+        }
+        return result;
+      })
+      .finally(() => {
+        inFlightUploads.delete(expenseId);
+      });
     inFlightUploads.set(expenseId, promise);
     return promise;
   };
@@ -56,6 +67,7 @@ export function useReceiptUpload() {
     const blob = await getImage(expenseId);
     if (!blob) {
       await setStatus(expenseId, { status: 'failed', lastAttemptAt: Date.now(), errorReason: 'missing_local_receipt' });
+      onUploadFailed?.(expenseId, 'missing_local_receipt');
       return null;
     }
     return upload(expenseId, blob);

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, X } from 'lucide-react';
 import { DailyWorkLog, Settings, Trip } from '../types';
-import { todayUK, ukWeekStart } from '../utils/ukDate';
+import { todayUK, toUKDateString, ukWeekStart } from '../utils/ukDate';
 import { formatCurrency, formatNumber, panelClasses, secondaryButtonClasses, subtlePanelClasses } from '../utils/ui';
 
 const STORAGE_KEY = 'dbt_lastWeeklyReview';
@@ -28,9 +28,9 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ dailyLogs, t
     previousWeekEnd.setUTCDate(previousWeekEnd.getUTCDate() + 6);
 
     return {
-      reviewKey: previousWeekStart.toISOString().slice(0, 10),
-      start: previousWeekStart.toISOString().slice(0, 10),
-      end: previousWeekEnd.toISOString().slice(0, 10),
+      reviewKey: toUKDateString(previousWeekStart),
+      start: toUKDateString(previousWeekStart),
+      end: toUKDateString(previousWeekEnd),
       startLabel: previousWeekStart.toLocaleDateString('en-GB', {
         timeZone: 'Europe/London',
         day: 'numeric',

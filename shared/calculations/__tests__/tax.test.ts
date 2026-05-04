@@ -183,6 +183,11 @@ describe('calcTaxBuffer', () => {
   it('returns correct percentage', () => {
     expect(calcTaxBuffer(10000, 20)).toBe(2000);
   });
+
+  it('bounds set-aside percentage between 0 and 100', () => {
+    expect(calcTaxBuffer(1000, -10)).toBe(0);
+    expect(calcTaxBuffer(1000, 125)).toBe(1000);
+  });
 });
 
 describe('calcKept', () => {

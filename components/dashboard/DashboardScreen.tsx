@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Brain,
@@ -282,6 +282,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const [storedLastEndOdometer, setStoredLastEndOdometer] = useState<number | null>(null);
   const [predictionRefreshToken, setPredictionRefreshToken] = useState(0);
   const [expandedPredictionId, setExpandedPredictionId] = useState<string | null>(null);
+  const shownReminderForSummaryIds = useRef<Set<string>>(new Set());
 
   const todayKey = todayUK();
   const providerOptions = useMemo(() => getProviderOptions(settings.driverRoles ?? ['COURIER'], startProvider), [settings.driverRoles, startProvider]);
@@ -789,6 +790,17 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const summaryProgressPercent = completedShiftSummary
     ? getProgressPercent(completedShiftSummary.weekRevenue, settings.weeklyRevenueTarget)
     : 0;
+  const completedSummaryLogId = completedShiftSummary?.shiftId ?? completedShiftSummary?.id;
+  const isCompletedSummaryFirstShift = Boolean(
+    completedShiftSummary &&
+    dailyLogs.length === 1 &&
+    dailyLogs[0]?.id === completedSummaryLogId &&
+    !shownReminderForSummaryIds.current.has(completedShiftSummary.id)
+  );
+  const markCompletedSummaryReminderHandled = () => {
+    if (!completedShiftSummary) return;
+    shownReminderForSummaryIds.current.add(completedShiftSummary.id);
+  };
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 pb-4 pt-2">
@@ -803,12 +815,13 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           summaryInsight={summaryInsight ?? null}
           summaryProgressPercent={summaryProgressPercent}
           weeklyRevenueTarget={settings.weeklyRevenueTarget}
-          isFirstShift={dailyLogs.length <= 1}
+          isFirstShift={isCompletedSummaryFirstShift}
           onDismissCompletedSummary={onDismissCompletedSummary}
           onShareSummary={onShareCompletedSummary}
           onAddExpense={() => onAddCompletedShiftExpense(completedShiftSummary)}
           onAddMiles={() => onAddCompletedShiftMiles(completedShiftSummary)}
           onSetReminder={onOpenReminderSettings}
+          onReminderNudgeHandled={markCompletedSummaryReminderHandled}
         />
       ) : (
         <>
@@ -824,7 +837,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
             onEndShift={openActiveEndSheet}
             onQuickAddRevenue={() => onUpdateSession({ revenue: liveRevenue + 10 })}
             onStartShift={openStartSheet}
-            onAddShift={dailyLogs.length === 0 ? onOpenWorkLog : () => openManualEntry()}
+            onAddShift={() => openManualEntry()}
             liveRevenue={liveRevenue}
             liveMiles={liveMiles}
             liveSetAside={liveSetAside}

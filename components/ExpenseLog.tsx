@@ -248,7 +248,11 @@ export const ExpenseLog: React.FC<ExpenseLogProps> = ({
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({});
   const receiptUrlsRef = useRef<Record<string, ReceiptUrlCacheEntry>>({});
-  const receiptUpload = useReceiptUpload();
+  const receiptUpload = useReceiptUpload({
+    onUploadFailed: () => {
+      showToast?.('Receipt upload failed - saved locally. Retry from the expense row.', 'warning');
+    },
+  });
   const energyExpenseCategory = getVehicleEnergyExpenseCategory(settings);
   const energyExpenseLabel = getVehicleEnergyExpenseLabel(settings);
   const energyExpenseDescription = getVehicleEnergyExpenseDescription(settings);

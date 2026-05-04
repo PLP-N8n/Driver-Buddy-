@@ -4,7 +4,7 @@ import { DailyWorkLog, DriverRole, Settings } from '../types';
 import { DatePicker } from './DatePicker';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { getProvidersByRole } from '../utils/providers';
-import { todayUK } from '../utils/ukDate';
+import { todayUK, toUKDateString } from '../utils/ukDate';
 import {
   fieldLabelClasses,
   formatCurrency,
@@ -34,7 +34,7 @@ const roleOptions: Array<{ role: DriverRole; label: string; icon: React.Componen
 const getYesterdayUK = () => {
   const date = new Date(`${todayUK()}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
+  return toUKDateString(date);
 };
 
 const getDefaultProviderForRole = (role: DriverRole) => getProvidersByRole(role)[0] ?? 'Other';
