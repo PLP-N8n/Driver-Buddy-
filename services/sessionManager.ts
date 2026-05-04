@@ -12,6 +12,12 @@ let lastDeviceCount: number | null = null;
 const registeredAccounts = new Set<string>();
 const registrationRequests = new Map<string, Promise<boolean>>();
 
+function clearCachedSessionToken(): void {
+  cachedToken = null;
+  cachedAccountId = null;
+  cachedExpiry = 0;
+}
+
 function bufferToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer), (value) => value.toString(16).padStart(2, '0')).join('');
 }
@@ -127,20 +133,35 @@ export async function buildAuthHeaders(
 }
 
 export function clearSessionCache(): void {
-  cachedToken = null;
-  cachedAccountId = null;
-  cachedExpiry = 0;
+  clearCachedSessionToken();
 }
 
 export function clearRegistrationCache(accountId?: string): void {
   if (accountId) {
     registeredAccounts.delete(accountId);
     registrationRequests.delete(accountId);
+
+    for (const cacheKey of registeredAccounts) {
+      if (cacheKey.startsWith(`${accountId}:`)) {
+        registeredAccounts.delete(cacheKey);
+      }
+    }
+
+    for (const cacheKey of registrationRequests.keys()) {
+      if (cacheKey.startsWith(`${accountId}:`)) {
+        registrationRequests.delete(cacheKey);
+      }
+    }
+
+    if (cachedAccountId === accountId) {
+      clearCachedSessionToken();
+    }
     return;
   }
 
   registeredAccounts.clear();
   registrationRequests.clear();
+  clearCachedSessionToken();
 }
 
 export function getLastDeviceCount(): number | null {

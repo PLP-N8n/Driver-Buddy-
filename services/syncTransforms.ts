@@ -3,6 +3,7 @@ import * as Sentry from '../src/sentry';
 import { calculateExpenseTaxClassification } from '../shared/calculations/expenses';
 import { migrateDailyWorkLog } from '../shared/migrations/migrateShift';
 import { saveImage } from './imageStore';
+import { stampSettings } from './settingsService';
 
 type SyncTripMeta = {
   startLocation: string;
@@ -115,6 +116,66 @@ const formatPlatformLabel = (value: string | null | undefined) => {
 const toSyncTimestamp = (updatedAt: string | undefined, fallbackDate: string): string =>
   updatedAt ?? `${fallbackDate}T12:00:00.000Z`;
 
+let lastSettingsPushTimestamp: number | null = null;
+let lastSettingsPushSignature: string | null = null;
+
+const cloneSyncValue = <T,>(value: T): T => {
+  if (value == null) return value;
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
+};
+
+const parseSettingsTimestamp = (value: string | undefined): number | null => {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getSettingsSignature = (settings: Settings): string => {
+  const { updatedAt: _updatedAt, ...settingsWithoutUpdatedAt } = settings;
+  return JSON.stringify(settingsWithoutUpdatedAt);
+};
+
+const nextMonotonicSettingsTimestamp = () =>
+  new Date(Math.max(Date.now(), (lastSettingsPushTimestamp ?? 0) + 1)).toISOString();
+
+const ensurePushableSettings = (settings: Settings): Settings => {
+  const clonedSettings = cloneSyncValue(settings);
+  const currentTimestamp = parseSettingsTimestamp(clonedSettings.updatedAt);
+  const currentSignature = getSettingsSignature(clonedSettings);
+  const hasUnstampedChange =
+    currentTimestamp != null &&
+    lastSettingsPushTimestamp != null &&
+    currentTimestamp <= lastSettingsPushTimestamp &&
+    lastSettingsPushSignature !== null &&
+    currentSignature !== lastSettingsPushSignature;
+  const needsStamp =
+    currentTimestamp == null ||
+    (lastSettingsPushTimestamp != null && currentTimestamp < lastSettingsPushTimestamp) ||
+    hasUnstampedChange;
+
+  const pushableSettings = needsStamp
+    ? stampSettings(clonedSettings, nextMonotonicSettingsTimestamp())
+    : clonedSettings;
+  const pushTimestamp = parseSettingsTimestamp(pushableSettings.updatedAt);
+
+  if (needsStamp) {
+    console.warn('Settings sync payload was missing a fresh updatedAt timestamp; stamping before push.');
+  }
+
+  lastSettingsPushTimestamp = pushTimestamp;
+  lastSettingsPushSignature = getSettingsSignature(pushableSettings);
+
+  return pushableSettings;
+};
+
+export const resetSyncPayloadStateForTests = () => {
+  lastSettingsPushTimestamp = null;
+  lastSettingsPushSignature = null;
+};
+
 const hasCompleteExpenseTaxClassification = (expense: Expense) =>
   expense.scope !== undefined &&
   expense.businessUsePercent !== undefined &&
@@ -177,6 +238,7 @@ export const buildSyncPayload = (
   settings: Settings,
   deletedIds?: SyncDeletedIds
 ) => {
+  const settingsForPayload = ensurePushableSettings(settings);
   const tripsById = new Map(trips.map((trip) => [trip.id, trip]));
   const shifts = dailyLogs.map((log) => migrateDailyWorkLog(log, log.linkedTripId ? tripsById.get(log.linkedTripId) : undefined));
   const classifiedExpenses = expenses.map((expense) => {
@@ -186,7 +248,7 @@ export const buildSyncPayload = (
           amount: expense.amount,
           businessUsePercent: expense.businessUsePercent,
           category: expense.category,
-          claimMethod: settings.claimMethod,
+          claimMethod: settingsForPayload.claimMethod,
           isVatClaimable: expense.isVatClaimable,
           scope: expense.scope ?? 'business',
         });
@@ -292,8 +354,8 @@ export const buildSyncPayload = (
       reviewStatus: expense.reviewStatus,
       updatedAt: toSyncTimestamp(expense.updatedAt, expense.date),
     })),
-    settings,
-    deletedIds,
+    settings: cloneSyncValue(settingsForPayload),
+    deletedIds: deletedIds ? cloneSyncValue(deletedIds) : undefined,
   };
 };
 

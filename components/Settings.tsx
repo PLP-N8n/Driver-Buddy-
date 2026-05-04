@@ -28,6 +28,7 @@ import { LinkedDevicesPanel } from './LinkedDevicesPanel';
 import { PlaidSyncToggle } from './PlaidSyncToggle';
 import { ReceiptSyncPanel } from './ReceiptSyncPanel';
 import { ensureReminderPermission, getReminderPermission, type ReminderPermissionState } from '../services/reminderService';
+import { stampSettings } from '../services/settingsService';
 import { isSyncConfigured, type SyncStatus } from '../services/syncService';
 import { isVehicleRunningCostCategory } from '../shared/calculations/expenses';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -128,7 +129,7 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
   syncStatus,
   receiptStats,
 }) => {
-  const update = (patch: Partial<Settings>) => onUpdateSettings({ ...settings, ...patch });
+  const update = (patch: Partial<Settings>) => onUpdateSettings(stampSettings({ ...settings, ...patch }));
   const reminderSectionRef = useRef<HTMLElement | null>(null);
   const reminderTimeInputRef = useRef<HTMLInputElement | null>(null);
   const methodChangeDialogRef = useRef<HTMLDivElement | null>(null);

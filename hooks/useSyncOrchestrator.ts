@@ -12,6 +12,7 @@ import {
   type SyncStatus,
 } from '../services/syncService';
 import { buildSyncPayload, prepareExpensesForLocalState } from '../services/syncTransforms';
+import { filterSubsumedLogs } from '../utils/platformInsights';
 import { useConnectivity } from './useConnectivity';
 
 const FOCUS_PULL_DEBOUNCE_MS = 2000;
@@ -49,19 +50,6 @@ function keepCurrentIfEqual<T>(current: T, next: T): T {
   return isEqualSyncState(current, next) ? current : next;
 }
 
-function filterSubsumedLogs(logs: DailyWorkLog[]): DailyWorkLog[] {
-  return logs.filter((log) => {
-    if (log.providerSplits?.length) return true;
-    return !logs.some(
-      (other) =>
-        other.id !== log.id &&
-        other.date === log.date &&
-        other.providerSplits?.some(
-          (split) => split.provider === log.provider && Math.abs(split.revenue - log.revenue) < 0.01,
-        ),
-    );
-  });
-}
 
 function preserveLocallyDeletedRecords(mergedData: MergedSyncState, deletedIds: DeletedIdsState): MergedSyncState {
   const deletedWorkLogIds = new Set([...deletedIds.workLogs, ...deletedIds.shifts]);

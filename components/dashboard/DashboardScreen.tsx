@@ -30,6 +30,7 @@ import { TaxEstimateCard } from './TaxEstimateCard';
 import { WeeklySummary } from './WeeklySummary';
 import { getHabitState } from '../../utils/habitEngine';
 import { useRecurringExpensesDue } from '../../hooks/useRecurringExpensesDue';
+import { stampSettings } from '../../services/settingsService';
 import { generateInsights } from '../../utils/insights';
 import { getMissedDays } from '../../utils/missedDays';
 import { getProviderOptions } from '../../utils/providers';
@@ -317,13 +318,12 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       reviewStatus: 'confirmed',
       updatedAt: new Date().toISOString(),
     });
-    onUpdateSettings({
+    onUpdateSettings(stampSettings({
       ...settings,
       recurringExpenses: settings.recurringExpenses.map((r) =>
         r.id === item.id ? { ...r, lastLoggedDate: todayKey } : r
       ),
-      updatedAt: new Date().toISOString(),
-    });
+    }));
   };
   const trackedMilesForSession = useMemo(() => {
     if (!activeSession) return 0;

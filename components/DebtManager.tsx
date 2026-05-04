@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, CreditCard, Repeat, Target, Trash2 } from 'lucide-react';
 import { DailyWorkLog, Debt, Settings } from '../types';
+import { stampSettings } from '../services/settingsService';
 import {
   fieldErrorClasses,
   fieldLabelClasses,
@@ -56,6 +57,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
     settings.debtStrategy === 'AVALANCHE' ? right.apr - left.apr : left.balance - right.balance
   );
   const directDebits = settings.directDebits ?? [];
+  const updateSettings = (nextSettings: Settings) => onUpdateSettings(stampSettings(nextSettings));
 
   const addDebt = () => {
     const nameValidation = validateRequired(newDebt.name ?? '');
@@ -70,7 +72,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
       return;
     }
 
-    onUpdateSettings({
+    updateSettings({
       ...settings,
       debts: [
         ...settings.debts,
@@ -109,7 +111,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
       return;
     }
 
-    onUpdateSettings({
+    updateSettings({
       ...settings,
       directDebits: [
         ...(settings.directDebits ?? []),
@@ -171,7 +173,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
               max="50"
               step="1"
               value={settings.debtSetAsidePercent}
-              onChange={(event) => onUpdateSettings({ ...settings, debtSetAsidePercent: parseInt(event.target.value, 10) })}
+              onChange={(event) => updateSettings({ ...settings, debtSetAsidePercent: parseInt(event.target.value, 10) })}
               className="h-2 w-full accent-brand"
             />
             <div className="mt-3 flex items-center justify-between text-sm text-slate-400">
@@ -193,7 +195,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => onUpdateSettings({ ...settings, debtStrategy: 'AVALANCHE' })}
+                onClick={() => updateSettings({ ...settings, debtStrategy: 'AVALANCHE' })}
                 className={`rounded-xl border p-4 text-left transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${settings.debtStrategy === 'AVALANCHE' ? 'border-brand bg-brand/10 text-white' : 'border-surface-border bg-surface-raised text-slate-300'}`}
               >
                 <ArrowDown className="mb-3 h-5 w-5" />
@@ -202,7 +204,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateSettings({ ...settings, debtStrategy: 'SNOWBALL' })}
+                onClick={() => updateSettings({ ...settings, debtStrategy: 'SNOWBALL' })}
                 className={`rounded-xl border p-4 text-left transition-colors duration-150 transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${settings.debtStrategy === 'SNOWBALL' ? 'border-brand bg-brand/10 text-white' : 'border-surface-border bg-surface-raised text-slate-300'}`}
               >
                 <ArrowUp className="mb-3 h-5 w-5" />
@@ -338,7 +340,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
                       <button
                         type="button"
                         onClick={() =>
-                          onUpdateSettings({ ...settings, debts: settings.debts.filter((item) => item.id !== debt.id) })
+                          updateSettings({ ...settings, debts: settings.debts.filter((item) => item.id !== debt.id) })
                         }
                         className={secondaryButtonClasses}
                       >
@@ -378,7 +380,7 @@ export const DebtManager: React.FC<DebtManagerProps> = ({ settings, dailyLogs, o
                   <button
                     type="button"
                     onClick={() =>
-                      onUpdateSettings({
+                      updateSettings({
                         ...settings,
                         directDebits: (settings.directDebits ?? []).filter((item) => item.id !== dd.id),
                       })

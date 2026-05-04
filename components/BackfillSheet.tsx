@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarClock, ChevronRight, Minus, Palmtree, X } from 'lucide-react';
 import { DailyWorkLog, Settings } from '../types';
+import { stampSettings } from '../services/settingsService';
 import { getMissedDays } from '../utils/missedDays';
 import { todayUK } from '../utils/ukDate';
 import {
@@ -143,10 +144,10 @@ export const BackfillSheet: React.FC<BackfillSheetProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onUpdateSettings({
+                    onUpdateSettings(stampSettings({
                       ...settings,
                       dayOffDates: [...new Set([...settings.dayOffDates, date])],
-                    });
+                    }));
                     setDismissedDates((current) => [...current, date]);
                   }}
                   className={secondaryButtonClasses}

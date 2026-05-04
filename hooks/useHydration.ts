@@ -15,6 +15,7 @@ import { initOPFS } from '../services/opfsStore';
 import { normalizeSettings, type StoredSettings } from '../services/settingsService';
 import { prepareExpensesForLocalState } from '../services/syncTransforms';
 import { migrateLegacyExpenses } from '../shared/migrations/migrateExpense';
+import { filterSubsumedLogs } from '../utils/platformInsights';
 
 const DATA_SCHEMA_VERSION = 1;
 const SCHEMA_VERSION_KEY = 'driver_schema_version';
@@ -57,7 +58,14 @@ export function useHydration({
   useEffect(() => {
     let cancelled = false;
 
-    const hydrate = async () => {
+    const reportHydrationWarning = (message: string, error: unknown) => {
+      Sentry.captureException(error);
+      console.warn(message, error);
+      return message;
+    };
+
+    const hydrateStoredData = async (): Promise<string[]> => {
+      const warnings: string[] = [];
       const savedTrips = parseStoredJson<Trip[]>('driver_trips');
       const savedExpenses = parseStoredJson<Expense[]>('driver_expenses');
       const savedLogs = parseStoredJson<DailyWorkLog[]>('driver_daily_logs');
@@ -65,7 +73,6 @@ export function useHydration({
       const savedCompletedShiftSummary = parseStoredJson<CompletedShiftSummary>('driver_completed_shift_summary');
       const savedSettings = parseStoredJson<StoredSettings>('driver_settings');
       const savedStats = parseStoredJson<PlayerStats>('driver_player_stats');
-      const nextBackupCode = getBackupCode();
       const serializedSavedLogs = Array.isArray(savedLogs) ? JSON.stringify(savedLogs) : null;
       const serializedSavedExpenses = Array.isArray(savedExpenses) ? JSON.stringify(savedExpenses) : null;
       const migratedWorkLogs = Array.isArray(savedLogs) ? savedLogs : null;
@@ -73,24 +80,31 @@ export function useHydration({
         ? (migrateLegacyExpenses(savedExpenses, savedSettings?.claimMethod ?? 'SIMPLIFIED') as Expense[])
         : null;
 
-      if (cancelled) return;
+      if (cancelled) return warnings;
 
       if (Array.isArray(savedTrips)) setTrips(savedTrips);
       if (Array.isArray(migratedExpenses)) {
-        const preparedExpenses = await prepareExpensesForLocalState(migratedExpenses);
-        if (cancelled) return;
+        try {
+          const preparedExpenses = await prepareExpensesForLocalState(migratedExpenses);
+          if (cancelled) return warnings;
 
-        setExpenses(preparedExpenses);
-        const serializedPreparedExpenses = JSON.stringify(preparedExpenses);
-        if (serializedPreparedExpenses !== serializedSavedExpenses) {
-          localStorage.setItem('driver_expenses', serializedPreparedExpenses);
+          setExpenses(preparedExpenses);
+          const serializedPreparedExpenses = JSON.stringify(preparedExpenses);
+          if (serializedPreparedExpenses !== serializedSavedExpenses) {
+            localStorage.setItem('driver_expenses', serializedPreparedExpenses);
+          }
+        } catch (error) {
+          warnings.push(reportHydrationWarning('Failed to prepare stored expenses during hydration.', error));
+          if (cancelled) return warnings;
+          setExpenses(migratedExpenses);
         }
       }
       if (Array.isArray(migratedWorkLogs)) {
-        setDailyLogs(migratedWorkLogs);
-        const serializedMigratedWorkLogs = JSON.stringify(migratedWorkLogs);
-        if (serializedMigratedWorkLogs !== serializedSavedLogs) {
-          localStorage.setItem('driver_daily_logs', serializedMigratedWorkLogs);
+        const dedupedWorkLogs = filterSubsumedLogs(migratedWorkLogs);
+        setDailyLogs(dedupedWorkLogs);
+        const serializedDedupedWorkLogs = JSON.stringify(dedupedWorkLogs);
+        if (serializedDedupedWorkLogs !== serializedSavedLogs) {
+          localStorage.setItem('driver_daily_logs', serializedDedupedWorkLogs);
         }
       }
       if (savedActiveSession) setActiveSession(savedActiveSession);
@@ -98,14 +112,29 @@ export function useHydration({
       if (savedSettings) setSettings(normalizeSettings(savedSettings));
       if (savedStats) setPlayerStats(savedStats);
 
+      return warnings;
+    };
+
+    const hydrate = async () => {
+      const opfsInit = initOPFS()
+        .then(() => null)
+        .catch((error) => reportHydrationWarning('Failed to initialize receipt storage during hydration.', error));
+      const [opfsWarning, storedDataWarnings] = await Promise.all([opfsInit, hydrateStoredData()]);
+
       if (!cancelled) {
+        const warnings = [
+          ...(opfsWarning ? [opfsWarning] : []),
+          ...storedDataWarnings,
+        ];
+        if (warnings.length > 0) {
+          console.warn(`Driver Buddy hydrated with warnings: ${warnings.join(' ')}`);
+        }
         localStorage.setItem(SCHEMA_VERSION_KEY, String(DATA_SCHEMA_VERSION));
-        setBackupCode(nextBackupCode);
+        setBackupCode(getBackupCode());
         setHasHydrated(true);
       }
     };
 
-    void initOPFS();
     void hydrate();
 
     return () => {

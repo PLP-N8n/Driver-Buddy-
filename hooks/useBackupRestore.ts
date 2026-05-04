@@ -370,11 +370,12 @@ export function useBackupRestore({
       }
 
       localStorage.setItem(LEGACY_BACKUP_CODE_KEY, pendingRestoreReview.code);
-      clearRegistrationCache(pendingRestoreReview.accountId);
-      clearSessionCache();
-      localStorage.removeItem('pending_identity');
+      // Tombstones must be cleared before cache invalidation so a debounced sync cannot re-push restored records as deletes.
       localStorage.removeItem('driver_deleted_ids');
       clearDeletedIds?.();
+      clearSessionCache();
+      clearRegistrationCache(pendingRestoreReview.accountId);
+      localStorage.removeItem('pending_identity');
       setBackupCode(getBackupCode());
       setPendingRestoreReview(null);
 

@@ -1,8 +1,24 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, type DailyWorkLog, type Expense, ExpenseCategory, type Trip } from '../types';
-import { applyPulledExpenses, applyPulledShiftWorkLogs, applyPulledTrips, buildSyncPayload, sanitizeExpenseForStorage } from './syncTransforms';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_SETTINGS, type DailyWorkLog, type Expense, ExpenseCategory, type Settings, type Trip } from '../types';
+import {
+  applyPulledExpenses,
+  applyPulledShiftWorkLogs,
+  applyPulledTrips,
+  buildSyncPayload,
+  resetSyncPayloadStateForTests,
+  sanitizeExpenseForStorage,
+} from './syncTransforms';
 
 describe('syncTransforms', () => {
+  beforeEach(() => {
+    resetSyncPayloadStateForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   it('buildSyncPayload includes all changed records', () => {
     const trips: Trip[] = [
       {
@@ -73,7 +89,7 @@ describe('syncTransforms', () => {
       })
     );
     expect(payload.expenses).toHaveLength(1);
-    expect(payload.settings).toEqual(DEFAULT_SETTINGS);
+    expect(payload.settings).toEqual(expect.objectContaining(DEFAULT_SETTINGS));
     expect(payload.shifts[0]).toEqual(
       expect.objectContaining({
         id: 'log-1',
@@ -189,6 +205,44 @@ describe('syncTransforms', () => {
         reviewStatus: 'confirmed',
       })
     );
+  });
+
+  it('buildSyncPayload re-stamps settings changed without stampSettings and returns a copy', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-10T10:00:00.000Z'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const settings: Settings = {
+      ...DEFAULT_SETTINGS,
+      updatedAt: '2026-04-10T09:00:00.000Z',
+      recurringExpenses: [
+        {
+          id: 'recurring-1',
+          description: 'Phone bill',
+          category: ExpenseCategory.PHONE,
+          amount: 24,
+          frequency: 'monthly',
+        },
+      ],
+    };
+
+    const firstPayload = buildSyncPayload([], [], [], settings);
+    expect(firstPayload.settings.updatedAt).toBe('2026-04-10T09:00:00.000Z');
+
+    settings.claimMethod = 'ACTUAL';
+    settings.recurringExpenses[0]!.description = 'Edited phone bill';
+    vi.setSystemTime(new Date('2026-04-10T10:01:00.000Z'));
+
+    const secondPayload = buildSyncPayload([], [], [], settings);
+
+    expect(warnSpy).toHaveBeenCalledWith('Settings sync payload was missing a fresh updatedAt timestamp; stamping before push.');
+    expect(secondPayload.settings).toEqual(
+      expect.objectContaining({
+        claimMethod: 'ACTUAL',
+        updatedAt: '2026-04-10T10:01:00.000Z',
+      })
+    );
+    settings.recurringExpenses[0]!.description = 'Mutation after payload build';
+    expect(secondPayload.settings.recurringExpenses[0]?.description).toBe('Edited phone bill');
   });
 
   it('applyPulledExpenses merges without duplicates', () => {

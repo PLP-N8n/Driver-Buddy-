@@ -9,6 +9,7 @@ import {
   calcTaxableProfit,
   compareTaxMethods,
 } from '../shared/calculations/tax';
+import { stampSettings } from '../services/settingsService';
 import {
   fieldErrorClasses,
   fieldLabelClasses,
@@ -86,6 +87,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   const [newAllowance, setNewAllowance] = useState({ description: '', amount: '' });
   const [allowanceError, setAllowanceError] = useState('');
   const [showCalcExplainer, setShowCalcExplainer] = useState(false);
+  const updateSettings = (nextSettings: Settings) => onUpdateSettings(stampSettings(nextSettings));
 
   const taxYearEnd = getTaxYearEndDate();
   const taxYearStart = ukTaxYearStart();
@@ -165,7 +167,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
     }
 
     const amount = parseFloat(newAllowance.amount);
-    onUpdateSettings({
+    updateSettings({
       ...settings,
       manualAllowances: [...settings.manualAllowances, { id: Date.now().toString(), description: newAllowance.description.trim(), amount }],
     });
@@ -176,7 +178,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   const handleMethodChange = (view: MethodView) => {
     setMethodView(view);
     if (view === 'SIMPLIFIED' || view === 'ACTUAL') {
-      onUpdateSettings({ ...settings, claimMethod: view });
+      updateSettings({ ...settings, claimMethod: view });
     }
   };
 
@@ -573,7 +575,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
                   <button
                     type="button"
                     onClick={() =>
-                      onUpdateSettings({
+                      updateSettings({
                         ...settings,
                         manualAllowances: settings.manualAllowances.filter((item) => item.id !== allowance.id),
                       })
