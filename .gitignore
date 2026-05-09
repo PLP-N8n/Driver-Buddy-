@@ -32,6 +32,9 @@ dist-split-test/
 # Knowledge graph (generated — open docs/graphify/graph.html to view)
 docs/graphify/
 
+# Claude Code
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
