@@ -26,7 +26,7 @@ import { IntelligenceFeed } from './IntelligenceFeed';
 import { MonthlySummaryCard } from './MonthlySummaryCard';
 import { PlatformBreakdownCard } from './PlatformBreakdownCard';
 import { QuickAddForm } from './QuickAddForm';
-import { TaxEstimateCard } from './TaxEstimateCard';
+import { RealTimeTaxMeter } from './RealTimeTaxMeter';
 import { WeeklySummary } from './WeeklySummary';
 import { getHabitState } from '../../utils/habitEngine';
 import { useRecurringExpensesDue } from '../../hooks/useRecurringExpensesDue';
@@ -892,7 +892,13 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
 
           {taxYearTotals.workDays > 0 ? (
             <>
-              <TaxEstimateCard totals={taxYearTotals} />
+              <RealTimeTaxMeter
+                trips={trips}
+                expenses={expenses}
+                dailyLogs={dailyLogs}
+                settings={settings}
+                onNavigateToTax={onNavigateToTax}
+              />
 
               {recentLogs.length > 0 && (
                 <section className={`${panelClasses} p-5`}>
