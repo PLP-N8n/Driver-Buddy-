@@ -202,6 +202,7 @@ export interface Settings {
   claimMethod: 'SIMPLIFIED' | 'ACTUAL';
   analyticsConsent?: boolean; // default false - opt-in
   mileageTrackingEnabled: boolean;
+  autoTripDetectionEnabled: boolean;
   weeklyRevenueTarget: number;
   businessRateFirst10k: number;
   businessRateAfter10k: number;
@@ -378,6 +379,7 @@ export const DEFAULT_SETTINGS: Settings = {
   claimMethod: 'SIMPLIFIED',
   analyticsConsent: false,
   mileageTrackingEnabled: false,
+  autoTripDetectionEnabled: false,
   weeklyRevenueTarget: 600,
   businessRateFirst10k: 0.45,
   businessRateAfter10k: 0.25,

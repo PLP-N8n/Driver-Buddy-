@@ -43,6 +43,11 @@ import { computeReceiptStats } from '../utils/receiptStats';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { useAppState, type ToastState } from '../hooks/useAppState';
 import { useDriverLedger } from '../hooks/useDriverLedger';
+import { useAutoTripDetection } from '../hooks/useAutoTripDetection';
+import { AutoTripIndicator } from './AutoTripIndicator';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { PullToRefreshIndicator } from './PullToRefreshIndicator';
+import { triggerHaptic } from '../utils/haptics';
 import { useExport } from '../hooks/useExport';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useHydration } from '../hooks/useHydration';
@@ -221,9 +226,20 @@ export function AppShell() {
     finalizeActiveSession,
     saveManualShift,
   } = ledger;
+
+  // Auto trip detection — privacy-first, local-only
+  const { state: autoTripState, startTrip: cancelAutoTrip } = useAutoTripDetection(settings.autoTripDetectionEnabled, addTrip);
+
+  // Pull-to-refresh on mobile
+  const { pullState, pullDistance, containerRef: pullRefreshRef } = usePullToRefresh(async () => {
+    if (triggerPull) {
+      await triggerPull();
+    }
+  });
+
   useFocusTrap(moreMenuRef, showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(exportModalRef, showExportModal, () => setShowExportModal(false));
-  const { isOnline, connectivityBanner, syncStatus } = useSyncOrchestrator({
+  const { isOnline, connectivityBanner, syncStatus, triggerPull } = useSyncOrchestrator({
     trips,
     setTrips,
     expenses,
@@ -624,7 +640,9 @@ export function AppShell() {
         </div>
       )}
 
-      <main className={`app-main min-h-screen pb-[11.5rem] ${connectivityBanner ? 'pt-[116px]' : 'pt-[76px]'}`}>
+      <PullToRefreshIndicator pullState={pullState} pullDistance={pullDistance} />
+
+      <main ref={pullRefreshRef} className={`app-main min-h-screen pb-[11.5rem] ${connectivityBanner ? 'pt-[116px]' : 'pt-[76px]'}`}>
         <div className="mx-auto flex min-h-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
           {showTaxReminder && (
             <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
@@ -836,13 +854,15 @@ export function AppShell() {
         </Suspense>
       )}
 
+      <AutoTripIndicator state={autoTripState} onCancel={cancelAutoTrip} />
+
       {!showMoreMenu && !showFeedback && !showFaq && !showExportModal && !isBackfillOpen && (
       <div className="bottom-dock fixed left-0 right-0 z-50 px-4 pb-1">
         <div className="app-dock mx-auto flex max-w-sm gap-2 rounded-[24px] p-1.5 dock-shadow">
           <button
             type="button"
             aria-label="Quick add trip"
-            onClick={() => openQuickLog('mileage')}
+            onClick={() => { triggerHaptic('light'); openQuickLog('mileage'); }}
             className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-indigo-500/15 active:scale-95"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/15">
@@ -853,7 +873,7 @@ export function AppShell() {
           <button
             type="button"
             aria-label="Quick add shift"
-            onClick={() => openQuickLog('worklog')}
+            onClick={() => { triggerHaptic('light'); openQuickLog('worklog'); }}
             className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-emerald-500/15 active:scale-95"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15">
@@ -864,7 +884,7 @@ export function AppShell() {
           <button
             type="button"
             aria-label="Quick add expense"
-            onClick={() => openQuickLog('expenses')}
+            onClick={() => { triggerHaptic('light'); openQuickLog('expenses'); }}
             className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2.5 transition-all duration-150 hover:bg-amber-500/15 active:scale-95"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
@@ -879,13 +899,13 @@ export function AppShell() {
       <nav className="app-nav fixed bottom-0 inset-x-0 z-50 border-t backdrop-blur-xl pb-safe">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-around px-2 sm:px-4">
           {primaryTabs.map((tab) => (
-            <BottomNavButton key={tab.id} active={activeTab === tab.id} icon={tab.icon} label={tab.label} onClick={() => navigateToTab(tab.id)} />
+            <BottomNavButton key={tab.id} active={activeTab === tab.id} icon={tab.icon} label={tab.label} onClick={() => { triggerHaptic('light'); navigateToTab(tab.id); }} />
           ))}
           <BottomNavButton
             active={activeTab === 'debt' || activeTab === 'settings'}
             icon={MoreHorizontal}
             label="More"
-            onClick={() => setShowMoreMenu(true)}
+            onClick={() => { triggerHaptic('light'); setShowMoreMenu(true); }}
           />
         </div>
       </nav>
