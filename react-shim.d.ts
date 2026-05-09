@@ -84,6 +84,7 @@ declare namespace React {
   function useRef<T>(initialValue: T): MutableRefObject<T>;
   function useRef<T>(initialValue: T | null): RefObject<T>;
   function useState<S>(initialState: S | (() => S)): [S, Dispatch<SetStateAction<S>>];
+  function useCallback<T extends (...args: any[]) => any>(callback: T, deps: readonly unknown[]): T;
   function useDeferredValue<T>(value: T): T;
 
   const Suspense: FC<{ fallback?: ReactNode }>;

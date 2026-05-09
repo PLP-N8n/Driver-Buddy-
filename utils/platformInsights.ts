@@ -46,20 +46,40 @@ const addProviderEntry = (
   });
 };
 
+export function filterSubsumedLogs(logs: DailyWorkLog[]): DailyWorkLog[] {
+  return logs.filter((log) => {
+    if (log.providerSplits?.length) return true;
+    return !logs.some(
+      (other) =>
+        other.id !== log.id &&
+        other.date === log.date &&
+        other.providerSplits?.some(
+          (split) => split.provider === log.provider && Math.abs(split.revenue - log.revenue) < 0.01,
+        ),
+    );
+  });
+}
+
 export function calcPlatformSummaries(logs: DailyWorkLog[]): PlatformSummary[] {
   const platforms = new Map<string, PlatformAccumulator>();
 
   for (const log of logs) {
     if (log.providerSplits?.length) {
       const totalSplitRevenue = log.providerSplits.reduce((sum, split) => sum + split.revenue, 0);
-      const revenueForHours = log.revenue > 0 ? log.revenue : totalSplitRevenue;
+      // Use log.revenue as the authoritative total (matches buildMonthlySummaries) and
+      // distribute proportionally across splits so platform totals stay consistent.
+      const authoritativeRevenue = log.revenue > 0 ? log.revenue : totalSplitRevenue;
 
       for (const split of log.providerSplits) {
-        const hourShare = revenueForHours > 0 ? split.revenue / revenueForHours : 0;
+        const proportionalRevenue =
+          totalSplitRevenue > 0
+            ? (split.revenue / totalSplitRevenue) * authoritativeRevenue
+            : authoritativeRevenue / log.providerSplits.length;
+        const hourShare = authoritativeRevenue > 0 ? proportionalRevenue / authoritativeRevenue : 0;
         addProviderEntry(
           platforms,
           split.provider,
-          split.revenue,
+          proportionalRevenue,
           log.hoursWorked * hourShare
         );
       }

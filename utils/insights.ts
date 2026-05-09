@@ -290,7 +290,7 @@ export function generateInsights(
         const topCatPercent = (topCatTotal / totalRecentAmount) * 100;
         if (topCatPercent > 40 && topCat !== ExpenseCategory.OTHER) {
           candidates.push({
-            message: `${topCat} is ${formatPercent(topCatPercent)} of running costs this month — ${formatCurrency(topCatTotal)}`,
+            message: `${topCat} is ${formatPercent(topCatPercent)} of running costs (last 30 days) — ${formatCurrency(topCatTotal)}`,
             weight: 72,
           });
         }
