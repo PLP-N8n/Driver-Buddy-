@@ -38,9 +38,14 @@ export const LinkedDevicesPanel: React.FC = () => {
     setLoading(true);
     setStatus(null);
     try {
-      const [headers, hash] = await Promise.all([buildAuthHeaders(), getDeviceSecretHash()]);
+      const [auth, hash] = await Promise.all([buildAuthHeaders(), getDeviceSecretHash()]);
+      if (!auth.ok) {
+        setStatus('Cloud sync account is not registered. Please set up sync first.');
+        setLoading(false);
+        return;
+      }
       setCurrentSuffix(hash.slice(-12));
-      const response = await fetch(`${workerUrl}/api/auth/devices`, { headers });
+      const response = await fetch(`${workerUrl}/api/auth/devices`, { headers: auth.headers });
       if (!response.ok) throw new Error('Could not load linked devices.');
       const data = (await response.json()) as { devices?: LinkedDevice[] };
       setDevices(Array.isArray(data.devices) ? data.devices : []);
@@ -59,10 +64,14 @@ export const LinkedDevicesPanel: React.FC = () => {
     if (!workerUrl) return;
     setStatus(null);
     try {
-      const headers = await buildAuthHeaders();
+      const auth = await buildAuthHeaders();
+      if (!auth.ok) {
+        setStatus('Cloud sync account is not registered. Please set up sync first.');
+        return;
+      }
       const response = await fetch(`${workerUrl}/api/auth/devices/${encodeURIComponent(suffix)}`, {
         method: 'DELETE',
-        headers,
+        headers: auth.headers,
       });
       if (!response.ok) throw new Error('Could not remove device.');
       await loadDevices();

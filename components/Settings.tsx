@@ -884,6 +884,41 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
 
       <section className={`${panelClasses} p-5`}>
         <div className="mb-4">
+          <h2 className="text-base font-semibold text-white">Smart Tracking</h2>
+          <p className="text-sm text-slate-400">Let Driver Buddy detect trips and remind you automatically.</p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem]">
+          <div className={`${subtlePanelClasses} flex items-center justify-between gap-4 px-4 py-3`}>
+            <div>
+              <p className="text-sm font-medium text-white">Auto-detect trips</p>
+              <p className="text-xs text-slate-400">
+                {settings.autoTripDetectionEnabled
+                  ? 'Driver Buddy will detect when you start driving and log trips automatically. All location data stays on your device.'
+                  : 'Enable to automatically detect and log business trips when you start driving.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.autoTripDetectionEnabled}
+              aria-label="Auto-detect trips"
+              onClick={() => update({ autoTripDetectionEnabled: !settings.autoTripDetectionEnabled })}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
+                settings.autoTripDetectionEnabled ? 'bg-brand' : 'bg-surface-raised'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  settings.autoTripDetectionEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className={`${panelClasses} p-5`}>
+        <div className="mb-4">
           <h2 className="text-base font-semibold text-white">Your Data</h2>
           <p className="text-sm text-slate-400">Local-first storage with optional cloud sync and privacy controls.</p>
         </div>

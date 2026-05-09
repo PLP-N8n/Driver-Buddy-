@@ -192,5 +192,5 @@ export function useSyncOrchestrator({
     schedulePush(buildSyncPayload(trips, expenses, dailyLogs, settings, deletedIds));
   }, [dailyLogs, deletedIds, expenses, hasHydrated, settings, trips]);
 
-  return { isOnline, connectivityBanner, syncStatus };
+  return { isOnline, connectivityBanner, syncStatus, triggerPull: pullAndMergeLatest };
 }

@@ -56,9 +56,16 @@ export function PlaidSyncToggle() {
       }
 
       try {
-        const headers = await buildAuthHeaders();
+        const auth = await buildAuthHeaders();
+        if (!auth.ok) {
+          if (!cancelled) {
+            setStatus(DEFAULT_STATUS);
+            setError('Cloud sync account is not registered. Please set up sync first.');
+          }
+          return;
+        }
         const response = await fetch(`${WORKER_URL}/api/plaid/status`, {
-          headers,
+          headers: auth.headers,
         });
 
         if (!response.ok) {
@@ -106,10 +113,14 @@ export function PlaidSyncToggle() {
     setIsDisconnecting(true);
 
     try {
-      const headers = await buildAuthHeaders();
+      const auth = await buildAuthHeaders();
+      if (!auth.ok) {
+        showToast('Cloud sync account is not registered. Please set up sync first.', 'error');
+        return;
+      }
       const response = await fetch(`${WORKER_URL}/api/plaid/disconnect`, {
         method: 'POST',
-        headers,
+        headers: auth.headers,
       });
 
       if (!response.ok) {

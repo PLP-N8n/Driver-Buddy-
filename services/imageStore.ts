@@ -138,8 +138,9 @@ export async function requestReceiptUpload(
   const workerUrl = import.meta.env.VITE_SYNC_WORKER_URL;
   if (!workerUrl) return null;
 
-  const headers = await buildAuthHeaders();
-  if (!headers['X-Session-Token']) return null;
+  const auth = await buildAuthHeaders();
+  if (!auth.ok) return null;
+  const headers = auth.headers;
 
   await setStatus(expenseId, { status: 'uploading', lastAttemptAt: Date.now(), errorReason: undefined });
 
@@ -201,8 +202,9 @@ export async function readRemoteReceipt(receiptId: string): Promise<Blob | null>
   const workerUrl = import.meta.env.VITE_SYNC_WORKER_URL;
   if (!workerUrl) return null;
 
-  const headers = await buildAuthHeaders();
-  if (!headers['X-Session-Token']) return null;
+  const auth = await buildAuthHeaders();
+  if (!auth.ok) return null;
+  const headers = auth.headers;
 
   const encodedKey = encodeURIComponent(receiptId);
   const res = await fetch(`${workerUrl}/api/receipts/${encodedKey}`, {
@@ -228,8 +230,9 @@ export async function deleteRemoteReceipt(receiptId: string): Promise<void> {
   const workerUrl = import.meta.env.VITE_SYNC_WORKER_URL;
   if (!workerUrl) return;
 
-  const headers = await buildAuthHeaders();
-  if (!headers['X-Session-Token']) return;
+  const auth = await buildAuthHeaders();
+  if (!auth.ok) return;
+  const headers = auth.headers;
 
   const encodedKey = encodeURIComponent(receiptId);
   await fetch(`${workerUrl}/api/receipts/${encodedKey}`, {
@@ -242,8 +245,9 @@ export async function migrateLegacyReceipt(legacyUrl: string): Promise<string | 
   const workerUrl = import.meta.env.VITE_SYNC_WORKER_URL;
   if (!workerUrl) return null;
 
-  const headers = await buildAuthHeaders();
-  if (!headers['X-Session-Token']) return null;
+  const auth = await buildAuthHeaders();
+  if (!auth.ok) return null;
+  const headers = auth.headers;
 
   try {
     const res = await fetch(`${workerUrl}/api/receipts/migrate-legacy`, {
