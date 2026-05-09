@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, ExpenseCategory, type SyncPullPayload } from '../types';
 
 vi.mock('./sessionManager', () => ({
-  buildAuthHeaders: vi.fn(async () => ({ 'X-Session-Token': 'test-token' })),
+  buildAuthHeaders: vi.fn(async () => ({ ok: true, headers: { 'X-Session-Token': 'test-token' } })),
 }));
 
 vi.mock('./deviceId', () => ({

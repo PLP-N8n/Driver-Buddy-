@@ -34,6 +34,50 @@ type DeletedIds = {
   shifts?: string[];
 };
 
+const MAX_SYNC_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_SYNC_ROWS_PER_ENTITY = 5_000;
+const MAX_SYNC_STRING_LENGTH = 10_000;
+const MAX_SYNC_ID_LENGTH = 128;
+
+function validateSyncPayload(body: SyncPayload): { ok: true } | { ok: false; reason: string } {
+  const totalRows =
+    (body.workLogs?.length ?? 0) +
+    (body.mileageLogs?.length ?? 0) +
+    (body.expenses?.length ?? 0) +
+    (body.shifts?.length ?? 0) +
+    (body.shiftEarnings?.length ?? 0);
+
+  if (totalRows > MAX_SYNC_ROWS_PER_ENTITY * 5) {
+    return { ok: false, reason: 'sync payload too large' };
+  }
+
+  for (const key of ['workLogs', 'mileageLogs', 'expenses', 'shifts', 'shiftEarnings'] as const) {
+    const rows = body[key] ?? [];
+    if (rows.length > MAX_SYNC_ROWS_PER_ENTITY) {
+      return { ok: false, reason: `too many ${key}` };
+    }
+  }
+
+  const stringFields = ['notes', 'description', 'category', 'platform', 'status', 'primary_platform', 'mileage_source'];
+  for (const rows of [body.workLogs, body.mileageLogs, body.expenses, body.shifts, body.shiftEarnings]) {
+    if (!rows) continue;
+    for (const row of rows) {
+      for (const field of stringFields) {
+        const value = row[field];
+        if (typeof value === 'string' && value.length > MAX_SYNC_STRING_LENGTH) {
+          return { ok: false, reason: `field ${field} exceeds max length` };
+        }
+      }
+      const id = row.id ?? row.shift_id;
+      if (typeof id === 'string' && id.length > MAX_SYNC_ID_LENGTH) {
+        return { ok: false, reason: 'id exceeds max length' };
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
 async function readJson<T>(request: Request): Promise<T | null> {
   try {
     return (await request.json()) as T;
@@ -220,8 +264,18 @@ export async function handleSyncPush(request: Request, env: Env): Promise<Respon
   const { limited } = await checkRateLimit(request, 'sync', env.DB, 60);
   if (limited) return jsonErr(request, 'too many requests', 429, env);
 
+  const contentLength = request.headers.get('content-length');
+  if (contentLength && Number(contentLength) > MAX_SYNC_BODY_BYTES) {
+    return jsonErr(request, 'payload too large', 413, env);
+  }
+
   const body = await readJson<SyncPayload>(request);
   if (!body) return jsonErr(request, 'invalid json', 400, env);
+
+  const validation = validateSyncPayload(body);
+  if (!validation.ok) {
+    return jsonErr(request, validation.reason, 400, env);
+  }
 
   const accountId = await getAuthenticatedAccountId(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401, env);

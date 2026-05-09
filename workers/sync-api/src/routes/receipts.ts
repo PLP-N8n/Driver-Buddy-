@@ -31,16 +31,42 @@ function presignUnavailable(
   request: Request,
   env: Env,
   key: string,
-  field: 'uploadUrl' | 'url'
+  field: 'uploadUrl' | 'url',
+  contentType?: string
 ): Response {
   return new Response(
-    JSON.stringify({ error: 'presigned_urls_unavailable', retryAfter: 86400, key, [field]: '' }),
+    JSON.stringify({
+      error: 'presigned_urls_unavailable',
+      retryAfter: 86400,
+      key,
+      [field]: '',
+      maxBytes: MAX_RECEIPT_BYTES,
+      contentType,
+    }),
     {
       status: 503,
       headers: { ...getCorsHeaders(request, env), 'Content-Type': 'application/json', 'Retry-After': '86400' },
     }
   );
 }
+
+const ALLOWED_RECEIPT_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
+
+const BLOCKED_RECEIPT_TYPES = new Set([
+  'image/svg+xml',
+  'text/html',
+  'application/xhtml+xml',
+  'application/xml',
+  'text/xml',
+]);
+
+const MAX_RECEIPT_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function handleRequestUpload(request: Request, env: Env): Promise<Response> {
   const { limited } = await checkRateLimit(request, 'receipts', env.DB);
@@ -49,22 +75,48 @@ export async function handleRequestUpload(request: Request, env: Env): Promise<R
   const accountId = await getAuthenticatedAccountId(request, env);
   if (!accountId) return jsonErr(request, 'unauthorized', 401, env);
 
-  let body: { filename?: string; contentType?: string };
+  let body: { filename?: string; contentType?: string; byteSize?: number };
   try {
-    body = (await request.json()) as { filename?: string; contentType?: string };
+    body = (await request.json()) as { filename?: string; contentType?: string; byteSize?: number };
   } catch {
     return jsonErr(request, 'invalid json', 400, env);
   }
 
   if (!body.filename || !body.contentType) return jsonErr(request, 'filename and contentType required', 400, env);
 
+  const contentType = body.contentType.toLowerCase().trim();
+  if (BLOCKED_RECEIPT_TYPES.has(contentType)) {
+    return jsonErr(request, 'receipt type not allowed', 400, env);
+  }
+  if (!ALLOWED_RECEIPT_TYPES.has(contentType)) {
+    return jsonErr(request, 'receipt type not allowed', 400, env);
+  }
+
+  const byteSize = typeof body.byteSize === 'number' && Number.isFinite(body.byteSize) ? body.byteSize : null;
+  if (byteSize !== null && byteSize > MAX_RECEIPT_BYTES) {
+    return jsonErr(request, 'receipt exceeds 5 MB limit', 400, env);
+  }
+
   const safeName = body.filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-  const key = `receipts/${accountId}/${Date.now()}_${safeName}`;
+  const extMatch = safeName.match(/\.([a-zA-Z0-9]+)$/);
+  const ext = extMatch && extMatch[1] ? extMatch[1].toLowerCase() : '';
+  const typeExtMap: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+  };
+  const expectedExt = typeExtMap[contentType];
+  const keyExt = ext === expectedExt ? ext : expectedExt;
+  const baseName = extMatch ? safeName.slice(0, -extMatch[0].length) : safeName;
+  const key = `receipts/${accountId}/${Date.now()}_${baseName.slice(0, 100)}.${keyExt}`;
+
   const bucket = env.RECEIPTS as ReceiptBucket;
-  if (typeof bucket.createPresignedUrl !== 'function') return presignUnavailable(request, env, key, 'uploadUrl');
+  if (typeof bucket.createPresignedUrl !== 'function') return presignUnavailable(request, env, key, 'uploadUrl', contentType);
 
   const uploadUrl = await bucket.createPresignedUrl(key, { expiresIn: 3600, httpMethod: 'PUT' });
-  return jsonOk(request, { uploadUrl, key }, 200, env);
+  return jsonOk(request, { uploadUrl, key, maxBytes: MAX_RECEIPT_BYTES, contentType }, 200, env);
 }
 
 export async function handleGetReceipt(request: Request, env: Env, key: string): Promise<Response> {

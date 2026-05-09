@@ -3,6 +3,7 @@ import { trackEvent } from './analyticsService';
 import { getDeviceId } from './deviceId';
 import { normalizeSettings } from './settingsService';
 import { buildAuthHeaders } from './sessionManager';
+import type { AuthFailureReason } from './sessionManager';
 import { applyPulledExpenses, applyPulledShiftWorkLogs, applyPulledTrips, applyPulledWorkLogs } from './syncTransforms';
 
 const env = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env;
@@ -165,6 +166,11 @@ export async function retryPendingPush(): Promise<boolean> {
   }
 }
 
+function emitAuthError(reason: AuthFailureReason) {
+  console.warn(`[syncService] auth failed: ${reason}`);
+  emit('error');
+}
+
 export async function push(data: object): Promise<boolean> {
   if (!WORKER_URL) {
     return false;
@@ -181,21 +187,29 @@ export async function push(data: object): Promise<boolean> {
     return false;
   }
 
+  const auth = await buildAuthHeaders();
+  if (!auth.ok) {
+    emitAuthError(auth.reason);
+    return false;
+  }
+
   isSyncing = true;
   emit('syncing');
 
   try {
-    const authHeaders = await buildAuthHeaders();
     const res = await fetch(`${WORKER_URL}/sync/push`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeaders,
+        ...auth.headers,
       },
       body: JSON.stringify(data),
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      console.warn(`[syncService] push failed: HTTP ${res.status} ${res.statusText}`);
+      throw new Error(`HTTP ${res.status}`);
+    }
 
     resetRetryState();
     pushSuccessListeners.forEach((listener) => listener());
@@ -228,16 +242,24 @@ export async function pull(
     return null;
   }
 
+  const accountId = deviceIdOverride ?? getDeviceId();
+  const auth = await buildAuthHeaders(accountId, deviceSecretOverride);
+  if (!auth.ok) {
+    emitAuthError(auth.reason);
+    return null;
+  }
+
   emit('syncing');
 
   try {
-    const accountId = deviceIdOverride ?? getDeviceId();
-    const authHeaders = await buildAuthHeaders(accountId, deviceSecretOverride);
     const res = await fetch(`${WORKER_URL}/sync/pull`, {
-      headers: authHeaders,
+      headers: auth.headers,
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      console.warn(`[syncService] pull failed: HTTP ${res.status} ${res.statusText}`);
+      throw new Error(`HTTP ${res.status}`);
+    }
 
     const data = await res.json();
     emit('idle');
@@ -283,11 +305,13 @@ export async function pullAndMerge(
 export async function deleteAccount(): Promise<boolean> {
   if (!WORKER_URL) return false;
 
+  const auth = await buildAuthHeaders();
+  if (!auth.ok) return false;
+
   try {
-    const authHeaders = await buildAuthHeaders();
     const res = await fetch(`${WORKER_URL}/sync/account`, {
       method: 'DELETE',
-      headers: authHeaders,
+      headers: auth.headers,
     });
 
     return res.ok;

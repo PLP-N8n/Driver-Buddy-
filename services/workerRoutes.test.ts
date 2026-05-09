@@ -84,7 +84,7 @@ describe('Worker CORS routes', () => {
     );
     expect(allowed.status).toBe(204);
     expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:3000');
-    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(allowed.headers.get('Access-Control-Allow-Credentials')).toBeNull();
 
     const denied = handleOptions(
       new Request('https://worker.example.test/api/sync', {
@@ -129,7 +129,7 @@ describe('Worker CORS routes', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://drivertax.rudradigital.uk');
-    expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
     expect(response.headers.get('Content-Type')).toBe('application/json');
     expect(await response.json()).toMatchObject({ error: 'unauthorized' });
   });
@@ -288,7 +288,7 @@ describe('Worker receipt route', () => {
       }
     );
 
-    const body = (await response.json()) as { error?: string; retryAfter?: number; key?: string; uploadUrl?: string };
+    const body = (await response.json()) as { error?: string; retryAfter?: number; key?: string; uploadUrl?: string; maxBytes?: number; contentType?: string };
     expect(response.status).toBe(503);
     expect(response.headers.get('Retry-After')).toBe('86400');
     expect(body).toMatchObject({
@@ -297,6 +297,63 @@ describe('Worker receipt route', () => {
       uploadUrl: '',
     });
     expect(body.key).toMatch(/^receipts\/account-123\/\d+_fuel_receipt\.jpg$/);
+    expect(body.maxBytes).toBe(5 * 1024 * 1024);
+    expect(body.contentType).toBe('image/jpeg');
+  });
+
+  it('rejects SVG and HTML-like receipt uploads', async () => {
+    const deviceHash = '1'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const response = await handleRequestUpload(
+      new Request('https://worker.example.test/api/receipts/request-upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+          'X-Session-Token': token,
+        },
+        body: JSON.stringify({
+          filename: 'receipt.svg',
+          contentType: 'image/svg+xml',
+        }),
+      }),
+      {
+        DB: makeDb({ devices: [deviceHash], firstResult: { count: 0, oldest: Date.now() } }),
+        RECEIPTS: {} as R2Bucket,
+        SESSION_SECRET: 'test-secret',
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'receipt type not allowed' });
+  });
+
+  it('rejects oversized receipt uploads', async () => {
+    const deviceHash = '1'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const response = await handleRequestUpload(
+      new Request('https://worker.example.test/api/receipts/request-upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+          'X-Session-Token': token,
+        },
+        body: JSON.stringify({
+          filename: 'huge_receipt.jpg',
+          contentType: 'image/jpeg',
+          byteSize: 6 * 1024 * 1024,
+        }),
+      }),
+      {
+        DB: makeDb({ devices: [deviceHash], firstResult: { count: 0, oldest: Date.now() } }),
+        RECEIPTS: {} as R2Bucket,
+        SESSION_SECRET: 'test-secret',
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'receipt exceeds 5 MB limit' });
   });
 
   it('rejects encoded traversal receipt keys before touching R2', async () => {
@@ -391,6 +448,77 @@ describe('Worker sync route', () => {
     expect(executedSql.some((sql) => sql.includes('DELETE FROM shift_earnings'))).toBe(false);
     expect(executedSql.some((sql) => sql.includes('INSERT INTO shift_earnings'))).toBe(false);
     expect(executedSql.some((sql) => sql.startsWith('INSERT INTO shifts'))).toBe(false);
+  });
+
+  it('rejects sync payloads exceeding content-length limit', async () => {
+    const deviceHash = '3'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const response = await handleSyncPush(
+      new Request('https://worker.example.test/sync/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Token': token,
+          'Content-Length': String(11 * 1024 * 1024),
+        },
+        body: JSON.stringify({ workLogs: [] }),
+      }),
+      {
+        DB: makeDb({ devices: [deviceHash] }),
+        SESSION_SECRET: 'test-secret',
+      }
+    );
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ error: 'payload too large' });
+  });
+
+  it('rejects sync payloads with too many rows per entity', async () => {
+    const deviceHash = '3'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const response = await handleSyncPush(
+      new Request('https://worker.example.test/sync/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Token': token,
+        },
+        body: JSON.stringify({
+          workLogs: Array.from({ length: 5_001 }, (_, i) => ({ id: `w${i}`, date: '2026-01-01' })),
+        }),
+      }),
+      {
+        DB: makeDb({ devices: [deviceHash] }),
+        SESSION_SECRET: 'test-secret',
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'too many workLogs' });
+  });
+
+  it('rejects sync payloads with oversized string fields', async () => {
+    const deviceHash = '3'.repeat(64);
+    const token = await issueTestSessionToken(deviceHash);
+    const response = await handleSyncPush(
+      new Request('https://worker.example.test/sync/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Token': token,
+        },
+        body: JSON.stringify({
+          workLogs: [{ id: 'w1', date: '2026-01-01', notes: 'a'.repeat(10_001) }],
+        }),
+      }),
+      {
+        DB: makeDb({ devices: [deviceHash] }),
+        SESSION_SECRET: 'test-secret',
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'field notes exceeds max length' });
   });
 });
 
