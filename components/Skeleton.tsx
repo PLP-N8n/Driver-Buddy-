@@ -1,8 +1,8 @@
 import React from 'react';
 
-interface SkeletonProps {
+export interface SkeletonProps {
   className?: string;
-  variant?: 'text' | 'circular' | 'rectangular';
+  variant?: 'text' | 'circular' | 'rectangular' | 'card' | 'chart' | 'list';
   shimmer?: boolean;
 }
 
@@ -15,6 +15,9 @@ export const Skeleton: React.FC<SkeletonProps> = ({
     text: 'h-4 rounded-md',
     circular: 'rounded-full',
     rectangular: 'rounded-2xl',
+    card: 'h-32 rounded-2xl',
+    chart: 'h-40 rounded-2xl',
+    list: 'h-16 rounded-2xl',
   };
 
   return (
