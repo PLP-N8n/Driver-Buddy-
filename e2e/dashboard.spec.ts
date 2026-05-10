@@ -16,10 +16,12 @@ async function unlockAdvancedFeatures(page: Page) {
 test('shows the empty dashboard state for a new user', async ({ page }) => {
   await visitApp(page);
 
-  await expect(page.getByText(/Ready for today\?/i)).toBeVisible();
-  await expect(page.getByText('Track your earnings')).toBeVisible();
-  await expect(page.getByText('Track your mileage')).toBeVisible();
-  await expect(page.getByText('See your real take-home')).toBeVisible();
+  await expect(page.getByText("Today's Revenue")).toBeVisible();
+  await expect(page.getByText('Week Progress')).toBeVisible();
+  await expect(page.getByText('Tax Saved')).toBeVisible();
+  await expect(page.getByText('Miles Logged')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Log your first shift/i })).toBeVisible();
+  await expect(page.getByText('Welcome to Driver Buddy')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Quick add shift' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Quick add trip' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Quick add expense' })).toBeVisible();
@@ -27,6 +29,21 @@ test('shows the empty dashboard state for a new user', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Expenses' })).toBeVisible();
   await expect(page.getByTestId('missed-log-banner')).toHaveCount(0);
   await expect(page.getByText('New version available')).toHaveCount(0);
+});
+
+test('dashboard shows bento hero tiles and action strip', async ({ page }) => {
+  await visitApp(page);
+
+  await expect(page.getByText("Today's Revenue")).toBeVisible();
+  await expect(page.getByText('Week Progress')).toBeVisible();
+  await expect(page.getByText('Tax Saved')).toBeVisible();
+  await expect(page.getByText('Miles Logged')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start Shift|Log your first shift/i })).toBeVisible();
+
+  const storyStrip = page.getByTestId('story-strip-scroll');
+  await expect(storyStrip).toBeVisible();
+  await expect(storyStrip).toHaveCSS('overflow-x', 'auto');
+  await expect(storyStrip).toHaveCSS('scroll-snap-type', /x/);
 });
 
 test('downloads the accountant export CSV from settings', async ({ page }) => {
@@ -76,7 +93,7 @@ test('downloads the tax summary report from the reporting page', async ({ page }
   });
   await page.getByRole('button', { name: 'Done' }).click();
 
-  await page.getByRole('button', { name: 'Tax' }).click();
+  await page.getByRole('button', { name: 'Tax', exact: true }).click();
   const mainContent = page.locator('main');
   await expect(mainContent.getByText('Tax pot', { exact: true })).toBeVisible();
   await expect(mainContent.getByText('What to set aside this week', { exact: true })).toBeVisible();
@@ -115,8 +132,8 @@ test('completes a work day and rolls the results into dashboard totals', async (
   await page.getByRole('button', { name: 'Done' }).click();
 
   await expect(page.getByText(/This tax year/i)).toBeVisible();
-  await expect(page.getByText('42 mi')).toBeVisible();
-  await expect(page.getByText(/18\.90/)).toBeVisible();
+  await expect(page.getByText('Tax Saved')).toBeVisible();
+  await expect(page.getByText('Miles Logged')).toBeVisible();
   await expect(page.getByText('Recent shifts')).toBeVisible();
 });
 

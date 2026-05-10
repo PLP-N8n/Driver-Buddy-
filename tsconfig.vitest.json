@@ -33,6 +33,8 @@
     }
   },
   "include": [
+    "components/**/*.ts",
+    "components/**/*.tsx",
     "hooks/**/*.ts",
     "services/**/*.ts",
     "shared/**/*.ts",
@@ -40,12 +42,12 @@
     "test-support/**/*.ts",
     "utils/**/*.ts",
     "types.ts",
+    "components/**/*.test.ts",
+    "components/**/*.test.tsx",
     "hooks/**/*.test.ts",
     "services/**/*.test.ts",
     "shared/**/*.test.ts",
     "utils/**/*.test.ts",
-    "components/**/*.test.ts",
-    "components/**/*.test.tsx",
     "cloudflare-workers.d.ts",
     "react-shim.d.ts",
     "vite-env.d.ts"
