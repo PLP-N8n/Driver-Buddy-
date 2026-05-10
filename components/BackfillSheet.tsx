@@ -3,7 +3,8 @@ import { CalendarClock, ChevronRight, Minus, Palmtree, X } from 'lucide-react';
 import { DailyWorkLog, Settings } from '../types';
 import { stampSettings } from '../services/settingsService';
 import { getMissedDays } from '../utils/missedDays';
-import { todayUK } from '../utils/ukDate';
+import { todayUK, UK_TZ } from '../utils/ukDate';
+import { BulkBackfillCalendar } from './BulkBackfillCalendar';
 import {
   formatCurrency,
   formatNumber,
@@ -18,7 +19,7 @@ const PROMPT_KEY = 'dbt_lastBackfillPrompt';
 
 const formatMissedDayLabel = (dateValue: string) =>
   new Date(`${dateValue}T12:00:00Z`).toLocaleDateString('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -44,6 +45,7 @@ export const BackfillSheet: React.FC<BackfillSheetProps> = ({
   onAddShift,
 }) => {
   const [dismissedDates, setDismissedDates] = useState<string[]>([]);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const missedDays = useMemo(() => getMissedDays(dailyLogs, settings.dayOffDates), [dailyLogs, settings.dayOffDates]);
   const visibleDays = useMemo(
     () => missedDays.filter((date) => !dismissedDates.includes(date)),
@@ -109,6 +111,34 @@ export const BackfillSheet: React.FC<BackfillSheetProps> = ({
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        <BulkBackfillCalendar
+          missedDays={visibleDays}
+          selectedDays={selectedDays}
+          onToggleDay={(day) => setSelectedDays(prev =>
+            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+          )}
+        />
+
+        {selectedDays.length > 0 && (
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                // TODO: Wire proper bulk backfill dispatch loop.
+                // Currently calls onAddShift for each day individually — this
+                // may need a bulk-friendly handler that avoids multiple navigation triggers.
+                selectedDays.forEach((day) => onAddShift(day));
+                setDismissedDates((current) => [...current, ...selectedDays]);
+                setSelectedDays([]);
+                onOpenChange(false);
+              }}
+              className={primaryButtonClasses}
+            >
+              Backfill selected ({selectedDays.length})
+            </button>
+          </div>
+        )}
 
         <div className="mt-5 space-y-3">
           {visibleDays.map((date) => (
