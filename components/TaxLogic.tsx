@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Download, Info, PiggyBank, Plus, Trash2 } from 'lucide-react';
+import { Skeleton } from './Skeleton';
 import { DailyWorkLog, Expense, Settings, Trip, getCurrentTaxYearLabel } from '../types';
 import {
   calcActualDeduction,
@@ -98,6 +99,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
   const taxYearEndKey = ukTaxYearEnd();
   const taxYearLabel = getCurrentTaxYearLabel();
   const filteredLogs = useMemo(() => filterToCurrentTaxYear(dailyLogs), [dailyLogs]);
+  const hasData = dailyLogs.length > 0;
   const filteredTrips = useMemo(
     () => filterToCurrentTaxYear(trips),
     [trips]
@@ -379,17 +381,24 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
         )}
       </section>
 
-      {analysis.totalRevenue > 0 && (
-        <section className={`${panelClasses} p-5`}>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Weekly Revenue Trend</p>
-          <RevenueTrendChart data={weeklyRevenueData} />
-        </section>
+      {!hasData ? (
+        <div className="space-y-3 p-5">
+          <Skeleton variant="chart" />
+          <Skeleton variant="list" />
+          <Skeleton variant="list" />
+        </div>
+      ) : (
+        <>
+          <section className={`${panelClasses} p-5`}>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Weekly Revenue Trend</p>
+            <RevenueTrendChart data={weeklyRevenueData} />
+          </section>
+          <section className={`${panelClasses} p-5`}>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Platform Breakdown</p>
+            <PlatformBarChart data={platformData} />
+          </section>
+        </>
       )}
-
-      <section className={`${panelClasses} p-5`}>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Platform Breakdown</p>
-        <PlatformBarChart data={platformData} />
-      </section>
 
       <section className="rounded-2xl border border-surface-border bg-surface p-4">
         <div className="inline-flex rounded-xl bg-surface-raised p-1">
