@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 import type { DailyWorkLog, Expense, Settings, Trip } from '../../types';
 import { buildMonthlySummaries } from '../../utils/monthlySummary';
 import { getTaxYear } from '../../utils/ukDate';
 import { formatCurrency, formatNumber, panelClasses, subtlePanelClasses } from '../../utils/ui';
+import { MonthlyDrillDown } from '../MonthlyDrillDown';
 
 type MonthlySummaryCardProps = {
   logs: DailyWorkLog[];
@@ -25,6 +26,8 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
     () => buildMonthlySummaries(logs, trips, expenses, settings, taxYear),
     [expenses, logs, settings, taxYear, trips]
   );
+
+  const [showDrillDown, setShowDrillDown] = useState(false);
 
   if (summaries.length < 2) {
     return null;
@@ -83,9 +86,25 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
         </div>
       </div>
 
+      <div className="mt-2">
+        <button type="button" onClick={() => setShowDrillDown(true)} className="text-xs text-brand hover:underline">
+          Drill down →
+        </button>
+      </div>
+
       <p className="mt-4 text-xs text-slate-500">
         Based on your {formatNumber(settings.taxSetAsidePercent, 1)}% set-aside rule.
       </p>
+
+      {showDrillDown && (
+        <MonthlyDrillDown
+          month={new Date().getMonth()}
+          year={new Date().getFullYear()}
+          dailyLogs={logs}
+          onDayClick={() => setShowDrillDown(false)}
+          onClose={() => setShowDrillDown(false)}
+        />
+      )}
     </section>
   );
 };
