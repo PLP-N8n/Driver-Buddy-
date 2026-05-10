@@ -1,6 +1,11 @@
 import { DailyWorkLog, Expense, Settings, Trip } from '../types';
 import { formatCurrency } from './ui';
 
+const escHtml = (value: unknown): string => {
+  const s = String(value ?? '');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+};
+
 export function generateStyledHtmlReport(params: {
   taxYearLabel: string;
   logs: DailyWorkLog[];
@@ -17,7 +22,7 @@ export function generateStyledHtmlReport(params: {
   const shiftRows = logs
     .map(
       (log) =>
-        `<tr><td>${log.date}</td><td>${log.provider}</td><td>${log.hoursWorked}</td><td>${formatCurrency(log.revenue)}</td></tr>`
+        `<tr><td>${escHtml(log.date)}</td><td>${escHtml(log.provider)}</td><td>${escHtml(log.hoursWorked)}</td><td>${formatCurrency(log.revenue)}</td></tr>`
     )
     .join('');
 
@@ -42,7 +47,7 @@ th{background:#f9fafb;font-weight:600}
 </head>
 <body>
 <h1>Driver Buddy Tax Report</h1>
-<p>Tax Year ${taxYearLabel}</p>
+<p>Tax Year ${escHtml(taxYearLabel)}</p>
 
 <div class="summary">
   <div class="card"><h3>Total Revenue</h3><p>${formatCurrency(totalRevenue)}</p></div>

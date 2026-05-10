@@ -488,8 +488,8 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tax Projection Range</p>
               <TaxProjectionRange
                 currentProjection={projection.estimatedLiability}
-                conservativeProjection={projection.estimatedLiability * 0.9}
-                optimisticProjection={projection.estimatedLiability * 1.2}
+                conservativeProjection={projection.estimatedLiability * 1.2}
+                optimisticProjection={projection.estimatedLiability * 0.9}
                 requiredWeeklyAverage={weeklyTarget}
                 weeksRemaining={weeksLeft}
               />

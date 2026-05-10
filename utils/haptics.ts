@@ -1,5 +1,5 @@
 const PATTERNS: Record<string, number | number[]> = {
-  light: 10,
+  light: 20,
   medium: 20,
   heavy: 30,
   success: [10, 50, 20],

@@ -37,7 +37,7 @@ export const StoryStrip: React.FC<StoryStripProps> = ({ stories }) => {
 
     Array.from(el.children).forEach((child) => observer.observe(child));
     return () => observer.disconnect();
-  }, [displayStories.length]);
+  }, [displayStories]);
 
   return (
     <div className="space-y-3">
@@ -47,7 +47,7 @@ export const StoryStrip: React.FC<StoryStripProps> = ({ stories }) => {
         className="flex gap-3 overflow-x-auto scroll-snap-x snap-x snap-mandatory pb-2 no-scrollbar"
       >
         {displayStories.map((story, index) => (
-          <div key={`${story.type}-${index}`} className="scroll-snap-align-start snap-start">
+          <div key={`${story.type}-${index}`} className="snap-start">
             <StoryCard {...story} />
           </div>
         ))}

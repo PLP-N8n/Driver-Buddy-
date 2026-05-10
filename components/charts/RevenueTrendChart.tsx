@@ -27,9 +27,8 @@ export const RevenueTrendChart: React.FC<RevenueTrendChartProps> = ({ data, heig
       role="img"
       aria-label="Weekly revenue trend"
     >
-      {data.map((item) => {
+      {data.map((item, index) => {
         const barHeight = (item.revenue / maxRevenue) * (chartHeight - 30);
-        const index = data.indexOf(item);
         const x = gap + index * (barWidth + gap);
         const y = chartHeight - barHeight - 20;
 

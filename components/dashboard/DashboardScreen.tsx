@@ -317,6 +317,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   const [predictionRefreshToken, setPredictionRefreshToken] = useState(0);
   const [expandedPredictionId, setExpandedPredictionId] = useState<string | null>(null);
   const shownReminderForSummaryIds = useRef<Set<string>>(new Set());
+  const endShiftTimeoutRef = useRef(0);
 
   const todayKey = todayUK();
   const providerOptions = useMemo(() => getProviderOptions(settings.driverRoles ?? ['COURIER'], startProvider), [settings.driverRoles, startProvider]);
@@ -849,7 +850,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       }
       localStorage.removeItem(DRAFT_STORAGE_KEY);
       setShowEndSheet(false);
-      window.setTimeout(() => {
+      endShiftTimeoutRef.current = window.setTimeout(() => {
         onShowCompletedSummary(summary);
         setEndingShift(false);
       }, 350);

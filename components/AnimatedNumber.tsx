@@ -25,7 +25,7 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   className = '',
 }) => {
   const [displayValue, setDisplayValue] = useState(prefersReducedMotion() ? value : 0);
-  const hasAnimated = useRef(false);
+  const animFrameRef = useRef(0);
   const elementRef = useRef<HTMLSpanElement>(null);
 
   const format = (num: number) =>
@@ -34,31 +34,34 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     }).format(num);
 
   useEffect(() => {
-    if (prefersReducedMotion() || hasAnimated.current) return;
+    if (prefersReducedMotion()) {
+      setDisplayValue(value);
+      return;
+    }
 
     const el = elementRef.current;
     if (!el) return;
 
+    const startValue = displayValue;
+
     const runAnimation = () => {
-      if (hasAnimated.current) return;
-      hasAnimated.current = true;
+      cancelAnimationFrame(animFrameRef.current);
 
       const startTime = performance.now();
       const animate = (now: number) => {
         const elapsed = now - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const eased = easeOutQuart(progress);
-        setDisplayValue(value * eased);
+        setDisplayValue(startValue + (value - startValue) * eased);
         if (progress < 1) {
-          requestAnimationFrame(animate);
+          animFrameRef.current = requestAnimationFrame(animate);
         }
       };
-      requestAnimationFrame(animate);
+      animFrameRef.current = requestAnimationFrame(animate);
     };
 
     if (typeof IntersectionObserver === 'undefined' || typeof requestAnimationFrame === 'undefined') {
       setDisplayValue(value);
-      hasAnimated.current = true;
       return;
     }
 
@@ -66,7 +69,7 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        if (!entry.isIntersecting || hasAnimated.current) return;
+        if (!entry.isIntersecting) return;
         runAnimation();
         observer.disconnect();
       },
@@ -74,7 +77,10 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     );
 
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(animFrameRef.current);
+    };
   }, [value, duration]);
 
   return (

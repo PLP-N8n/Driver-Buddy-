@@ -28,13 +28,14 @@ export const HeroTile: React.FC<HeroTileProps> = ({
   isEmpty,
   emptyHint,
 }) => {
-  const showDelta = delta !== undefined && delta !== 0;
+  const showDelta = delta !== undefined && delta !== 0 && Number.isFinite(delta);
   const deltaPositive = (delta ?? 0) >= 0;
 
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={label}
       className="relative flex min-h-[96px] flex-col justify-between rounded-2xl border border-surface-border bg-surface-raised p-4 text-left transition-transform duration-150 hover:scale-[1.02] active:scale-95"
     >
       <div className="flex items-start justify-between gap-2">

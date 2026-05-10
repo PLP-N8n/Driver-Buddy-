@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { X } from 'lucide-react';
 import { DailyWorkLog } from '../types';
 import { dialogBackdropClasses, dialogPanelClasses, formatCurrency } from '../utils/ui';
+import { todayUK } from '../utils/ukDate';
 
 export interface MonthlyDrillDownProps {
   month: number;
@@ -32,7 +33,7 @@ export const MonthlyDrillDown: React.FC<MonthlyDrillDownProps> = ({
   const cells: (number | null)[] = Array.from({ length: firstDay }, () => null);
   for (let i = 1; i <= daysInMonth; i++) cells.push(i);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayUK();
 
   return (
     <div className={dialogBackdropClasses} onClick={onClose}>
