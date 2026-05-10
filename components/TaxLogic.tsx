@@ -26,7 +26,11 @@ import {
 } from '../utils/ui';
 import { generateHmrcSummaryHtml, generateTaxPackCSVs } from '../utils/taxPack';
 import { buildTaxAnalysis } from '../utils/tax';
-import { filterToCurrentTaxYear, todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
+import { filterToCurrentTaxYear, todayUK, UK_TZ, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
+import { RevenueTrendChart } from './charts/RevenueTrendChart';
+import { PlatformBarChart } from './charts/PlatformBarChart';
+import { TaxProjectionRange } from './TaxProjectionRange';
+import { generateStyledHtmlReport } from '../utils/styledExport';
 
 interface TaxLogicProps {
   trips: Trip[];
@@ -109,6 +113,26 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
       }),
     [filteredLogs, filteredExpenses, filteredTrips, settings]
   );
+
+  const weeklyRevenueData = useMemo(() => {
+    const weeks = new Map<string, number>();
+    filteredLogs.forEach((log) => {
+      const date = new Date(log.date);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      const key = weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      weeks.set(key, (weeks.get(key) || 0) + log.revenue);
+    });
+    return Array.from(weeks.entries()).map(([week, revenue]) => ({ week, revenue }));
+  }, [filteredLogs]);
+
+  const platformData = useMemo(() => {
+    const platforms = new Map<string, number>();
+    filteredLogs.forEach((log) => {
+      platforms.set(log.provider, (platforms.get(log.provider) || 0) + log.revenue);
+    });
+    return Array.from(platforms.entries()).map(([provider, revenue]) => ({ provider, revenue }));
+  }, [filteredLogs]);
 
   const effectiveMethod = methodView === 'COMPARE' ? settings.claimMethod : methodView;
   const projection = effectiveMethod === 'SIMPLIFIED' ? analysis.simplifiedProjection : analysis.actualProjection;
@@ -355,6 +379,18 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
         )}
       </section>
 
+      {analysis.totalRevenue > 0 && (
+        <section className={`${panelClasses} p-5`}>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Weekly Revenue Trend</p>
+          <RevenueTrendChart data={weeklyRevenueData} />
+        </section>
+      )}
+
+      <section className={`${panelClasses} p-5`}>
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Platform Breakdown</p>
+        <PlatformBarChart data={platformData} />
+      </section>
+
       <section className="rounded-2xl border border-surface-border bg-surface p-4">
         <div className="inline-flex rounded-xl bg-surface-raised p-1">
           {(['SIMPLIFIED', 'ACTUAL', 'COMPARE'] as MethodView[]).map((view) => (
@@ -438,6 +474,19 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
             </div>
           </section>
 
+          {projection.estimatedLiability > 0 && (
+            <section className={`${panelClasses} p-5`}>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tax Projection Range</p>
+              <TaxProjectionRange
+                currentProjection={projection.estimatedLiability}
+                conservativeProjection={projection.estimatedLiability * 0.9}
+                optimisticProjection={projection.estimatedLiability * 1.2}
+                requiredWeeklyAverage={weeklyTarget}
+                weeksRemaining={weeksLeft}
+              />
+            </section>
+          )}
+
           {projection.paymentsOnAccount && (
             <section className="mx-0 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
               <div className="flex items-start gap-3">
@@ -488,7 +537,7 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
               {dates.map(({ label, date }) => {
                 const days = daysUntil(date);
                 const dateStr = date.toLocaleDateString('en-GB', {
-                  timeZone: 'Europe/London',
+                  timeZone: UK_TZ,
                   day: 'numeric',
                   month: 'short',
                   year: 'numeric',
@@ -608,6 +657,29 @@ export const TaxLogic: React.FC<TaxLogicProps> = ({
             <button type="button" onClick={handleHmrcSummaryDownload} className={secondaryButtonClasses}>
               <Download className="h-4 w-4" />
               <span>HMRC Summary</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const html = generateStyledHtmlReport({
+                  taxYearLabel,
+                  logs: dailyLogs,
+                  trips,
+                  expenses,
+                  settings,
+                });
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `driver-buddy-report-${taxYearLabel.replace('/', '-')}.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className={secondaryButtonClasses}
+            >
+              <Download className="h-4 w-4" />
+              <span>Styled Report</span>
             </button>
             <button
               type="button"
