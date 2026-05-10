@@ -8,15 +8,18 @@
     "target": "ES2022",
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
+    "types": [
+      "node",
+      "vitest/globals",
+      "@testing-library/jest-dom/vitest"
+    ],
+    "skipLibCheck": true,
     "sourceMap": false,
     "declaration": false,
     "allowImportingTsExtensions": false,
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@testing-library/react": [
-        "./test-support/testing-library-react.ts"
       ],
       "#react-local": [
         "./node_modules/react/index.js"
@@ -41,6 +44,8 @@
     "services/**/*.test.ts",
     "shared/**/*.test.ts",
     "utils/**/*.test.ts",
+    "components/**/*.test.ts",
+    "components/**/*.test.tsx",
     "cloudflare-workers.d.ts",
     "react-shim.d.ts",
     "vite-env.d.ts"
@@ -48,6 +53,8 @@
   "exclude": [
     "e2e/**",
     "node_modules/**",
+    "workers/**",
+    "services/workerRoutes.test.ts",
     ".tmp-unit/**",
     ".tmp-unit-run/**",
     ".tmp-unit-run2/**",

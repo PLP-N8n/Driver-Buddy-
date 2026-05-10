@@ -13,6 +13,7 @@ export default defineConfig({
       '.tmp-vitest/services/**/*.test.js',
       '.tmp-vitest/shared/**/*.test.js',
       '.tmp-vitest/utils/**/*.test.js',
+      '.tmp-vitest/components/**/*.test.js',
     ],
     pool: 'threads',
     fileParallelism: false,
@@ -20,7 +21,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@testing-library/react': path.resolve(rootDir, '.tmp-vitest/test-support/testing-library-react.js'),
       '#react-local': path.resolve(rootDir, 'node_modules/react/index.js'),
       '#react-dom-client-local': path.resolve(rootDir, 'node_modules/react-dom/client.js'),
       '#react-dom-test-utils-local': path.resolve(rootDir, 'node_modules/react-dom/test-utils.js'),
