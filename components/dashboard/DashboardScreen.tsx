@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+const { memo } = React;
 import {
   AlertTriangle,
   Brain,
@@ -19,14 +20,15 @@ import {
   Settings,
   Trip,
 } from '../../types';
-import { EarningsSummary } from './EarningsSummary';
-import { HabitCard } from './HabitCard';
-import { HealthCheckCard } from './HealthCheckCard';
+import { ActionStrip } from './ActionStrip';
+import { BentoHero } from './BentoHero';
+import { CollapsibleSection } from './CollapsibleSection';
 import { IntelligenceFeed } from './IntelligenceFeed';
 import { MonthlySummaryCard } from './MonthlySummaryCard';
 import { PlatformBreakdownCard } from './PlatformBreakdownCard';
 import { QuickAddForm } from './QuickAddForm';
-import { RealTimeTaxMeter } from './RealTimeTaxMeter';
+import { StoryStrip } from './StoryStrip';
+import type { StoryCardProps } from './StoryCard';
 import { WeeklySummary } from './WeeklySummary';
 import { getHabitState } from '../../utils/habitEngine';
 import { useRecurringExpensesDue } from '../../hooks/useRecurringExpensesDue';
@@ -39,7 +41,7 @@ import { calculateTimestampShiftDurationHours } from '../../utils/shiftDuration'
 import { predictNextShift } from '../../utils/shiftPredictor';
 import { calculateExpenseTaxClassification } from '../../shared/calculations/expenses';
 import { calcMileageAllowance } from '../../shared/calculations/mileage';
-import { filterToCurrentTaxYear, todayUK, toUKDateString, ukWeekStart } from '../../utils/ukDate';
+import { filterToCurrentTaxYear, todayUK, toUKDateString, UK_TZ, ukWeekStart } from '../../utils/ukDate';
 import {
   getEnergyQuantityUnitForCategory,
   getVehicleEnergyExpenseCategory,
@@ -62,7 +64,7 @@ import {
 
 const DRAFT_STORAGE_KEY = 'dbt_draftEndShift';
 const LAST_END_ODOMETER_KEY = 'dbt_lastEndOdometer';
-const PREDICTION_DISMISS_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+const PREDICTION_DISMISS_FOR_MS = 24 * 60 * 60 * 1000; // 24 hours — short enough to recover from accidental dismiss
 
 const hashPrediction = (value: string) => {
   let hash = 0;
@@ -117,6 +119,8 @@ interface DashboardProps {
   onOpenWorkLog: () => void;
   onAddExpense: (expense: Expense) => void;
   onUpdateSettings: (settings: Settings) => void;
+  backupCode?: string;
+  onRestoreFromBackupCode?: (code: string) => void | Promise<void>;
 }
 
 type EndSheetMode = 'active' | 'manual';
@@ -159,7 +163,7 @@ const createEmptyDraft = (defaultProvider = 'Work Day'): EndShiftDraft => ({
 
 const formatTime = (value: string) =>
   new Date(value).toLocaleTimeString('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     hour: 'numeric',
     minute: '2-digit',
   });
@@ -240,6 +244,30 @@ const pillButtonClass = (active: boolean) =>
 const summaryStatClass = 'rounded-2xl border border-surface-border bg-surface-raised px-4 py-3';
 const getPredictionId = (prediction: DriverPrediction) => hashPrediction(`${prediction.type}:${prediction.message}`);
 
+const RecentShiftItem: React.FC<{ log: DailyWorkLog }> = memo(({ log }) => (
+  <div className={`${subtlePanelClasses} flex items-center justify-between px-4 py-3`}>
+    <div>
+      <p className="text-sm font-medium text-white">
+        {new Date(`${log.date}T12:00:00Z`).toLocaleDateString('en-GB', {
+          timeZone: UK_TZ,
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+        })}
+      </p>
+      <p className="text-xs text-slate-500">
+        {log.provider}{log.hoursWorked > 0 ? ` · ${formatNumber(log.hoursWorked, 1)} hrs` : ''}{log.jobCount ? ` · ${log.jobCount} jobs` : ''}
+      </p>
+    </div>
+    <div className="text-right">
+      <p className="font-mono text-sm font-semibold tracking-tight text-white">{formatCurrency(log.revenue)}</p>
+      {log.hoursWorked > 0 && (
+        <p className="font-mono text-xs tracking-tight text-slate-500">{formatCurrency(log.revenue / log.hoursWorked)}/hr</p>
+      )}
+    </div>
+  </div>
+));
+
 export const DashboardScreen: React.FC<DashboardProps> = ({
   trips,
   expenses,
@@ -267,6 +295,8 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
   onOpenWorkLog,
   onAddExpense,
   onUpdateSettings,
+  backupCode,
+  onRestoreFromBackupCode,
 }) => {
   const [showStartSheet, setShowStartSheet] = useState(false);
   const [showEndSheet, setShowEndSheet] = useState(false);
@@ -412,6 +442,57 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
       workDays: currentYearLogs.length,
     };
   }, [dailyLogs, settings, trips]);
+
+  const storiesData = useMemo(() => {
+    const stories: StoryCardProps[] = [];
+    if (recentLogs[0]) {
+      stories.push({
+        type: 'recentShift',
+        title: 'Recent Shift',
+        body: `${recentLogs[0].provider} · ${formatCurrency(recentLogs[0].revenue)}`,
+        cta: 'View',
+        onCta: () => onOpenWorkLog(),
+      });
+    }
+    if (topPrediction) {
+      stories.push({
+        type: 'prediction',
+        title: 'Insight',
+        body: topPrediction.message,
+        cta: topPrediction.actionLabel || 'Set Reminder',
+        onCta: () => onSetPredictionReminder(),
+      });
+    }
+    if (visibleMissedDays[0]) {
+      stories.push({
+        type: 'missedDay',
+        title: 'Missed Day',
+        body: `You didn't log ${visibleMissedDays[0]}. Backfill it now.`,
+        cta: 'Backfill',
+        onCta: () => onOpenBackfill(),
+      });
+    }
+    const dueRecurringExpense = dueRecurringExpenses[0];
+    if (dueRecurringExpense) {
+      stories.push({
+        type: 'recurring',
+        title: 'Recurring Due',
+        body: `${dueRecurringExpense.description} · ${formatCurrency(dueRecurringExpense.amount)}`,
+        cta: 'Log Now',
+        onCta: () => handleLogRecurring(dueRecurringExpense),
+      });
+    }
+    if (hasHabitCard && habitState.currentStreak >= 3) {
+      stories.push({
+        type: 'habit',
+        title: 'Streak',
+        body: `${habitState.currentStreak} day streak! Keep it up.`,
+        cta: 'Nice',
+        onCta: () => {},
+      });
+    }
+    return stories;
+  }, [recentLogs, topPrediction, visibleMissedDays, dueRecurringExpenses, hasHabitCard, habitState]);
 
   const dashboardInsight = useMemo(() => {
     const sourceLog =
@@ -825,51 +906,53 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         />
       ) : (
         <>
-          <EarningsSummary
-            activeSession={activeSession ? { startedAt: activeSession.startedAt } : null}
-            todayLogsCount={todayLogs.length}
-            hasAnyLoggedShifts={dailyLogs.length > 0}
-            outcomeStats={outcomeStats}
-            activeDurationHours={activeDurationHours}
+          <BentoHero
+            taxMeterProps={{ trips, expenses, dailyLogs, settings, onNavigateToTax }}
+            todayRevenue={todayRevenue}
             weekRevenue={weekRevenue}
             weeklyRevenueTarget={settings.weeklyRevenueTarget}
             weekProgressPercent={weekProgressPercent}
+            taxSaved={taxYearTotals.taxSetAside}
+            totalBusinessMiles={taxYearTotals.totalBusinessMiles}
+            activeSession={activeSession}
+            activeDurationHours={activeDurationHours}
+            hasAnyLoggedShifts={dailyLogs.length > 0}
+            onTileClick={(tile) => {
+              if (tile === 'today') onNavigateToTax();
+              if (tile === 'week') onNavigateToTax();
+              if (tile === 'tax') onNavigateToTax();
+              if (tile === 'miles') onOpenWorkLog();
+            }}
+          />
+
+          <ActionStrip
+            activeSession={activeSession ? { startedAt: activeSession.startedAt } : null}
+            activeDurationHours={activeDurationHours}
+            hasAnyLoggedShifts={dailyLogs.length > 0}
+            backupCode={backupCode}
+            onStartShift={openStartSheet}
             onEndShift={openActiveEndSheet}
             onQuickAddRevenue={() => onUpdateSession({ revenue: liveRevenue + 10 })}
-            onStartShift={openStartSheet}
             onAddShift={() => openManualEntry()}
-            liveRevenue={liveRevenue}
-            liveMiles={liveMiles}
-            liveSetAside={liveSetAside}
-            taxSetAsidePercent={settings.taxSetAsidePercent}
-            onViewTaxEstimate={onNavigateToTax}
-            formatTime={formatTime}
+            onRestoreFromBackupCode={onRestoreFromBackupCode}
           />
 
-          <HealthCheckCard
-            logs={dailyLogs}
-            trips={trips}
-            expenses={expenses}
-            settings={settings}
-            today={todayKey}
-          />
+          <StoryStrip stories={storiesData} />
 
-          <PlatformBreakdownCard logs={dailyLogs} />
+          <CollapsibleSection title="Platform Breakdown" defaultExpanded>
+            <PlatformBreakdownCard logs={dailyLogs} />
+          </CollapsibleSection>
 
-          <MonthlySummaryCard
-            logs={dailyLogs}
-            trips={trips}
-            expenses={expenses}
-            settings={settings}
-          />
+          <CollapsibleSection title="Monthly Summary">
+            <MonthlySummaryCard
+              logs={dailyLogs}
+              trips={trips}
+              expenses={expenses}
+              settings={settings}
+            />
+          </CollapsibleSection>
 
-          <section className={`${panelClasses} overflow-hidden p-5`}>
-            {hasHabitCard && (
-              <div>
-                <HabitCard state={habitState} />
-              </div>
-            )}
-
+          <CollapsibleSection title="Intelligence Feed" defaultExpanded>
             <IntelligenceFeed
               dashboardInsight={dashboardInsight}
               dismissedInsight={dismissedInsight}
@@ -888,59 +971,16 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
               dueRecurringExpenses={dueRecurringExpenses}
               onLogRecurring={handleLogRecurring}
             />
-          </section>
+          </CollapsibleSection>
 
-          {taxYearTotals.workDays > 0 ? (
-            <>
-              <RealTimeTaxMeter
-                trips={trips}
-                expenses={expenses}
-                dailyLogs={dailyLogs}
-                settings={settings}
-                onNavigateToTax={onNavigateToTax}
-              />
-
-              {recentLogs.length > 0 && (
-                <section className={`${panelClasses} p-5`}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent shifts</p>
-                  <div className="mt-3 space-y-2">
-                    {recentLogs.map((log) => (
-                      <div key={log.id} className={`${subtlePanelClasses} flex items-center justify-between px-4 py-3`}>
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {new Date(`${log.date}T12:00:00Z`).toLocaleDateString('en-GB', {
-                              timeZone: 'Europe/London',
-                              weekday: 'short',
-                              day: 'numeric',
-                              month: 'short',
-                            })}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {log.provider}{log.hoursWorked > 0 ? ` · ${formatNumber(log.hoursWorked, 1)} hrs` : ''}{log.jobCount ? ` · ${log.jobCount} jobs` : ''}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono text-sm font-semibold tracking-tight text-white">{formatCurrency(log.revenue)}</p>
-                          {log.hoursWorked > 0 && (
-                            <p className="font-mono text-xs tracking-tight text-slate-500">{formatCurrency(log.revenue / log.hoursWorked)}/hr</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </>
-          ) : (
-            <section className={`${panelClasses} p-6 text-center`}>
-              <p className="text-sm text-slate-400">UK drivers claim an average of £800/yr in mileage alone — but only if it&apos;s logged.</p>
-              <button
-                type="button"
-                onClick={() => openManualEntry()}
-                className={`${primaryButtonClasses} mt-5 w-full justify-center`}
-              >
-                Log your first shift
-              </button>
+          {recentLogs.length > 0 && (
+            <section className={`${panelClasses} p-5`}>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent shifts</p>
+              <div className="mt-3 space-y-2">
+                {recentLogs.map((log) => (
+                  <RecentShiftItem key={log.id} log={log} />
+                ))}
+              </div>
             </section>
           )}
         </>
