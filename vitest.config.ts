@@ -7,7 +7,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    env: { VITE_SYNC_WORKER_URL: 'https://sync.example.test' },
     include: [
+      'components/**/*.test.ts',
+      'components/**/*.test.tsx',
       'hooks/**/*.test.ts',
       'services/**/*.test.ts',
       'shared/**/*.test.ts',
