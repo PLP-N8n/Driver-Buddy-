@@ -1,5 +1,5 @@
 import { getFocusClasses, getMinTouchTarget } from './accessibility';
-import { toUKDateString, ukWeekStart } from './ukDate';
+import { toUKDateString, UK_TZ, ukWeekStart } from './ukDate';
 
 export const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-GB', {
@@ -67,7 +67,7 @@ export const validatePositiveNumber = (value: string): ValidationResult =>
 export const focusRingClasses = getFocusClasses();
 export const touchTargetClasses = getMinTouchTarget();
 const buttonBaseClasses =
-  `inline-flex ${touchTargetClasses} select-none items-center justify-center gap-2 rounded-full px-5 py-3 text-sm transition-colors transition-transform duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${focusRingClasses}`;
+  `inline-flex ${touchTargetClasses} select-none items-center justify-center gap-2 rounded-full px-5 py-3 text-sm transition-colors transition-transform duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${focusRingClasses} data-haptic`;
 
 export const fieldLabelClasses = 'mb-2 block text-sm font-medium text-slate-300';
 export const inputClasses =
@@ -95,6 +95,9 @@ export const dialogBackdropClasses = 'fixed inset-x-0 top-0 bottom-[64px] z-40 f
 export const dialogPanelClasses =
   'max-h-[calc(100vh-64px)] w-full overflow-y-auto rounded-3xl border border-surface-border bg-surface p-5 shadow-2xl shadow-black/40 animate-scale-in';
 
+// Returns type="text" with inputMode="decimal" rather than type="number".
+// Deliberate: avoids browser number-input quirks (spinners, locale formatting)
+// at the cost of manual parsing and no min/max/step validation.
 export const getNumericInputProps = (mode: 'decimal' | 'numeric' = 'decimal') => ({
   inputMode: mode,
   type: 'text' as const,
@@ -108,7 +111,7 @@ export const getMondayForDate = (dateValue: string) => toWeekStartDate(dateValue
 
 export const formatWeekLabel = (dateValue: string, startDay: 'MON' | 'SUN' = 'MON') =>
   toWeekStartDate(dateValue, startDay).toLocaleDateString('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     day: 'numeric',
     month: 'short',
   });
