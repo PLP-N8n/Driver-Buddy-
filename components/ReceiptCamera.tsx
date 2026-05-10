@@ -22,7 +22,7 @@ export const ReceiptCamera: React.FC<ReceiptCameraProps> = ({ onCapture, onCance
     if (!file) return;
     // Lightweight extraction: try to find amount in filename
     const amountMatch = file.name.match(/(\d+[.,]\d{2})/);
-    const amount = amountMatch ? Number.parseFloat(amountMatch[1].replace(',', '.')) : undefined;
+    const amount = amountMatch?.[1] ? Number.parseFloat(amountMatch[1].replace(',', '.')) : undefined;
     onCapture(file, { amount });
   };
 

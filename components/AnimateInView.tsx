@@ -28,7 +28,7 @@ export const AnimateInView: React.FC<AnimateInViewProps> = ({ children, delay = 
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry?.isIntersecting) {
           setVisible(true);
           observer.disconnect();
         }
