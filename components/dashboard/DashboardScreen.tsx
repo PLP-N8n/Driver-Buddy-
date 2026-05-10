@@ -20,12 +20,14 @@ import {
   Settings,
   Trip,
 } from '../../types';
+import { AnimateInView } from '../AnimateInView';
 import { ActionStrip } from './ActionStrip';
 import { BentoHero } from './BentoHero';
 import { CollapsibleSection } from './CollapsibleSection';
 import { IntelligenceFeed } from './IntelligenceFeed';
 import { MonthlySummaryCard } from './MonthlySummaryCard';
 import { PlatformBreakdownCard } from './PlatformBreakdownCard';
+import { DriveModeSheet } from './DriveModeSheet';
 import { QuickAddForm } from './QuickAddForm';
 import { StoryStrip } from './StoryStrip';
 import type { StoryCardProps } from './StoryCard';
@@ -300,6 +302,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
 }) => {
   const [showStartSheet, setShowStartSheet] = useState(false);
   const [showEndSheet, setShowEndSheet] = useState(false);
+  const [showDriveMode, setShowDriveMode] = useState(false);
   const [endSheetMode, setEndSheetMode] = useState<EndSheetMode>('active');
   const [startProvider, setStartProvider] = useState('Work Day');
   const [startOdometer, setStartOdometer] = useState('');
@@ -883,6 +886,21 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
     shownReminderForSummaryIds.current.add(completedShiftSummary.id);
   };
 
+  const handleDriveModeSave = (payload: { revenue: number; provider: string; endOdometer?: number }) => {
+    const hoursWorked = activePrediction?.estimatedHours ?? 1;
+    const summary = onSaveManualShift({
+      date: todayKey,
+      provider: payload.provider,
+      hoursWorked: Math.max(0.5, hoursWorked),
+      revenue: payload.revenue,
+      expenses: [],
+      endOdometer: payload.endOdometer,
+      notes: 'Quick-logged via Drive Mode',
+    });
+    setShowDriveMode(false);
+    onShowCompletedSummary(summary);
+  };
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 pb-4 pt-2">
       {completedShiftSummary ? (
@@ -906,82 +924,111 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         />
       ) : (
         <>
-          <BentoHero
-            taxMeterProps={{ trips, expenses, dailyLogs, settings, onNavigateToTax }}
-            todayRevenue={todayRevenue}
-            weekRevenue={weekRevenue}
-            weeklyRevenueTarget={settings.weeklyRevenueTarget}
-            weekProgressPercent={weekProgressPercent}
-            taxSaved={taxYearTotals.taxSetAside}
-            totalBusinessMiles={taxYearTotals.totalBusinessMiles}
-            activeSession={activeSession}
-            activeDurationHours={activeDurationHours}
-            hasAnyLoggedShifts={dailyLogs.length > 0}
-            onTileClick={(tile) => {
-              if (tile === 'today') onNavigateToTax();
-              if (tile === 'week') onNavigateToTax();
-              if (tile === 'tax') onNavigateToTax();
-              if (tile === 'miles') onOpenWorkLog();
-            }}
-          />
-
-          <ActionStrip
-            activeSession={activeSession ? { startedAt: activeSession.startedAt } : null}
-            activeDurationHours={activeDurationHours}
-            hasAnyLoggedShifts={dailyLogs.length > 0}
-            backupCode={backupCode}
-            onStartShift={openStartSheet}
-            onEndShift={openActiveEndSheet}
-            onQuickAddRevenue={() => onUpdateSession({ revenue: liveRevenue + 10 })}
-            onAddShift={() => openManualEntry()}
-            onRestoreFromBackupCode={onRestoreFromBackupCode}
-          />
-
-          <StoryStrip stories={storiesData} />
-
-          <CollapsibleSection title="Platform Breakdown" defaultExpanded>
-            <PlatformBreakdownCard logs={dailyLogs} />
-          </CollapsibleSection>
-
-          <CollapsibleSection title="Monthly Summary">
-            <MonthlySummaryCard
-              logs={dailyLogs}
-              trips={trips}
-              expenses={expenses}
-              settings={settings}
-            />
-          </CollapsibleSection>
-
-          <CollapsibleSection title="Intelligence Feed" defaultExpanded>
-            <IntelligenceFeed
-              dashboardInsight={dashboardInsight}
-              dismissedInsight={dismissedInsight}
-              onDismissInsight={setDismissedInsight}
-              topPrediction={topPrediction}
-              isPredictionExpanded={topPrediction ? expandedPredictionId === getPredictionId(topPrediction) : false}
-              onTogglePrediction={() => {
-                if (!topPrediction) return;
-                const predictionId = getPredictionId(topPrediction);
-                setExpandedPredictionId((current) => (current === predictionId ? null : predictionId));
+          <AnimateInView delay="0ms">
+            <BentoHero
+              taxMeterProps={{ trips, expenses, dailyLogs, settings, onNavigateToTax }}
+              todayRevenue={todayRevenue}
+              weekRevenue={weekRevenue}
+              weeklyRevenueTarget={settings.weeklyRevenueTarget}
+              weekProgressPercent={weekProgressPercent}
+              taxSaved={taxYearTotals.taxSetAside}
+              totalBusinessMiles={taxYearTotals.totalBusinessMiles}
+              activeSession={activeSession}
+              activeDurationHours={activeDurationHours}
+              hasAnyLoggedShifts={dailyLogs.length > 0}
+              onTileClick={(tile) => {
+                if (tile === 'today') onNavigateToTax();
+                if (tile === 'week') onNavigateToTax();
+                if (tile === 'tax') onNavigateToTax();
+                if (tile === 'miles') onOpenWorkLog();
               }}
-              onDismissPrediction={dismissPrediction}
-              onSetReminder={onSetPredictionReminder}
-              missedDays={visibleMissedDays}
-              onOpenBackfill={onOpenBackfill}
-              dueRecurringExpenses={dueRecurringExpenses}
-              onLogRecurring={handleLogRecurring}
             />
-          </CollapsibleSection>
+          </AnimateInView>
+
+          <AnimateInView delay="50ms">
+            <ActionStrip
+              activeSession={activeSession ? { startedAt: activeSession.startedAt } : null}
+              activeDurationHours={activeDurationHours}
+              hasAnyLoggedShifts={dailyLogs.length > 0}
+              backupCode={backupCode}
+              onStartShift={openStartSheet}
+              onEndShift={openActiveEndSheet}
+              onQuickAddRevenue={() => onUpdateSession({ revenue: liveRevenue + 10 })}
+              onAddShift={() => openManualEntry()}
+              onRestoreFromBackupCode={onRestoreFromBackupCode}
+            />
+          </AnimateInView>
+
+          {!activeSession && activePrediction && (
+            <AnimateInView delay="50ms">
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setShowDriveMode(true)}
+                  className="flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-5 py-2.5 text-sm font-semibold text-brand transition-colors hover:bg-brand/20 active:scale-95"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Quick-log shift
+                </button>
+              </div>
+            </AnimateInView>
+          )}
+
+          <AnimateInView delay="100ms">
+            <StoryStrip stories={storiesData} />
+          </AnimateInView>
+
+          <AnimateInView delay="150ms">
+            <CollapsibleSection title="Platform Breakdown" defaultExpanded>
+              <PlatformBreakdownCard logs={dailyLogs} />
+            </CollapsibleSection>
+          </AnimateInView>
+
+          <AnimateInView delay="0ms">
+            <CollapsibleSection title="Monthly Summary">
+              <MonthlySummaryCard
+                logs={dailyLogs}
+                trips={trips}
+                expenses={expenses}
+                settings={settings}
+              />
+            </CollapsibleSection>
+          </AnimateInView>
+
+          <AnimateInView delay="0ms">
+            <CollapsibleSection title="Intelligence Feed" defaultExpanded>
+              <IntelligenceFeed
+                dashboardInsight={dashboardInsight}
+                dismissedInsight={dismissedInsight}
+                onDismissInsight={setDismissedInsight}
+                topPrediction={topPrediction}
+                isPredictionExpanded={topPrediction ? expandedPredictionId === getPredictionId(topPrediction) : false}
+                onTogglePrediction={() => {
+                  if (!topPrediction) return;
+                  const predictionId = getPredictionId(topPrediction);
+                  setExpandedPredictionId((current) => (current === predictionId ? null : predictionId));
+                }}
+                onDismissPrediction={dismissPrediction}
+                onSetReminder={onSetPredictionReminder}
+                missedDays={visibleMissedDays}
+                onOpenBackfill={onOpenBackfill}
+                dueRecurringExpenses={dueRecurringExpenses}
+                onLogRecurring={handleLogRecurring}
+              />
+            </CollapsibleSection>
+          </AnimateInView>
 
           {recentLogs.length > 0 && (
-            <section className={`${panelClasses} p-5`}>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent shifts</p>
-              <div className="mt-3 space-y-2">
-                {recentLogs.map((log) => (
-                  <RecentShiftItem key={log.id} log={log} />
-                ))}
-              </div>
-            </section>
+            <AnimateInView delay="0ms">
+              <section className={`${panelClasses} p-5`}>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent shifts</p>
+                <div className="mt-3 space-y-2">
+                  {recentLogs.map((log) => (
+                    <RecentShiftItem key={log.id} log={log} />
+                  ))}
+                </div>
+              </section>
+            </AnimateInView>
           )}
         </>
       )}
@@ -1019,6 +1066,13 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
         onSaveShift={saveShift}
         activeSessionEstimatedRevenue={activePrediction}
         settings={settings}
+      />
+
+      <DriveModeSheet
+        show={showDriveMode}
+        prediction={activePrediction}
+        onClose={() => setShowDriveMode(false)}
+        onSave={handleDriveModeSave}
       />
     </div>
   );
