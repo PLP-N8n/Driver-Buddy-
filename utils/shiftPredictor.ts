@@ -9,6 +9,7 @@ export interface ShiftPrediction {
   estimatedRevenueAvg: number;
   fuelLikely: boolean;
   startOdometer: number | null;
+  estimatedMiles?: number;
   confidence: 'high' | 'medium' | 'low';
 }
 
