@@ -3,40 +3,32 @@ import { AlertTriangle, Calendar, PiggyBank, Receipt, TrendingUp } from 'lucide-
 import { DailyWorkLog, Expense, Settings, Trip } from '../../types';
 import { buildTaxAnalysis } from '../../utils/tax';
 import { filterToCurrentTaxYear, todayUK, ukTaxYearEnd, ukTaxYearStart } from '../../utils/ukDate';
-import { formatCurrency, formatNumber } from '../../utils/ui';
+import { formatCurrency } from '../../utils/ui';
+import { TaxMeterRing } from './TaxMeterRing';
 
-function daysUntilTaxDeadline(): number {
+// UK tax deadlines: Jan 31 (online return) and Jul 31 (second payment on account).
+// Returns the days until the nearest upcoming deadline and its display label.
+function getNextDeadline(): { days: number; label: string } {
   const today = new Date(`${todayUK()}T12:00:00Z`);
   const year = today.getMonth() > 4 ? today.getFullYear() + 1 : today.getFullYear();
   const jan31 = new Date(`${year}-01-31T12:00:00Z`);
   const jul31 = new Date(`${year}-07-31T12:00:00Z`);
   const daysToJan = Math.ceil((jan31.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   const daysToJul = Math.ceil((jul31.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysToJan >= 0 && daysToJan < daysToJul) return daysToJan;
-  if (daysToJul >= 0) return daysToJul;
-  // After Jul 31, next deadline is Jan 31 of following year
+
+  if (daysToJan >= 0 && daysToJan < daysToJul) return { days: daysToJan, label: '31 Jan' };
+  if (daysToJul >= 0) return { days: daysToJul, label: '31 Jul' };
   const nextJan = new Date(`${year + 1}-01-31T12:00:00Z`);
-  return Math.ceil((nextJan.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return { days: Math.ceil((nextJan.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)), label: '31 Jan' };
 }
 
-function getNextDeadlineLabel(): string {
-  const today = new Date(`${todayUK()}T12:00:00Z`);
-  const year = today.getMonth() > 4 ? today.getFullYear() + 1 : today.getFullYear();
-  const jan31 = new Date(`${year}-01-31T12:00:00Z`);
-  const jul31 = new Date(`${year}-07-31T12:00:00Z`);
-  const daysToJan = Math.ceil((jan31.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  const daysToJul = Math.ceil((jul31.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysToJan >= 0 && daysToJan < daysToJul) return '31 Jan';
-  if (daysToJul >= 0) return '31 Jul';
-  return '31 Jan';
-}
-
-type RealTimeTaxMeterProps = {
+export type RealTimeTaxMeterProps = {
   trips: Trip[];
   expenses: Expense[];
   dailyLogs: DailyWorkLog[];
   settings: Settings;
   onNavigateToTax: () => void;
+  size?: 'compact' | 'hero';
 };
 
 export const RealTimeTaxMeter: React.FC<RealTimeTaxMeterProps> = ({
@@ -45,6 +37,7 @@ export const RealTimeTaxMeter: React.FC<RealTimeTaxMeterProps> = ({
   dailyLogs,
   settings,
   onNavigateToTax,
+  size = 'compact',
 }) => {
   const analysis = useMemo(() => {
     const yearLogs = filterToCurrentTaxYear(dailyLogs);
@@ -58,10 +51,13 @@ export const RealTimeTaxMeter: React.FC<RealTimeTaxMeterProps> = ({
     });
   }, [trips, expenses, dailyLogs, settings]);
 
-  const activeProjection =
-    settings.claimMethod === 'ACTUAL'
-      ? analysis.actualProjection
-      : analysis.simplifiedProjection;
+  const activeProjection = useMemo(
+    () =>
+      settings.claimMethod === 'ACTUAL'
+        ? analysis.actualProjection
+        : analysis.simplifiedProjection,
+    [analysis, settings.claimMethod]
+  );
 
   const totalTax =
     activeProjection.estimatedTax +
@@ -83,9 +79,8 @@ export const RealTimeTaxMeter: React.FC<RealTimeTaxMeterProps> = ({
     return { label: 'Additional rate (45%)', color: 'text-red-400', bg: 'bg-red-500/10' };
   }, [activeProjection.taxableProfit, settings.isScottishTaxpayer]);
 
-  const deadlineDays = daysUntilTaxDeadline();
-  const deadlineLabel = getNextDeadlineLabel();
-  const weeklyTarget = settings.weeklyRevenueTarget;
+  const { days: deadlineDays, label: deadlineLabel } = getNextDeadline();
+  const isHero = size === 'hero';
 
   const currentYearLabel = useMemo(() => {
     const start = ukTaxYearStart();
@@ -95,7 +90,7 @@ export const RealTimeTaxMeter: React.FC<RealTimeTaxMeterProps> = ({
 
   return (
     <section
-      className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900/90 via-slate-800/80 to-slate-900/90 p-5 backdrop-blur-xl"
+      className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900/90 via-slate-800/80 to-slate-900/90 backdrop-blur-xl ${isHero ? 'p-4 md:p-5' : 'p-5'}`}
       onClick={onNavigateToTax}
       role="button"
       tabIndex={0}
@@ -125,29 +120,34 @@ export const RealTimeTaxMeter: React.FC<RealTimeTaxMeterProps> = ({
       </div>
 
       {/* Main Tax Owed */}
-      <div className="mt-5">
-        <p className="text-xs text-slate-500">Estimated tax owed</p>
-        <div className="mt-1 flex items-baseline gap-2">
-          <p className="text-3xl font-bold tracking-tight text-white">
-            {formatCurrency(totalTax)}
-          </p>
-          <span className="text-xs text-slate-500">
-            ({settings.claimMethod === 'SIMPLIFIED' ? 'Simplified miles' : 'Actual costs'})
-          </span>
+      <div className="mt-5 flex items-center gap-4">
+        {isHero && (
+          <TaxMeterRing percent={personalAllowancePercent} size={100} />
+        )}
+        <div>
+          <p className="text-xs text-slate-500">Estimated tax owed</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className={`font-bold tracking-tight text-white ${isHero ? 'text-4xl max-md:text-2xl' : 'text-3xl'}`}>
+              {formatCurrency(totalTax)}
+            </p>
+            <span className="text-xs text-slate-500">
+              ({settings.claimMethod === 'SIMPLIFIED' ? 'Simplified miles' : 'Actual costs'})
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Breakdown grid */}
       <div className="mt-4 grid grid-cols-3 gap-2">
-        <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/5">
+        <div className={`rounded-xl bg-white/5 ring-1 ring-white/5 ${isHero ? 'p-4' : 'p-3'}`}>
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Income tax</p>
           <p className="mt-1 text-sm font-semibold text-white">{formatCurrency(activeProjection.estimatedTax)}</p>
         </div>
-        <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/5">
+        <div className={`rounded-xl bg-white/5 ring-1 ring-white/5 ${isHero ? 'p-4' : 'p-3'}`}>
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Class 4 NI</p>
           <p className="mt-1 text-sm font-semibold text-white">{formatCurrency(activeProjection.estimatedClass4NI)}</p>
         </div>
-        <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/5">
+        <div className={`rounded-xl bg-white/5 ring-1 ring-white/5 ${isHero ? 'p-4' : 'p-3'}`}>
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Profit after tax</p>
           <p className="mt-1 text-sm font-semibold text-emerald-400">
             {formatCurrency(activeProjection.taxableProfit - totalTax)}
