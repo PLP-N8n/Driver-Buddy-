@@ -1,7 +1,7 @@
 import type { DailyWorkLog, Expense, Settings, Trip } from '../types';
 import { calcMileageAllowance } from '../shared/calculations/mileage';
 import { calcKept, calcTaxBuffer } from '../shared/calculations/tax';
-import { ukTaxYearEnd, ukTaxYearStart } from './ukDate';
+import { UK_TZ, ukTaxYearEnd, ukTaxYearStart } from './ukDate';
 
 export interface MonthSummary {
   yearMonth: string;
@@ -28,7 +28,7 @@ const getYearMonth = (date: string) => date.slice(0, 7);
 
 const getMonthLabel = (yearMonth: string) =>
   new Date(`${yearMonth}-01T12:00:00Z`).toLocaleDateString('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     month: 'long',
     year: 'numeric',
   });

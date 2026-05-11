@@ -32,8 +32,8 @@ export const AutoTripIndicator: React.FC<AutoTripIndicatorProps> = ({ state, onC
   };
 
   const isDriving = state === 'driving';
-  const isDetecting = state === 'detecting' || state === 'stopping';
 
+  // 88px offset: dock height (68px) + nav bar padding (~20px). Keep in sync with .bottom-dock + .app-nav.
   return (
     <div className="fixed inset-x-0 bottom-[calc(72px+env(safe-area-inset-bottom)+88px)] z-50 px-4">
       <div

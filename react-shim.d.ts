@@ -1,3 +1,5 @@
+// This shim provides minimal React types for projects without @types/react installed.
+// Adding more shims compounds tech debt — prefer installing @types/react as a devDependency.
 declare namespace React {
   type Key = string | number;
   type ReactText = string | number;
@@ -57,6 +59,7 @@ declare namespace React {
 
   interface FormEvent<T = any> extends SyntheticEvent<T> {}
   interface MouseEvent<T = any> extends SyntheticEvent<T> {}
+  interface PointerEvent<T = any> extends MouseEvent<T> {}
   interface KeyboardEvent<T = any> extends SyntheticEvent<T> {
     key: string;
   }
@@ -79,6 +82,8 @@ declare namespace React {
 
   function createElement(type: unknown, props: unknown, ...children: unknown[]): ReactElement;
   function lazy<T extends ComponentType<any>>(factory: () => Promise<{ default: T }>): T;
+  function memo<T extends ComponentType<any>>(component: T, propsAreEqual?: (prevProps: Readonly<ComponentProps<T>>, nextProps: Readonly<ComponentProps<T>>) => boolean): T;
+  function memo<T extends ComponentType<any>>(component: T, propsAreEqual?: (prevProps: Readonly<ComponentProps<T>>, nextProps: Readonly<ComponentProps<T>>) => boolean): T;
   function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
   function useMemo<T>(factory: () => T, deps: readonly unknown[]): T;
   function useRef<T>(initialValue: T): MutableRefObject<T>;

@@ -3,6 +3,7 @@ import { ChevronDown, LoaderCircle } from 'lucide-react';
 import type { Settings } from '../../types';
 import type { ShiftPrediction } from '../../utils/shiftPredictor';
 import { formatNumber } from '../../utils/ui';
+import { UK_TZ } from '../../utils/ukDate';
 import { getEnergyQuantityLabel, getVehicleEnergyExpenseLabel, getVehicleEnergyQuantityUnit } from '../../utils/vehicleFuel';
 import {
   formatCurrency,
@@ -223,7 +224,7 @@ export const QuickAddForm: React.FC<QuickAddFormProps> = ({
               {endSheetMode === 'active'
                 ? `${formatNumber(activeDurationHours, 2)}h logged so far`
                 : new Date(`${manualShiftDate}T12:00:00Z`).toLocaleDateString('en-GB', {
-                    timeZone: 'Europe/London',
+                    timeZone: UK_TZ,
                     weekday: 'long',
                     day: 'numeric',
                     month: 'short',

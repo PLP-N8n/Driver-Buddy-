@@ -95,6 +95,18 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'driver-buddy-push') {
+    event.waitUntil(
+      clients.matchAll({ type: 'window' }).then((clientList) => {
+        for (const client of clientList) {
+          client.postMessage({ type: 'SYNC_PUSH_RETRY' });
+        }
+      }).catch(() => {})
+    );
+  }
+});
+
 self.addEventListener('notificationclick', (event) => {
   if (event.notification.tag !== DAILY_REMINDER_NOTIFICATION_TAG) return;
 

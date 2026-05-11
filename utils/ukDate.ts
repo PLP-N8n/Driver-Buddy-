@@ -1,5 +1,5 @@
 // All dates in this app are UK local time (Europe/London - handles BST/GMT automatically)
-const UK_TZ = 'Europe/London';
+export const UK_TZ = 'Europe/London';
 
 /** Returns today's date as YYYY-MM-DD in UK local time */
 export function todayUK(): string {

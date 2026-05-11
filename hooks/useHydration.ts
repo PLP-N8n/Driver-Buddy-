@@ -16,9 +16,11 @@ import { normalizeSettings, type StoredSettings } from '../services/settingsServ
 import { prepareExpensesForLocalState } from '../services/syncTransforms';
 import { migrateLegacyExpenses } from '../shared/migrations/migrateExpense';
 import { filterSubsumedLogs } from '../utils/platformInsights';
+import { openDriverBuddyDB, putShift, putExpense, putTrip, putSetting, putPlayerStats } from '../services/storage';
 
 const DATA_SCHEMA_VERSION = 1;
 const SCHEMA_VERSION_KEY = 'driver_schema_version';
+const IDB_MIGRATED_KEY = '_migrated_v1';
 
 const parseStoredJson = <T,>(key: string): T | null => {
   const value = localStorage.getItem(key);
@@ -73,44 +75,119 @@ export function useHydration({
       const savedCompletedShiftSummary = parseStoredJson<CompletedShiftSummary>('driver_completed_shift_summary');
       const savedSettings = parseStoredJson<StoredSettings>('driver_settings');
       const savedStats = parseStoredJson<PlayerStats>('driver_player_stats');
-      const serializedSavedLogs = Array.isArray(savedLogs) ? JSON.stringify(savedLogs) : null;
-      const serializedSavedExpenses = Array.isArray(savedExpenses) ? JSON.stringify(savedExpenses) : null;
-      const migratedWorkLogs = Array.isArray(savedLogs) ? savedLogs : null;
-      const migratedExpenses = Array.isArray(savedExpenses)
-        ? (migrateLegacyExpenses(savedExpenses, savedSettings?.claimMethod ?? 'SIMPLIFIED') as Expense[])
-        : null;
 
       if (cancelled) return warnings;
 
-      if (Array.isArray(savedTrips)) setTrips(savedTrips);
-      if (Array.isArray(migratedExpenses)) {
-        try {
-          const preparedExpenses = await prepareExpensesForLocalState(migratedExpenses);
-          if (cancelled) return warnings;
+      const db = await openDriverBuddyDB();
+      const alreadyMigrated = await db.get('settings', IDB_MIGRATED_KEY);
 
-          setExpenses(preparedExpenses);
-          const serializedPreparedExpenses = JSON.stringify(preparedExpenses);
-          if (serializedPreparedExpenses !== serializedSavedExpenses) {
-            localStorage.setItem('driver_expenses', serializedPreparedExpenses);
-          }
-        } catch (error) {
-          warnings.push(reportHydrationWarning('Failed to prepare stored expenses during hydration.', error));
-          if (cancelled) return warnings;
-          setExpenses(migratedExpenses);
+      if (!alreadyMigrated) {
+        // ── One-time localStorage → IndexedDB migration ──────────────
+
+        const logs = Array.isArray(savedLogs) ? savedLogs : [];
+        for (const log of logs) {
+          await putShift(db, {
+            id: log.id,
+            date: log.date,
+            status: 'completed',
+            primary_platform: log.provider ?? 'Unknown',
+            hours_worked: log.hoursWorked ?? 0,
+            total_earnings: log.revenue ?? 0,
+            started_at: log.startedAt ?? null,
+            ended_at: log.endedAt ?? null,
+            fuel_liters: log.fuelLiters ?? null,
+            job_count: log.jobCount ?? null,
+            business_miles: log.milesDriven ?? null,
+            notes: log.notes ?? null,
+            provider_splits: log.providerSplits ? JSON.stringify(log.providerSplits) : null,
+            resolved_from_evidence: '[]',
+            last_resolved_at: new Date().toISOString(),
+            user_override: 0,
+          });
+        }
+
+        const trips = Array.isArray(savedTrips) ? savedTrips : [];
+        for (const trip of trips) {
+          await putTrip(db, {
+            ...trip,
+            resolved_from_evidence: '[]',
+            last_resolved_at: new Date().toISOString(),
+            user_override: 0,
+          });
+        }
+
+        const legacyExpenses = Array.isArray(savedExpenses)
+          ? migrateLegacyExpenses(savedExpenses, savedSettings?.claimMethod ?? 'SIMPLIFIED')
+          : [];
+        for (const expense of legacyExpenses) {
+          await putExpense(db, {
+            ...expense,
+            resolved_from_evidence: '[]',
+            last_resolved_at: new Date().toISOString(),
+            user_override: 0,
+          });
+        }
+
+        if (savedSettings) await putSetting(db, 'data', normalizeSettings(savedSettings));
+        if (savedStats) await putPlayerStats(db, savedStats);
+
+        await putSetting(db, IDB_MIGRATED_KEY, '1');
+
+        try {
+          localStorage.removeItem('driver_trips');
+          localStorage.removeItem('driver_expenses');
+          localStorage.removeItem('driver_daily_logs');
+          localStorage.removeItem('driver_settings');
+          localStorage.removeItem('driver_player_stats');
+        } catch {
+          // localStorage clear is best-effort
         }
       }
-      if (Array.isArray(migratedWorkLogs)) {
-        const dedupedWorkLogs = filterSubsumedLogs(migratedWorkLogs);
-        setDailyLogs(dedupedWorkLogs);
-        const serializedDedupedWorkLogs = JSON.stringify(dedupedWorkLogs);
-        if (serializedDedupedWorkLogs !== serializedSavedLogs) {
-          localStorage.setItem('driver_daily_logs', serializedDedupedWorkLogs);
-        }
+
+      if (cancelled) return warnings;
+
+      // ── Populate state from IndexedDB ──────────────────────────────
+
+      const [idbShifts, idbTrips, idbExpenses, idbSettings, idbStats] = await Promise.all([
+        db.getAll('shifts'),
+        db.getAll('trips'),
+        db.getAll('expenses'),
+        db.get('settings', 'data'),
+        db.get('player_stats', 'singleton'),
+      ]);
+
+      if (cancelled) return warnings;
+
+      const workLogs: DailyWorkLog[] = (idbShifts as any[]).map((s) => ({
+        id: s.id,
+        date: s.date,
+        provider: s.primary_platform ?? 'Unknown',
+        hoursWorked: s.hours_worked ?? 0,
+        revenue: s.total_earnings ?? 0,
+        notes: s.notes ?? undefined,
+        fuelLiters: s.fuel_liters ?? undefined,
+        jobCount: s.job_count ?? undefined,
+        milesDriven: s.business_miles ?? undefined,
+        startedAt: s.started_at ?? undefined,
+        endedAt: s.ended_at ?? undefined,
+        providerSplits: typeof s.provider_splits === 'string' ? JSON.parse(s.provider_splits) : undefined,
+      }));
+
+      setDailyLogs(filterSubsumedLogs(workLogs));
+      setTrips(idbTrips as Trip[]);
+
+      try {
+        const prepared = await prepareExpensesForLocalState(idbExpenses as Expense[]);
+        if (!cancelled) setExpenses(prepared);
+      } catch (error) {
+        warnings.push(reportHydrationWarning('Failed to prepare stored expenses during hydration.', error));
+        if (!cancelled) setExpenses(idbExpenses as Expense[]);
       }
+
+      if (idbSettings) setSettings(normalizeSettings(idbSettings as StoredSettings));
+      if (idbStats) setPlayerStats(idbStats as PlayerStats);
       if (savedActiveSession) setActiveSession(savedActiveSession);
       if (savedCompletedShiftSummary) setCompletedShiftSummary(savedCompletedShiftSummary);
-      if (savedSettings) setSettings(normalizeSettings(savedSettings));
-      if (savedStats) setPlayerStats(savedStats);
 
       return warnings;
     };

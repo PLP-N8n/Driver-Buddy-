@@ -914,6 +914,33 @@ export const SettingsPanel: React.FC<SettingsProps> = ({
               />
             </button>
           </div>
+
+          <div className={`${subtlePanelClasses} flex items-center justify-between gap-4 px-4 py-3`}>
+            <div>
+              <p className="text-sm font-medium text-white">Detect missed shifts</p>
+              <p className="text-xs text-slate-400">
+                {settings.detectMissedShiftsEnabled
+                  ? 'After 5+ shifts, Driver Buddy will prompt if it spots driving you did not log.'
+                  : 'Enable to be prompted when GPS shows driving outside your logged shifts.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.detectMissedShiftsEnabled}
+              aria-label="Detect missed shifts"
+              onClick={() => update({ detectMissedShiftsEnabled: !settings.detectMissedShiftsEnabled })}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--focus-ring-offset)] ${
+                settings.detectMissedShiftsEnabled ? 'bg-brand' : 'bg-surface-raised'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  settings.detectMissedShiftsEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
       </section>
 

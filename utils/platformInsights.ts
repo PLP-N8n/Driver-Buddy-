@@ -47,16 +47,26 @@ const addProviderEntry = (
 };
 
 export function filterSubsumedLogs(logs: DailyWorkLog[]): DailyWorkLog[] {
+  // Pre-index logs with providerSplits by (date, provider) for O(n) lookup
+  const splitIndex = new Map<string, Set<string>>();
+  for (const log of logs) {
+    if (!log.providerSplits?.length) continue;
+    for (const split of log.providerSplits) {
+      const key = `${log.date}|${split.provider.toLowerCase()}`;
+      const ids = splitIndex.get(key);
+      if (ids) {
+        ids.add(log.id);
+      } else {
+        splitIndex.set(key, new Set([log.id]));
+      }
+    }
+  }
+
   return logs.filter((log) => {
     if (log.providerSplits?.length) return true;
-    return !logs.some(
-      (other) =>
-        other.id !== log.id &&
-        other.date === log.date &&
-        other.providerSplits?.some(
-          (split) => split.provider === log.provider && Math.abs(split.revenue - log.revenue) < 0.01,
-        ),
-    );
+    const key = `${log.date}|${(log.provider ?? '').toLowerCase()}`;
+    const coveringIds = splitIndex.get(key);
+    return !coveringIds || coveringIds.size === 0;
   });
 }
 

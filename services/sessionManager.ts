@@ -52,6 +52,9 @@ function parseTokenExpiry(token: string): number {
   return Number.isFinite(expiresAt) ? expiresAt : 0;
 }
 
+// 401 during session issuance means "no valid session" (not_registered).
+// During registration, callers override this to 'account_claimed' — meaning
+// "account exists with different device credentials."
 function mapHttpError(status: number): AuthFailureReason {
   if (status === 401) return 'not_registered';
   if (status === 429) return 'rate_limited';
@@ -67,38 +70,8 @@ export async function getDeviceSecretHash(deviceSecret = getDeviceSecret()): Pro
 }
 
 async function registerAccount(accountId: string, deviceSecret = getDeviceSecret()): Promise<boolean> {
-  if (!WORKER_URL) return false;
-  const cacheKey = `${accountId}:${await getDeviceSecretHash(deviceSecret)}`;
-  if (registeredAccounts.has(cacheKey)) return true;
-
-  const pendingRequest = registrationRequests.get(cacheKey);
-  if (pendingRequest) return pendingRequest;
-
-  const request = (async () => {
-    const deviceSecretHash = await getDeviceSecretHash(deviceSecret);
-    const response = await fetch(`${WORKER_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId, deviceSecretHash }),
-    });
-
-    if (!response.ok) {
-      console.warn(`[sessionManager] registerAccount failed: HTTP ${response.status} ${response.statusText}`);
-      return false;
-    }
-
-    const data = (await response.json().catch(() => ({}))) as { deviceCount?: number };
-    lastDeviceCount = typeof data.deviceCount === 'number' && Number.isFinite(data.deviceCount) ? data.deviceCount : null;
-    registeredAccounts.add(cacheKey);
-    return true;
-  })()
-    .catch(() => false)
-    .finally(() => {
-      registrationRequests.delete(cacheKey);
-    });
-
-  registrationRequests.set(cacheKey, request);
-  return request;
+  const result = await registerAccountWithReason(accountId, deviceSecret);
+  return result.ok;
 }
 
 async function registerAccountWithReason(

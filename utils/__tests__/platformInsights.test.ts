@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcPlatformSummaries } from '../platformInsights';
+import { calcPlatformSummaries, filterSubsumedLogs } from '../platformInsights';
 import type { DailyWorkLog } from '../../types';
 
 const makeLog = (overrides: Partial<DailyWorkLog> & { id: string }): DailyWorkLog => ({
@@ -109,5 +109,49 @@ describe('calcPlatformSummaries', () => {
 
     expect(uber?.earningsShare).toBeCloseTo(75);
     expect(bolt?.earningsShare).toBeCloseTo(25);
+  });
+});
+
+describe('filterSubsumedLogs', () => {
+  it('keeps logs that have providerSplits', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', revenue: 50, providerSplits: [{ provider: 'Uber', revenue: 50 }] }),
+    ];
+
+    expect(filterSubsumedLogs(logs)).toHaveLength(1);
+  });
+
+  it('removes a single-provider log that is covered by a split log on the same date', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', revenue: 50 }),
+      makeLog({ id: 'b', provider: 'Multi', revenue: 60, providerSplits: [{ provider: 'Uber', revenue: 50 }] }),
+    ];
+
+    const result = filterSubsumedLogs(logs);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe('b');
+  });
+
+  it('keeps a single-provider log when no split covers its (date, provider) pair', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', revenue: 50 }),
+      makeLog({ id: 'b', provider: 'Uber', revenue: 60, providerSplits: [{ provider: 'Bolt', revenue: 60 }] }),
+    ];
+
+    const result = filterSubsumedLogs(logs);
+    expect(result).toHaveLength(2);
+  });
+
+  it('handles empty input', () => {
+    expect(filterSubsumedLogs([])).toHaveLength(0);
+  });
+
+  it('keeps all logs when none have providerSplits', () => {
+    const logs: DailyWorkLog[] = [
+      makeLog({ id: 'a', provider: 'Uber', revenue: 50 }),
+      makeLog({ id: 'b', provider: 'Bolt', revenue: 30 }),
+    ];
+
+    expect(filterSubsumedLogs(logs)).toHaveLength(2);
   });
 });

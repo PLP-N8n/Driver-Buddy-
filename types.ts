@@ -203,6 +203,7 @@ export interface Settings {
   analyticsConsent?: boolean; // default false - opt-in
   mileageTrackingEnabled: boolean;
   autoTripDetectionEnabled: boolean;
+  detectMissedShiftsEnabled: boolean;
   weeklyRevenueTarget: number;
   businessRateFirst10k: number;
   businessRateAfter10k: number;
@@ -212,6 +213,8 @@ export interface Settings {
   isScottishTaxpayer?: boolean;
   // Smart Allocations
   taxSetAsidePercent: number;
+  taxBracketPercent: number;
+  vehicleCostPerMile?: number;
   maintenanceSetAsidePercent: number;
   debtSetAsidePercent: number;
   // Debt Management
@@ -316,6 +319,70 @@ export type SyncPullPayload = {
   settings?: Partial<Settings> | null;
 };
 
+// ── Evidence / Ledger types ──────────────────────────────────────────
+
+export type EvidenceSource = 'manual' | 'ocr' | 'api';
+
+export interface EvidenceRecord {
+  id: string;
+  account_id?: string;
+  source_type: EvidenceSource;
+  source_detail: string;
+  confidence: number;
+  raw_payload?: string;
+  created_at: string;
+  resolved_to_ledger_id?: string | null;
+  dispute_status?: 'pending' | 'resolved' | null;
+}
+
+export interface ShiftEvidence extends EvidenceRecord {
+  date: string;
+  platform?: string;
+  hours_worked?: number;
+  earnings?: number;
+  started_at?: string;
+  ended_at?: string;
+  start_odometer?: number;
+  end_odometer?: number;
+  business_miles?: number;
+  fuel_liters?: number;
+  job_count?: number;
+  notes?: string;
+  provider_splits?: ProviderSplit[];
+}
+
+export interface ExpenseEvidence extends EvidenceRecord {
+  date: string;
+  category?: ExpenseCategory;
+  amount?: number;
+  description?: string;
+  receipt_id?: string;
+  scope?: ExpenseScope;
+  business_use_percent?: number;
+  vehicle_expense_type?: VehicleExpenseType;
+  tax_treatment?: TaxTreatment;
+  linked_shift_id?: string;
+}
+
+export interface MileageEvidence extends EvidenceRecord {
+  date: string;
+  start_location?: string;
+  end_location?: string;
+  start_odometer?: number;
+  end_odometer?: number;
+  total_miles?: number;
+  purpose?: TripPurpose;
+  path?: Coordinate[];
+  notes?: string;
+  linked_shift_id?: string;
+}
+
+export interface LedgerMeta {
+  resolved_from_evidence?: string[];
+  last_resolved_at?: string;
+  user_override?: boolean;
+}
+
 export interface ActiveWorkSessionExpenseDraft {
   id: string;
   category: ExpenseCategory;
@@ -380,6 +447,7 @@ export const DEFAULT_SETTINGS: Settings = {
   analyticsConsent: false,
   mileageTrackingEnabled: false,
   autoTripDetectionEnabled: false,
+  detectMissedShiftsEnabled: false,
   weeklyRevenueTarget: 600,
   businessRateFirst10k: 0.45,
   businessRateAfter10k: 0.25,
@@ -388,6 +456,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderTime: '18:00',
   isScottishTaxpayer: false,
   taxSetAsidePercent: 20,
+  taxBracketPercent: 20,
   maintenanceSetAsidePercent: 10,
   debtSetAsidePercent: 0,
   debts: [],

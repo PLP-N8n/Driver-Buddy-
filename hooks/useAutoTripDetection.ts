@@ -39,7 +39,7 @@ export function useAutoTripDetection(enabled: boolean, onTripComplete: (trip: Tr
   const positionsRef = useRef<GeolocationPosition[]>([]);
   const stateRef = useRef<AutoTripState>('idle');
 
-  const startTrip = useCallback(() => {
+  const cancelTrip = useCallback(() => {
     positionsRef.current = [];
     drivingStartRef.current = null;
     stopStartRef.current = null;
@@ -50,21 +50,21 @@ export function useAutoTripDetection(enabled: boolean, onTripComplete: (trip: Tr
   const finishTrip = useCallback(() => {
     const positions = positionsRef.current;
     if (positions.length < 2) {
-      startTrip();
+      cancelTrip();
       return;
     }
 
     const first = positions[0];
     const last = positions[positions.length - 1];
     if (!first || !last) {
-      startTrip();
+      cancelTrip();
       return;
     }
     const distanceMeters = calculateDistance(positions);
     const miles = distanceMeters / 1609.34;
 
     if (miles < MIN_TRIP_MILES) {
-      startTrip();
+      cancelTrip();
       return;
     }
 
@@ -82,16 +82,16 @@ export function useAutoTripDetection(enabled: boolean, onTripComplete: (trip: Tr
     };
 
     onTripComplete(trip);
-    startTrip();
-  }, [onTripComplete, startTrip]);
+    cancelTrip();
+  }, [onTripComplete, cancelTrip]);
 
   useEffect(() => {
     if (!enabled) {
-      if (watchIdRef.current !== null) {
+      if (watchIdRef.current !== null && watchIdRef.current >= 0) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      startTrip();
+      cancelTrip();
       return;
     }
 
@@ -100,7 +100,7 @@ export function useAutoTripDetection(enabled: boolean, onTripComplete: (trip: Tr
       return;
     }
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
+    const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const speed = position.coords.speed ?? 0;
         positionsRef.current.push(position);
@@ -112,10 +112,12 @@ export function useAutoTripDetection(enabled: boolean, onTripComplete: (trip: Tr
         const now = Date.now();
         const currentState = stateRef.current;
 
-        if (currentState === 'idle') {
+        if (currentState === 'idle' || currentState === 'detecting') {
           if (speed >= DRIVING_SPEED_MPS) {
             if (!drivingStartRef.current) {
               drivingStartRef.current = now;
+              setState('detecting');
+              stateRef.current = 'detecting';
             } else if (now - drivingStartRef.current >= DRIVING_DURATION_MS) {
               setState('driving');
               stateRef.current = 'driving';
@@ -123,37 +125,47 @@ export function useAutoTripDetection(enabled: boolean, onTripComplete: (trip: Tr
             }
           } else {
             drivingStartRef.current = null;
+            setState('idle');
+            stateRef.current = 'idle';
           }
-        } else if (currentState === 'driving') {
+        } else if (currentState === 'driving' || currentState === 'stopping') {
           if (speed < DRIVING_SPEED_MPS) {
             if (!stopStartRef.current) {
               stopStartRef.current = now;
+              setState('stopping');
+              stateRef.current = 'stopping';
             } else if (now - stopStartRef.current >= STOP_DURATION_MS) {
               finishTrip();
             }
           } else {
             stopStartRef.current = null;
+            setState('driving');
+            stateRef.current = 'driving';
           }
         }
       },
       (err) => {
         console.warn('[AutoTrip] geolocation error:', err.message);
-        if (stateRef.current === 'driving') {
+        if (stateRef.current === 'driving' || stateRef.current === 'stopping') {
           finishTrip();
         }
       },
-      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 30_000 }
+      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 30_000 }
     );
 
+    if (typeof watchId === 'number' && watchId >= 0) {
+      watchIdRef.current = watchId;
+    }
+
     return () => {
-      if (watchIdRef.current !== null) {
+      if (watchIdRef.current !== null && watchIdRef.current >= 0) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
     };
-  }, [enabled, startTrip, finishTrip]);
+  }, [enabled, cancelTrip, finishTrip]);
 
-  return { state, startTrip };
+  return { state, cancelTrip };
 }
 
 function calculateDistance(positions: GeolocationPosition[]): number {

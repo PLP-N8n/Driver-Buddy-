@@ -17,6 +17,7 @@ if (process.env.DISABLE_PWA !== 'true') {
   plugins.push(
     asPluginOption(VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.ico'],
       manifest: {
         name: 'Driver Buddy',

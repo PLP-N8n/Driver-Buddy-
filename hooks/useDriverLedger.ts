@@ -85,6 +85,42 @@ const getFuelLiters = (expenses: Array<Pick<Expense, 'category' | 'liters'>>) =>
     .filter((expense) => expense.category === ExpenseCategory.FUEL)
     .reduce((sum, expense) => sum + (expense.liters ?? 0), 0);
 
+interface BuildShiftFromPartsParams {
+  id: string;
+  date: string;
+  provider: string;
+  hoursWorked: number;
+  revenue: number;
+  markedNoEarnings?: boolean;
+  fuelLiters: number;
+  expensesTotal: number;
+  notes?: string;
+  miles: number;
+  linkedTripId?: string;
+  startedAt: string;
+  endedAt: string;
+  providerSplits?: ProviderSplit[];
+  updatedAt: string;
+}
+
+const buildShiftFromParts = (params: BuildShiftFromPartsParams): DailyWorkLog => ({
+  id: params.id,
+  date: params.date,
+  provider: params.provider,
+  hoursWorked: Number(params.hoursWorked.toFixed(2)),
+  revenue: params.revenue,
+  ...(params.markedNoEarnings ? { markedNoEarnings: true } : {}),
+  fuelLiters: params.fuelLiters > 0 ? Number(params.fuelLiters.toFixed(2)) : undefined,
+  expensesTotal: params.expensesTotal > 0 ? Number(params.expensesTotal.toFixed(2)) : 0,
+  notes: params.notes,
+  milesDriven: params.miles > 0 ? Number(params.miles.toFixed(1)) : 0,
+  linkedTripId: params.linkedTripId,
+  startedAt: params.startedAt,
+  endedAt: params.endedAt,
+  providerSplits: params.providerSplits,
+  updatedAt: params.updatedAt,
+});
+
 const copyEnergyFields = <T extends Pick<Expense, 'energyQuantity' | 'energyUnit' | 'liters'>>(expense: T) => ({
   energyQuantity: expense.energyQuantity,
   energyUnit: expense.energyUnit,
@@ -375,23 +411,23 @@ export function useDriverLedger({
       });
     });
 
-    const completedLog: DailyWorkLog = {
+    const completedLog = buildShiftFromParts({
       id: logId,
       date: session.date,
       provider: session.provider || 'Work Day',
-      hoursWorked: Number(hoursWorked.toFixed(2)),
+      hoursWorked,
       revenue,
-      ...(session.markedNoEarnings ? { markedNoEarnings: true } : {}),
-      fuelLiters: fuelLiters > 0 ? Number(fuelLiters.toFixed(2)) : undefined,
-      expensesTotal: expensesTotal > 0 ? Number(expensesTotal.toFixed(2)) : 0,
+      markedNoEarnings: session.markedNoEarnings,
+      fuelLiters,
+      expensesTotal,
       notes: 'Captured from the Driver Buddy shift flow',
-      milesDriven: miles > 0 ? Number(miles.toFixed(1)) : 0,
+      miles,
       linkedTripId,
       startedAt: session.startedAt,
       endedAt,
       providerSplits: session.providerSplits,
       updatedAt,
-    };
+    });
 
     if (completedLog.providerSplits?.length) {
       removeSubsumedLogs(completedLog.date, completedLog.providerSplits);
@@ -490,23 +526,23 @@ export function useDriverLedger({
       });
     });
 
-    const completedLog: DailyWorkLog = {
+    const completedLog = buildShiftFromParts({
       id: logId,
       date: payload.date,
       provider: payload.provider,
       hoursWorked: payload.hoursWorked,
       revenue: payload.revenue,
-      ...(payload.markedNoEarnings ? { markedNoEarnings: true } : {}),
-      fuelLiters: fuelLiters > 0 ? Number(fuelLiters.toFixed(2)) : undefined,
-      expensesTotal: expensesTotal > 0 ? Number(expensesTotal.toFixed(2)) : 0,
+      markedNoEarnings: payload.markedNoEarnings,
+      fuelLiters,
+      expensesTotal,
       notes: payload.notes,
-      milesDriven: miles > 0 ? Number(miles.toFixed(1)) : 0,
+      miles,
       linkedTripId,
       startedAt,
       endedAt,
       providerSplits: payload.providerSplits,
       updatedAt,
-    };
+    });
 
     if (completedLog.providerSplits?.length) {
       removeSubsumedLogs(completedLog.date, completedLog.providerSplits);

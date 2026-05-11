@@ -15,7 +15,7 @@ import { Settings, Trip, TripPurpose } from '../types';
 import { DatePicker } from './DatePicker';
 import { EmptyState } from './EmptyState';
 import { calcMileageAllowanceForMiles } from '../shared/calculations/mileage';
-import { getTaxYearForDate, todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
+import { getTaxYearForDate, todayUK, UK_TZ, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
 import {
   dangerButtonClasses,
   fieldErrorClasses,
@@ -115,7 +115,7 @@ function MonthlySummaryBar({ trips, settings }: { trips: Trip[]; settings: Setti
   });
 
   const monthLabel = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     month: 'long',
     year: 'numeric',
   }).format(new Date());

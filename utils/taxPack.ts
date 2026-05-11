@@ -1,4 +1,5 @@
 import { DailyWorkLog, Expense, Settings, Trip } from '../types';
+import { UK_TZ } from './ukDate';
 import { buildTaxAnalysis } from './tax';
 
 export interface TaxPackOptions {
@@ -53,7 +54,7 @@ const inRange = (date: string, start: string, end: string) => date >= start && d
 
 const formatUkDate = (date: string) =>
   new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     day: 'numeric',
     month: 'long',
     year: 'numeric',

@@ -1,6 +1,9 @@
 import React from 'react';
+const { memo } = React;
 import { Bell, Car, Receipt, Share2, Sparkles, X } from 'lucide-react';
 import { calcKept } from '../../shared/calculations/tax';
+import { calcTrueTakeHome } from '../../shared/calculations/trueTakeHome';
+import { calcGoalPacing } from '../../utils/goalPacing';
 import type { CompletedShiftSummary, DailyWorkLog, Expense, Trip } from '../../types';
 import { shouldPromptForShiftMileage } from '../../utils/mileageLinkage';
 import { formatCurrency, formatNumber, panelClasses, primaryButtonClasses, secondaryButtonClasses } from '../../utils/ui';
@@ -15,6 +18,9 @@ type WeeklySummaryProps = {
   summaryInsight: string | null;
   summaryProgressPercent: number;
   weeklyRevenueTarget: number;
+  claimMethod?: 'SIMPLIFIED' | 'ACTUAL';
+  taxSetAsidePercent?: number;
+  workWeekStartDay?: 'MON' | 'SUN';
   isFirstShift?: boolean;
   onDismissCompletedSummary: () => void;
   onShareSummary: (summaryText: string) => void | Promise<void>;
@@ -44,7 +50,7 @@ const buildEarningsSummaryLine = (summary: CompletedShiftSummary) => {
   return parts.join(', ');
 };
 
-export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
+export const WeeklySummary: React.FC<WeeklySummaryProps> = memo(({
   completedShiftSummary,
   completedLog,
   trips = [],
@@ -54,6 +60,9 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
   summaryInsight,
   summaryProgressPercent,
   weeklyRevenueTarget,
+  claimMethod = 'SIMPLIFIED',
+  taxSetAsidePercent = 20,
+  workWeekStartDay = 'MON',
   isFirstShift = false,
   onDismissCompletedSummary,
   onShareSummary,
@@ -143,6 +152,52 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
       </div>
 
       <p className="mt-5 text-center text-sm font-medium text-slate-100">{earningsSummaryLine}</p>
+
+      {(() => {
+        const takeHome = calcTrueTakeHome({
+          grossEarnings: completedShiftSummary.revenue,
+          businessMiles: completedShiftSummary.miles,
+          expenses: expenses ?? [],
+          claimMethod,
+          taxSetAsidePercent,
+        });
+        return (
+          <p className="mt-2 text-center text-xs text-slate-400">
+            {formatCurrency(takeHome.taxSetAside)} set aside for tax &middot; {formatCurrency(takeHome.vehicleCostDeduction)} vehicle costs &middot; {formatCurrency(takeHome.otherBusinessExpenses)} other expenses
+          </p>
+        );
+      })()}
+
+      {weeklyRevenueTarget > 0 && completedShiftSummary.workDayCount > 0 && (() => {
+        const weekLogs = completedLog
+          ? [{ id: completedShiftSummary.shiftId ?? '', date: completedShiftSummary.date, provider: '', hoursWorked: summaryHoursWorked, revenue: completedShiftSummary.revenue }]
+          : [];
+        const pacing = calcGoalPacing(
+          weeklyRevenueTarget,
+          completedShiftSummary.date,
+          workWeekStartDay,
+          weekLogs,
+          []
+        );
+        if (!pacing) return null;
+        const statusColors: Record<string, string> = {
+          ahead: 'text-emerald-400 bg-emerald-400/10',
+          onTrack: 'text-sky-400 bg-sky-400/10',
+          behind: 'text-amber-400 bg-amber-400/10',
+          stretch: 'text-red-400 bg-red-400/10',
+        };
+        const statusLabels: Record<string, string> = {
+          ahead: 'Ahead of pace',
+          onTrack: 'On track',
+          behind: 'Behind pace',
+          stretch: 'Stretch goal',
+        };
+        return (
+          <div className={`mt-3 rounded-xl px-3 py-2 text-center text-xs font-semibold ${statusColors[pacing.status] ?? 'text-slate-400 bg-slate-400/10'}`}>
+            {statusLabels[pacing.status]} &middot; {formatCurrency(completedShiftSummary.weekRevenue)} / {formatCurrency(weeklyRevenueTarget)} this week
+          </div>
+        );
+      })()}
 
       {activePostShiftNudge && (
         <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
@@ -234,4 +289,4 @@ export const WeeklySummary: React.FC<WeeklySummaryProps> = ({
       </button>
     </section>
   );
-};
+});

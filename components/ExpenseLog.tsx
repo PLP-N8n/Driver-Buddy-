@@ -27,7 +27,7 @@ import { ReceiptStatusBadge } from './ReceiptStatusBadge';
 import { useReceiptUpload } from '../hooks/useReceiptUpload';
 import { getSimplifiedMileageDeductibleExplanation } from '../utils/simplifiedMileageDeductibleCopy';
 import { suggestCategory } from '../utils/expenseCategorySuggestions';
-import { todayUK, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
+import { todayUK, UK_TZ, ukTaxYearEnd, ukTaxYearStart } from '../utils/ukDate';
 import {
   formatEnergyQuantity,
   getEnergyQuantityLabel,
@@ -190,7 +190,7 @@ function MonthlySummaryBar({ expenses }: { expenses: ExpenseRecord[] }) {
   });
 
   const monthLabel = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
+    timeZone: UK_TZ,
     month: 'long',
     year: 'numeric',
   }).format(new Date());

@@ -17,8 +17,12 @@ export function usePullToRefresh(onRefresh: () => void | Promise<void>): UsePull
   const [pullDistance, setPullDistance] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const startYRef = useRef(0);
-  const currentYRef = useRef(0);
   const isActiveRef = useRef(false);
+  const pullDistanceRef = useRef(0);
+  const onRefreshRef = useRef(onRefresh);
+
+  // Keep callback ref fresh without triggering effect re-runs
+  onRefreshRef.current = onRefresh;
 
   const isAtTop = useCallback(() => {
     const el = containerRef.current;
@@ -36,28 +40,26 @@ export function usePullToRefresh(onRefresh: () => void | Promise<void>): UsePull
       if (!touch) return;
       isActiveRef.current = true;
       startYRef.current = touch.clientY;
-      currentYRef.current = startYRef.current;
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (!isActiveRef.current) return;
       const touch = e.touches[0];
       if (!touch) return;
-      const y = touch.clientY;
-      const rawDelta = y - startYRef.current;
+      const rawDelta = touch.clientY - startYRef.current;
       if (rawDelta < 0) {
         isActiveRef.current = false;
+        pullDistanceRef.current = 0;
         setPullState('idle');
         setPullDistance(0);
         return;
       }
 
       const resisted = Math.min(rawDelta * RESISTANCE, MAX_PULL);
-      currentYRef.current = y;
+      pullDistanceRef.current = resisted;
       setPullDistance(resisted);
       setPullState(resisted >= PULL_THRESHOLD ? 'ready' : 'pulling');
 
-      // Prevent default scroll only when we're actively pulling
       if (resisted > 0 && isAtTop()) {
         e.preventDefault();
       }
@@ -67,16 +69,18 @@ export function usePullToRefresh(onRefresh: () => void | Promise<void>): UsePull
       if (!isActiveRef.current) return;
       isActiveRef.current = false;
 
-      if (pullDistance >= PULL_THRESHOLD) {
+      if (pullDistanceRef.current >= PULL_THRESHOLD) {
         setPullState('refreshing');
         setPullDistance(PULL_THRESHOLD);
         try {
-          await onRefresh();
+          await onRefreshRef.current();
         } finally {
+          pullDistanceRef.current = 0;
           setPullState('idle');
           setPullDistance(0);
         }
       } else {
+        pullDistanceRef.current = 0;
         setPullState('idle');
         setPullDistance(0);
       }
@@ -91,7 +95,7 @@ export function usePullToRefresh(onRefresh: () => void | Promise<void>): UsePull
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
-  }, [isAtTop, onRefresh, pullDistance]);
+  }, [isAtTop]);
 
   return { pullState, pullDistance, containerRef };
 }

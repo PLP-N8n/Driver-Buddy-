@@ -10,7 +10,7 @@ export async function visitApp(page: Page) {
   });
   await page.reload();
   await page.waitForLoadState('networkidle');
-  await expect(page.getByRole('button', { name: 'Start Shift' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start Shift|Log your first shift/i })).toBeVisible();
 }
 
 export async function createTrip(page: Page, trip: { start: string; end: string; miles: string }) {
@@ -26,12 +26,19 @@ export async function completeWorkDay(
   page: Page,
   options: { startOdometer: string; earnings: string; miles: string; fuelAmount?: string; litres?: string }
 ) {
-  await page.getByRole('button', { name: 'Start Shift' }).click();
-  await page.getByLabel(/Start odometer/i).fill(options.startOdometer);
-  await page.getByRole('button', { name: 'Start shift', exact: true }).click();
+  const startShiftButton = page.getByRole('button', { name: 'Start Shift' });
+  if (await startShiftButton.isVisible().catch(() => false)) {
+    await startShiftButton.click();
+    await page.getByLabel(/Start odometer/i).fill(options.startOdometer);
+    await page.getByRole('button', { name: 'Start shift', exact: true }).click();
 
-  await expect(page.getByText(/Session running/i)).toBeVisible();
-  await page.getByRole('button', { name: 'End shift' }).click();
+    await expect(page.getByText(/Session running/i)).toBeVisible();
+    await page.getByRole('button', { name: 'End shift' }).click();
+  } else {
+    await page.getByRole('button', { name: 'Log your first shift' }).click();
+    await expect(page.getByText('Quick add shift')).toBeVisible();
+    await page.getByLabel('Hours').fill('4');
+  }
   await page.getByLabel('Earnings').fill(options.earnings);
   await page.getByLabel('End odometer').fill(String(Number(options.startOdometer) + Number(options.miles)));
 

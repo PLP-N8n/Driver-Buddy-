@@ -4,6 +4,7 @@ import { DailyWorkLog, DriverRole, Settings } from '../types';
 import { DatePicker } from './DatePicker';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { getProvidersByRole } from '../utils/providers';
+import { calcMileageAllowanceForMiles } from '../shared/calculations/mileage';
 import { todayUK, toUKDateString } from '../utils/ukDate';
 import {
   fieldLabelClasses,
@@ -115,7 +116,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ settings, onSk
       kept: gross - setAside,
       setAsidePercent: settings.taxSetAsidePercent,
       miles,
-      mileageClaim: miles * 0.45,
+      mileageClaim: calcMileageAllowanceForMiles(miles, 0),
     });
   };
 

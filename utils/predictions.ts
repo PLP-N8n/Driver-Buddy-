@@ -1,8 +1,10 @@
 import { DailyWorkLog, Settings } from '../types';
 import { todayUK, ukWeekStart } from './ukDate';
+import { generateGoldenHoursPredictions } from './goldenHours';
+import { generateGoalPacingPrediction } from './goalPacing';
 
 export interface DriverPrediction {
-  type: 'schedule' | 'platform' | 'timing' | 'target';
+  type: 'schedule' | 'platform' | 'timing' | 'target' | 'goldenHours' | 'pace';
   message: string;
   confidence: number;
   actionLabel?: string;
@@ -209,6 +211,21 @@ export function generatePredictions(logs: DailyWorkLog[], settings: Settings): D
         actionLabel: getReminderActionLabel(settings),
       });
     }
+  }
+
+  // Golden Hours
+  const goldenHoursPrediction = generateGoldenHoursPredictions(eligibleLogs, isEarlySample);
+  if (goldenHoursPrediction) {
+    predictions.push(goldenHoursPrediction);
+  }
+
+  // Goal Pacing
+  const pacingPrediction = generateGoalPacingPrediction(eligibleLogs, {
+    weeklyRevenueTarget: settings.weeklyRevenueTarget,
+    workWeekStartDay: settings.workWeekStartDay,
+  });
+  if (pacingPrediction) {
+    predictions.push(pacingPrediction);
   }
 
   if (eligibleLogs.length >= 14) {

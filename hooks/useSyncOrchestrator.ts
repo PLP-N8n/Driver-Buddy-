@@ -187,6 +187,15 @@ export function useSyncOrchestrator({
     };
   }, [hasHydrated, pullAndMergeLatest]);
 
+  // Periodic pull every 15 min for long-running sessions (gated on visibility)
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') void pullAndMergeLatest();
+    }, 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [hasHydrated, pullAndMergeLatest]);
+
   useEffect(() => {
     if (!hasHydrated) return;
     schedulePush(buildSyncPayload(trips, expenses, dailyLogs, settings, deletedIds));
